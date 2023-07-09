@@ -1,0 +1,13 @@
+[package]
+name = "crabbing-interpreters"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bumpalo = "3.13.0"
+clap = { version = "4.3.4", features = ["derive"] }
+logos = "0.13.0"
+thiserror = "1.0.40"
+
+[dev-dependencies]
+rstest = { version = "0.18.1", default-features = false }
