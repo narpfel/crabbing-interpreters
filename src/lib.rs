@@ -11,9 +11,11 @@ use std::path::PathBuf;
 use bumpalo::Bump;
 use clap::Parser;
 
+use crate::eval::eval;
 pub use crate::lex::lex;
 pub use crate::parse::parse;
 
+mod eval;
 mod lex;
 mod parse;
 
@@ -42,6 +44,8 @@ struct Args {
     /// output parsed expression as an s-expression (for testing the parser)
     #[arg(long)]
     test_parser: bool,
+    #[arg(long)]
+    test_evaluator: bool,
 }
 
 pub fn run<'a>(
@@ -65,6 +69,11 @@ pub fn run<'a>(
         let ast = parse(bump, tokens)?;
         if args.test_parser {
             println!("{}", ast.as_sexpr());
+            return Ok(());
+        }
+        let value = eval(&ast)?;
+        if args.test_evaluator {
+            println!("{value}");
             return Ok(());
         }
     }

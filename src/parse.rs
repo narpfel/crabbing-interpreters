@@ -77,8 +77,8 @@ impl Expression<'_> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Literal<'a> {
-    kind: LiteralKind<'a>,
-    #[allow(unused)]
+    pub(crate) kind: LiteralKind<'a>,
+    #[expect(dead_code)]
     token: Token<'a>,
 }
 
@@ -105,9 +105,8 @@ impl LiteralKind<'_> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct UnaryOp<'a> {
-    #[allow(unused)]
-    kind: UnaryOpKind,
-    token: Token<'a>,
+    pub(crate) kind: UnaryOpKind,
+    pub(crate) token: Token<'a>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -118,8 +117,8 @@ pub enum UnaryOpKind {
 
 #[derive(Debug, Clone, Copy)]
 pub struct BinOp<'a> {
-    kind: BinOpKind,
-    token: Token<'a>,
+    pub(crate) kind: BinOpKind,
+    pub(crate) token: Token<'a>,
 }
 
 #[derive(Debug, Clone, Copy)]
