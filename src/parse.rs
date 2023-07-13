@@ -47,6 +47,12 @@ pub enum Eof {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub enum Statement<'a> {
+    Expression(Expression<'a>),
+    Print(Expression<'a>),
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
     Unary(UnaryOp<'a>, &'a Expression<'a>),
@@ -72,6 +78,7 @@ impl<'a> Expression<'a> {
         }
     }
 
+    #[cfg(test)]
     pub fn as_sexpr(&self) -> String {
         match self {
             Expression::Literal(lit) => lit.kind.value_string(),
@@ -111,6 +118,7 @@ pub enum LiteralKind<'a> {
 }
 
 impl LiteralKind<'_> {
+    #[cfg(test)]
     fn value_string(self) -> String {
         match self {
             LiteralKind::Number(x) => format!("{x:?}"),
@@ -188,7 +196,7 @@ impl<'a> BinOp<'a> {
     }
 }
 
-struct Tokens<'a>(Peekable<Copied<std::slice::Iter<'a, Token<'a>>>>);
+pub struct Tokens<'a>(Peekable<Copied<std::slice::Iter<'a, Token<'a>>>>);
 
 impl<'a> Tokens<'a> {
     fn next(&mut self) -> Result<Token<'a>, Eof> {
@@ -230,14 +238,53 @@ impl<'a> Tokens<'a> {
     }
 }
 
-pub fn parse<'a>(bump: &'a Bump, tokens: &'a [Token<'a>]) -> Result<Expression<'a>, Error<'a>> {
+pub fn parse<'a, T>(
+    parser: impl FnOnce(&'a Bump, &mut Tokens<'a>) -> Result<T, Error<'a>>,
+    bump: &'a Bump,
+    tokens: &'a [Token<'a>],
+) -> Result<T, Error<'a>> {
     let tokens = &mut Tokens(tokens.iter().copied().peekable());
-    let expression = expression(bump, tokens)?;
+    let result = parser(bump, tokens)?;
     tokens.eof()?;
-    Ok(expression)
+    Ok(result)
 }
 
-fn expression<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+pub fn program<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a>,
+) -> Result<&'a [Statement<'a>], Error<'a>> {
+    let mut statements = Vec::new();
+    while let Ok(token) = tokens.peek() {
+        let statement = match token.kind {
+            TokenKind::Print => print(bump, tokens)?,
+            _ => expression_statement(bump, tokens)?,
+        };
+        statements.push(statement);
+    }
+    tokens.eof()?;
+    Ok(bump.alloc_slice_copy(&statements))
+}
+
+fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    tokens.consume(TokenKind::Print)?;
+    let expr = expression(bump, tokens)?;
+    tokens.consume(TokenKind::Semicolon)?;
+    Ok(Statement::Print(expr))
+}
+
+fn expression_statement<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a>,
+) -> Result<Statement<'a>, Error<'a>> {
+    let result = Statement::Expression(expression(bump, tokens)?);
+    tokens.consume(TokenKind::Semicolon)?;
+    Ok(result)
+}
+
+pub fn expression<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a>,
+) -> Result<Expression<'a>, Error<'a>> {
     expr_impl(bump, tokens, None)
 }
 
@@ -251,6 +298,7 @@ fn expr_impl<'a>(
     while let Ok(token) = tokens.peek() {
         let op = match token.kind {
             TokenKind::RParen => break,
+            TokenKind::Semicolon => break,
             _ => BinOp::new(token)?,
         };
 
@@ -414,7 +462,7 @@ pub(crate) mod tests {
 
     pub(crate) fn parse_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Expression<'a>, Error<'a>> {
         let tokens = crate::lex(bump, "<test>", src).unwrap();
-        parse(bump, tokens)
+        parse(expression, bump, tokens)
     }
 
     #[rstest]

@@ -17,8 +17,11 @@ use bumpalo::Bump;
 use clap::Parser;
 
 use crate::eval::eval;
+use crate::eval::execute;
 pub use crate::lex::lex;
-pub use crate::parse::parse;
+use crate::parse::expression;
+use crate::parse::parse;
+use crate::parse::program;
 use crate::parse::Expression;
 
 mod eval;
@@ -44,14 +47,6 @@ impl AllocPath for Bump {
 struct Args {
     /// filename
     filename: Option<PathBuf>,
-    /// output token stream (for testing the lexer)
-    #[arg(long)]
-    test_lexer: bool,
-    /// output parsed expression as an s-expression (for testing the parser)
-    #[arg(long)]
-    test_parser: bool,
-    #[arg(long)]
-    test_evaluator: bool,
 }
 
 fn repl() -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +71,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
         };
-        let expr = match parse(bump, tokens) {
+        let expr = match parse(expression, bump, tokens) {
             Ok(expr) => expr,
             Err(err) => {
                 println!("Parse error\n{:?}", err);
@@ -194,23 +189,8 @@ pub fn run<'a>(
             bump.alloc_path(&filename),
             bump.alloc_str(&std::fs::read_to_string(filename)?),
         )?;
-        if args.test_lexer {
-            for token in tokens {
-                println!("{}", token.as_debug_string());
-            }
-            println!("EOF  null");
-            return Ok(());
-        }
-        let ast = parse(bump, tokens)?;
-        if args.test_parser {
-            println!("{}", ast.as_sexpr());
-            return Ok(());
-        }
-        let value = eval(&ast)?;
-        if args.test_evaluator {
-            println!("{value}");
-            return Ok(());
-        }
+        let ast = parse(program, bump, tokens)?;
+        execute(ast)?;
     }
     else {
         repl()?;

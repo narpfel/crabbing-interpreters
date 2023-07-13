@@ -5,6 +5,7 @@ use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::Expression;
 use crate::parse::LiteralKind;
+use crate::parse::Statement;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 
@@ -110,6 +111,16 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
         }
         Expression::Grouping { expr, .. } => eval(expr)?,
     })
+}
+
+pub fn execute<'a>(program: &'a [Statement<'a>]) -> Result<(), TypeError<'a>> {
+    for statement in program {
+        match statement {
+            Statement::Expression(expr) => drop(eval(expr)?),
+            Statement::Print(expr) => println!("{}", eval(expr)?),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
