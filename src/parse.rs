@@ -254,15 +254,21 @@ pub fn program<'a>(
     tokens: &mut Tokens<'a>,
 ) -> Result<&'a [Statement<'a>], Error<'a>> {
     let mut statements = Vec::new();
-    while let Ok(token) = tokens.peek() {
-        let statement = match token.kind {
-            TokenKind::Print => print(bump, tokens)?,
-            _ => expression_statement(bump, tokens)?,
-        };
-        statements.push(statement);
+
+    while tokens.peek().is_ok() {
+        statements.push(statement(bump, tokens)?);
     }
+
     tokens.eof()?;
     Ok(bump.alloc_slice_copy(&statements))
+}
+
+fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    let token = tokens.peek()?;
+    Ok(match token.kind {
+        TokenKind::Print => print(bump, tokens)?,
+        _ => expression_statement(bump, tokens)?,
+    })
 }
 
 fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
