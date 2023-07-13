@@ -15,6 +15,10 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        self.loc
+    }
+
     pub fn slice(&self) -> &'a str {
         &self.loc.src[self.loc.span()]
     }
@@ -63,8 +67,74 @@ impl std::fmt::Debug for Loc<'_> {
 }
 
 impl<'a> Loc<'a> {
+    pub(crate) fn file(&self) -> &'a Path {
+        self.file
+    }
+
+    pub(crate) fn start(&self) -> usize {
+        self.span.start
+    }
+
     pub(crate) fn span(&self) -> Range<usize> {
         self.span.start..self.span.end
+    }
+
+    pub(crate) fn until(self, other: Self) -> Self {
+        assert_eq!(self.file, other.file);
+        assert_eq!(self.src, other.src);
+        assert!(self.span.end <= other.span.start);
+        Self {
+            span: Span {
+                start: self.span.start,
+                end: other.span.end,
+            },
+            ..self
+        }
+    }
+
+    pub(crate) fn report(&self, kind: ariadne::ReportKind<'a>) -> ariadne::ReportBuilder<'a, Self> {
+        ariadne::Report::build(kind, self.file(), self.start())
+    }
+
+    pub(crate) fn cache(&self) -> impl ariadne::Cache<Path> + 'a {
+        struct Cache<'b>(&'b Path, ariadne::Source);
+        impl ariadne::Cache<Path> for Cache<'_> {
+            fn fetch(
+                &mut self,
+                id: &Path,
+            ) -> Result<&ariadne::Source, Box<dyn std::fmt::Debug + '_>> {
+                if self.0 == id {
+                    Ok(&self.1)
+                }
+                else {
+                    Err(Box::new(format!(
+                        "failed to fetch source `{}`",
+                        id.display(),
+                    )))
+                }
+            }
+
+            fn display<'a>(&self, id: &'a Path) -> Option<Box<dyn std::fmt::Display + 'a>> {
+                Some(Box::new(id.display()))
+            }
+        }
+        Cache(self.file(), ariadne::Source::from(self.src))
+    }
+}
+
+impl ariadne::Span for Loc<'_> {
+    type SourceId = Path;
+
+    fn source(&self) -> &Self::SourceId {
+        self.file
+    }
+
+    fn start(&self) -> usize {
+        self.span.start
+    }
+
+    fn end(&self) -> usize {
+        self.span.end
     }
 }
 

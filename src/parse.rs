@@ -3,6 +3,7 @@ use std::iter::Peekable;
 
 use bumpalo::Bump;
 
+use crate::lex::Loc;
 use crate::lex::Token;
 use crate::lex::TokenKind;
 
@@ -54,10 +55,23 @@ pub enum Expression<'a> {
         op: BinOp<'a>,
         rhs: &'a Expression<'a>,
     },
-    Grouping(&'a Expression<'a>),
+    Grouping {
+        l_paren: Token<'a>,
+        expr: &'a Expression<'a>,
+        r_paren: Token<'a>,
+    },
 }
 
-impl Expression<'_> {
+impl<'a> Expression<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        match self {
+            Expression::Literal(lit) => lit.loc(),
+            Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
+            Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
+            Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
+        }
+    }
+
     pub fn as_sexpr(&self) -> String {
         match self {
             Expression::Literal(lit) => lit.kind.value_string(),
@@ -70,7 +84,7 @@ impl Expression<'_> {
                 lhs.as_sexpr(),
                 rhs.as_sexpr(),
             ),
-            Expression::Grouping(expr) => format!("(group {})", expr.as_sexpr()),
+            Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
         }
     }
 }
@@ -78,8 +92,13 @@ impl Expression<'_> {
 #[derive(Debug, Clone, Copy)]
 pub struct Literal<'a> {
     pub(crate) kind: LiteralKind<'a>,
-    #[expect(dead_code)]
     token: Token<'a>,
+}
+
+impl<'a> Literal<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        self.token.loc()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -109,6 +128,12 @@ pub struct UnaryOp<'a> {
     pub(crate) token: Token<'a>,
 }
 
+impl<'a> UnaryOp<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        self.token.loc()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOpKind {
     Minus,
@@ -119,6 +144,12 @@ pub enum UnaryOpKind {
 pub struct BinOp<'a> {
     pub(crate) kind: BinOpKind,
     pub(crate) token: Token<'a>,
+}
+
+impl<'a> BinOp<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        self.token.loc()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -260,10 +291,10 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
 }
 
 fn grouping<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
-    tokens.consume(TokenKind::LParen)?;
+    let l_paren = tokens.consume(TokenKind::LParen)?;
     let expr = expression(bump, tokens)?;
-    tokens.consume(TokenKind::RParen)?;
-    Ok(Expression::Grouping(bump.alloc(expr)))
+    let r_paren = tokens.consume(TokenKind::RParen)?;
+    Ok(Expression::Grouping { l_paren, r_paren, expr: bump.alloc(expr) })
 }
 
 fn unary_op<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {

@@ -17,6 +17,15 @@ pub enum Value<'a> {
 }
 
 impl Value<'_> {
+    pub fn typ(&self) -> &'static str {
+        match self {
+            Value::Number(_) => "Number",
+            Value::String(_) => "String",
+            Value::Bool(_) => "Bool",
+            Value::Nil => "Nil",
+        }
+    }
+
     fn is_truthy(&self) -> bool {
         use Value::*;
         match self {
@@ -99,7 +108,7 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
                 _ => return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
             }
         }
-        Expression::Grouping(expr) => eval(expr)?,
+        Expression::Grouping { expr, .. } => eval(expr)?,
     })
 }
 
