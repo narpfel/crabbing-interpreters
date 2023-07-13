@@ -414,6 +414,10 @@ mod tests {
     #[case::string_concat(r#""a" + "b""#, "(+ a b)")]
     #[case::bool_conjunction("true < false", "(< true false)")]
     #[case::nil("nil", "nil")]
+    #[case::comparison_of_parenthesised_gt(
+        "(1 > 2) == (3 > 4)",
+        "(== (group (> 1.0 2.0)) (group (> 3.0 4.0)))"
+    )]
     fn test_parser(#[case] src: &str, #[case] expected: &str) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);
@@ -449,6 +453,10 @@ mod tests {
     )]
     #[case::expect_expr_in_parens("()", check_err!(Error::UnexpectedToken { .. }))]
     #[case::unclosed_paren("(1 + 2", check_err!(Error::Eof(_)))]
+    #[case::one_plus("1+", check_err!(Error::Eof(_)))]
+    #[case::comparison_of_lt("1 > 2 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
+    #[case::comparison_of_lt("1 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
+    #[case::comparison_of_lt("1 > 2 == 3", check_err!(Error::AmbiguousPrecedences { .. }))]
     fn test_parse_error(
         #[case] src: &str,
         #[case] expected: impl for<'a> FnOnce(Result<Expression<'a>, Error<'a>>),
