@@ -216,23 +216,11 @@ fn expr_impl<'a>(
     tokens: &mut Tokens<'a>,
     left_op: Option<(Token<'a>, Operator)>,
 ) -> Result<Expression<'a>, Error<'a>> {
-    use TokenKind::*;
-    let mut lhs = {
-        let token = tokens.peek()?;
-        match token.kind {
-            LParen => grouping(bump, tokens)?,
-            String | Number | True | False | Nil => literal(tokens)?,
-            Minus | Bang => unary_op(bump, tokens)?,
-            _ => unexpected_token(
-                &[LParen, String, Number, True, False, Nil, Minus, Bang],
-                token,
-            )?,
-        }
-    };
+    let mut lhs = primary(bump, tokens)?;
 
     while let Ok(token) = tokens.peek() {
         let op = match token.kind {
-            RParen => break,
+            TokenKind::RParen => break,
             _ => BinOp::new(token)?,
         };
 
@@ -255,6 +243,21 @@ fn expr_impl<'a>(
         };
     }
     Ok(lhs)
+}
+
+fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+    use TokenKind::*;
+    let token = tokens.peek()?;
+    Ok(match token.kind {
+        LParen => grouping(bump, tokens)?,
+        String | Number | True | False | Nil => literal(tokens)?,
+        Minus | Bang => unary_op(bump, tokens)?,
+        // TODO: could error with “expected expression” error here
+        _ => unexpected_token(
+            &[LParen, String, Number, True, False, Nil, Minus, Bang],
+            token,
+        )?,
+    })
 }
 
 fn grouping<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
