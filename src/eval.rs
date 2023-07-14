@@ -1,5 +1,5 @@
-use std::borrow::Cow;
 use std::fmt::Display;
+use std::rc::Rc;
 
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -10,14 +10,14 @@ use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Value<'a> {
+pub enum Value {
     Number(f64),
-    String(Cow<'a, str>),
+    String(Rc<str>),
     Bool(bool),
     Nil,
 }
 
-impl Value<'_> {
+impl Value {
     pub fn typ(&self) -> &'static str {
         match self {
             Value::Number(_) => "Number",
@@ -37,7 +37,7 @@ impl Value<'_> {
     }
 }
 
-impl Display for Value<'_> {
+impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Number(x) => write!(f, "{x}"),
@@ -53,24 +53,24 @@ pub enum TypeError<'a> {
     #[error("invalid operand to unary operator")]
     InvalidUnaryOp {
         op: UnaryOp<'a>,
-        value: Value<'a>,
+        value: Value,
         at: Expression<'a>,
     },
     #[error("invalid operands to binary operator")]
     InvalidBinaryOp {
-        lhs: Value<'a>,
+        lhs: Value,
         op: BinOp<'a>,
-        rhs: Value<'a>,
+        rhs: Value,
         at: Expression<'a>,
     },
 }
 
-pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
+pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
             LiteralKind::Number(n) => Number(n),
-            LiteralKind::String(s) => String(Cow::Borrowed(s)),
+            LiteralKind::String(s) => String(Rc::from(s)),
             LiteralKind::True => Bool(true),
             LiteralKind::False => Bool(false),
             LiteralKind::Nil => Nil,
@@ -93,7 +93,7 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
             match (&lhs, op.kind, &rhs) {
                 (_, EqualEqual, _) => Bool(lhs == rhs),
                 (_, NotEqual, _) => Bool(lhs != rhs),
-                (String(lhs), Plus, String(rhs)) => String(Cow::Owned(format!("{}{}", lhs, rhs))),
+                (String(lhs), Plus, String(rhs)) => String(Rc::from(format!("{}{}", lhs, rhs))),
                 (Number(lhs), _, Number(rhs)) => match op.kind {
                     Plus => Number(lhs + rhs),
                     Less => Bool(lhs < rhs),
@@ -113,7 +113,7 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
     })
 }
 
-pub fn execute<'a>(program: &'a [Statement<'a>]) -> Result<Value<'a>, TypeError<'a>> {
+pub fn execute<'a>(program: &'a [Statement<'a>]) -> Result<Value, TypeError<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
@@ -134,7 +134,7 @@ mod tests {
 
     use super::*;
 
-    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, TypeError<'a>> {
+    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value, TypeError<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         eval(&ast)
     }
@@ -143,7 +143,7 @@ mod tests {
     #[case::bool("true", Value::Bool(true))]
     #[case::bool("false", Value::Bool(false))]
     #[case::divide_numbers("4 / 2", Value::Number(2.0))]
-    #[case::concat_strings(r#""a" + "b""#, Value::String(Cow::Borrowed("ab")))]
+    #[case::concat_strings(r#""a" + "b""#, Value::String(Rc::from("ab")))]
     #[case::exponentiation("2 ** 2", Value::Number(4.0))]
     #[case::exponentiation("2 ** 2 ** 3", Value::Number(2.0_f64.powi(8)))]
     #[case::associativity("2 + 2 * 3", Value::Number(8.0))]
@@ -163,7 +163,7 @@ mod tests {
 
     macro_rules! check {
         ($body:expr) => {
-            for<'a> |result: Result<Value<'a>, TypeError<'a>>| -> () {
+            for<'a> |result: Result<Value, TypeError<'a>>| -> () {
                 #[allow(clippy::redundant_closure_call)]
                 let () = $body(result);
             }
@@ -206,7 +206,7 @@ mod tests {
     )]
     fn test_type_error(
         #[case] src: &str,
-        #[case] expected: impl for<'a> FnOnce(Result<Value<'a>, TypeError<'a>>),
+        #[case] expected: impl for<'a> FnOnce(Result<Value, TypeError<'a>>),
     ) {
         let bump = &Bump::new();
         expected(eval_str(bump, src));
