@@ -93,6 +93,14 @@ pub fn eval<'a>(
                 Not => Bool(!value.is_truthy()),
             }
         }
+        Expression::Assign { target, value, .. } => {
+            let value = eval(globals, value)?;
+            match globals.get_mut(target.name()) {
+                Some(place) => *place = value.clone(),
+                None => return Err(TypeError::NameError(*target)),
+            }
+            return Ok(value);
+        }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
             let lhs = eval(globals, lhs)?;
@@ -111,7 +119,7 @@ pub fn eval<'a>(
                     Times => Number(lhs * rhs),
                     Divide => Number(lhs / rhs),
                     Power => Number(lhs.powf(*rhs)),
-                    EqualEqual | NotEqual => unreachable!(),
+                    EqualEqual | NotEqual | Assign => unreachable!(),
                 },
                 _ => return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
             }

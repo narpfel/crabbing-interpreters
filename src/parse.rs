@@ -38,6 +38,9 @@ pub enum Error<'a> {
         left_op_token: Token<'a>,
         right_op: BinOp<'a>,
     },
+
+    #[error("invalid assignment target {0:?}")]
+    InvalidAssignmentTarget(Expression<'a>),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -68,6 +71,11 @@ pub enum Expression<'a> {
         r_paren: Token<'a>,
     },
     Ident(Name<'a>),
+    Assign {
+        target: Name<'a>,
+        equal: Token<'a>,
+        value: &'a Expression<'a>,
+    },
 }
 
 impl<'a> Expression<'a> {
@@ -78,6 +86,7 @@ impl<'a> Expression<'a> {
             Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
             Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
             Expression::Ident(name) => name.loc(),
+            Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
         }
     }
 
@@ -96,6 +105,8 @@ impl<'a> Expression<'a> {
             ),
             Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
             Expression::Ident(name) => format!("(name {})", name.name()),
+            Expression::Assign { target, value, .. } =>
+                format!("(= {} {})", target.name(), value.as_sexpr()),
         }
     }
 }
@@ -177,6 +188,7 @@ pub enum BinOpKind {
     Times,
     Divide,
     Power,
+    Assign,
 }
 
 impl<'a> BinOp<'a> {
@@ -194,6 +206,7 @@ impl<'a> BinOp<'a> {
             Star => BinOpKind::Times,
             Slash => BinOpKind::Divide,
             StarStar => BinOpKind::Power,
+            Equal => BinOpKind::Assign,
             _ => unexpected_token_with_message("a binary operator", token)?,
         };
         Ok(Self { kind, token })
@@ -359,12 +372,22 @@ fn expr_impl<'a>(
                 right_op: op,
             })?,
         }
+        // eat the `op` token
         let _ = tokens.next();
         let rhs = expr_impl(bump, tokens, Some((op.token, Operator::Infix(op.kind))))?;
-        lhs = Expression::Binary {
-            lhs: bump.alloc(lhs),
-            op,
-            rhs: bump.alloc(rhs),
+        lhs = if matches!(op.kind, BinOpKind::Assign) {
+            Expression::Assign {
+                target: as_assignment_target(lhs)?,
+                equal: op.token,
+                value: bump.alloc(rhs),
+            }
+        }
+        else {
+            Expression::Binary {
+                lhs: bump.alloc(lhs),
+                op,
+                rhs: bump.alloc(rhs),
+            }
         };
     }
     Ok(lhs)
@@ -443,6 +466,15 @@ fn unexpected_token_with_message<'a>(
     Err(Error::UnexpectedTokenMsg { expected, actual })
 }
 
+fn as_assignment_target(lhs: Expression) -> Result<Name, Error> {
+    if let Expression::Ident(name) = lhs {
+        Ok(name)
+    }
+    else {
+        Err(Error::InvalidAssignmentTarget(lhs))
+    }
+}
+
 trait NotEof<'a>
 where
     Self: 'a,
@@ -485,18 +517,21 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
             Infix(Plus | Minus) => Left,
             Infix(Times | Divide | Power) => Right,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
+            Infix(Assign) => Ambiguous,
         },
         Some(Infix(Times | Divide)) => match right {
             Prefix(_) => Right,
             Infix(Plus | Minus | Times | Divide) => Left,
             Infix(Power) => Right,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
+            Infix(Assign) => Ambiguous,
         },
         Some(Infix(Power)) => match right {
             Prefix(_) => Right,
             Infix(Power) => Right,
             Infix(Plus | Minus | Times | Divide) => Left,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
+            Infix(Assign) => Ambiguous,
         },
         Some(Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual)) =>
             match right {
@@ -504,7 +539,9 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
                 Infix(Plus | Minus | Times | Divide | Power) => Right,
                 Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) =>
                     Ambiguous,
+                Infix(Assign) => Ambiguous,
             },
+        Some(Infix(Assign)) => Right,
     }
 }
 
@@ -550,6 +587,8 @@ pub(crate) mod tests {
         "(1 > 2) == (3 > 4)",
         "(== (group (> 1.0 2.0)) (group (> 3.0 4.0)))"
     )]
+    #[case::assign_1_plus_2("a = 1 + 2", "(= a (+ 1.0 2.0))")]
+    #[case::assign_assign("a = b = c", "(= a (= b (name c)))")]
     fn test_parser(#[case] src: &str, #[case] expected: &str) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);
