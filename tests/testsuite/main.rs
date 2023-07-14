@@ -16,19 +16,19 @@ fn testname() -> String {
 
 #[test]
 fn repl_evaluates_expression() {
-    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("1 + 2"))
+    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("1 + 2;"))
 }
 
 #[test]
 fn repl_produces_error_message() {
-    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("nil * 2"))
+    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("nil * 2;"))
 }
 
 #[rstest]
-#[case::nil("nil")]
-#[case::bool_true("true")]
-#[case::negative_nil("- nil")]
-#[case::divide_by_string(r#"42 / "string""#)]
+#[case::nil("nil;")]
+#[case::bool_true("true;")]
+#[case::negative_nil("- nil;")]
+#[case::divide_by_string(r#"42 / "string";"#)]
 fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,

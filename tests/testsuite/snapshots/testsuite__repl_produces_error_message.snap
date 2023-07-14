@@ -3,44 +3,15 @@ source: tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args: []
-  stdin: nil * 2
+  stdin: nil * 2;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[3mBinary {
-    lhs: Literal(
-        Literal {
-            kind: Nil,
-            token: Token {
-                kind: Nil,
-                loc: <input>:0..3,
-            },
-        },
-    ),
-    op: BinOp {
-        kind: Times,
-        token: Token {
-            kind: Star,
-            loc: <input>:4..5,
-        },
-    },
-    rhs: Literal(
-        Literal {
-            kind: Number(
-                2.0,
-            ),
-            token: Token {
-                kind: Number,
-                loc: <input>:6..7,
-            },
-        },
-    ),
-}[0m
-Error: type error in binary operator `*`: lhs has type `Nil`, but rhs has type `Number`
+[0mλ» [1m[0mError: type error in binary operator `*`: lhs has type `Nil`, but rhs has type `Number`
    ╭─[<input>:1:1]
    │
- 1 │ nil * 2
+ 1 │ nil * 2;
    │ ─┬─ ┬ ┬  
    │  │  │ ╰── this is of type `Number`
    │  │  │    

@@ -3,42 +3,11 @@ source: tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args: []
-  stdin: 1 + 2
+  stdin: 1 + 2;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[3mBinary {
-    lhs: Literal(
-        Literal {
-            kind: Number(
-                1.0,
-            ),
-            token: Token {
-                kind: Number,
-                loc: <input>:0..1,
-            },
-        },
-    ),
-    op: BinOp {
-        kind: Plus,
-        token: Token {
-            kind: Plus,
-            loc: <input>:2..3,
-        },
-    },
-    rhs: Literal(
-        Literal {
-            kind: Number(
-                2.0,
-            ),
-            token: Token {
-                kind: Number,
-                loc: <input>:4..5,
-            },
-        },
-    ),
-}[0m
-[38;2;170;034;255m[1m=> 3[0m
+[0mλ» [1m[0m[38;2;170;034;255m[1m=> 3[0m
 [0mλ» [1m[0m
 ----- stderr -----

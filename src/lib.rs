@@ -16,10 +16,9 @@ use ariadne::Label;
 use bumpalo::Bump;
 use clap::Parser;
 
-use crate::eval::eval;
 use crate::eval::execute;
+use crate::eval::Value;
 pub use crate::lex::lex;
-use crate::parse::expression;
 use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Expression;
@@ -52,36 +51,51 @@ struct Args {
 fn repl() -> Result<(), Box<dyn std::error::Error>> {
     let bump = &mut Bump::new();
     let mut line = String::new();
-    loop {
-        bump.reset();
+    'repl: loop {
         line.clear();
-        print!("\x1B[0mλ» \x1B[1m");
-        stdout().flush()?;
-        // TODO: read until the lexer finds a semicolon token (or the parser doesn’t
-        // error with an unexpected EOF)
-        let len = stdin().read_line(&mut line)?;
-        print!("\x1B[0m");
-        if len == 0 {
-            return Ok(());
-        }
-        let tokens = match lex(bump, "<input>", &line) {
-            Ok(tokens) => tokens,
-            Err(err) => {
-                eprintln!("{:?}", err);
-                continue;
+        let mut first = true;
+        let stmts = loop {
+            if first {
+                print!("\x1B[0mλ» \x1B[1m");
             }
-        };
-        let expr = match parse(expression, bump, tokens) {
-            Ok(expr) => expr,
-            Err(err) => {
-                println!("Parse error\n{:?}", err);
-                continue;
+            else {
+                print!("\x1B[0m.. \x1B[1m");
             }
+            stdout().flush()?;
+            let len = stdin().read_line(&mut line)?;
+            print!("\x1B[0m");
+            if len == 0 {
+                if first {
+                    return Ok(());
+                }
+                else {
+                    println!();
+                    break &[][..];
+                }
+            }
+            first = false;
+            let tokens = match lex(bump, "<input>", &line) {
+                Ok(tokens) => tokens,
+                Err(err) => {
+                    eprintln!("{:?}", err);
+                    continue 'repl;
+                }
+            };
+            match parse(program, bump, tokens) {
+                Ok(stmts) => break stmts,
+                Err(parse::Error::Eof(_)) => (),
+                Err(err) => {
+                    println!("Parse error\n{:?}", err);
+                    continue 'repl;
+                }
+            };
         };
-        println!("\x1B[3m{:#?}\x1B[0m", expr);
-        let result = eval(&expr);
+        let result = execute(stmts);
         match result {
-            Ok(value) => println!("\x1B[38;2;170;034;255m\x1B[1m=> {}\x1B[0m", value),
+            Ok(value) =>
+                if !matches!(value, Value::Nil) {
+                    println!("\x1B[38;2;170;034;255m\x1B[1m=> {}\x1B[0m", value);
+                },
             Err(eval::TypeError::InvalidUnaryOp { op, value, at }) => {
                 let Expression::Unary(operator, operand) = at
                 else {

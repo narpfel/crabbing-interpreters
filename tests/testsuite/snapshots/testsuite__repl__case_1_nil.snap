@@ -3,20 +3,10 @@ source: tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args: []
-  stdin: nil
+  stdin: nil;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[3mLiteral(
-    Literal {
-        kind: Nil,
-        token: Token {
-            kind: Nil,
-            loc: <input>:0..3,
-        },
-    },
-)[0m
-[38;2;170;034;255m[1m=> nil[0m
-[0mλ» [1m[0m
+[0mλ» [1m[0m[0mλ» [1m[0m
 ----- stderr -----

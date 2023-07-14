@@ -113,14 +113,18 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
     })
 }
 
-pub fn execute<'a>(program: &'a [Statement<'a>]) -> Result<(), TypeError<'a>> {
+pub fn execute<'a>(program: &'a [Statement<'a>]) -> Result<Value<'a>, TypeError<'a>> {
+    let mut last_value = Value::Nil;
     for statement in program {
-        match statement {
-            Statement::Expression(expr) => drop(eval(expr)?),
-            Statement::Print(expr) => println!("{}", eval(expr)?),
+        last_value = match statement {
+            Statement::Expression(expr) => eval(expr)?,
+            Statement::Print(expr) => {
+                println!("{}", eval(expr)?);
+                Value::Nil
+            }
         }
     }
-    Ok(())
+    Ok(last_value)
 }
 
 #[cfg(test)]
