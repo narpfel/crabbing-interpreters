@@ -50,6 +50,7 @@ pub enum Eof {
 pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
+    Var(Name<'a>, Option<Expression<'a>>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -66,6 +67,7 @@ pub enum Expression<'a> {
         expr: &'a Expression<'a>,
         r_paren: Token<'a>,
     },
+    Ident(Name<'a>),
 }
 
 impl<'a> Expression<'a> {
@@ -75,6 +77,7 @@ impl<'a> Expression<'a> {
             Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
             Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
             Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
+            Expression::Ident(name) => name.loc(),
         }
     }
 
@@ -92,6 +95,7 @@ impl<'a> Expression<'a> {
                 rhs.as_sexpr(),
             ),
             Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
+            Expression::Ident(name) => format!("(name {})", name.name()),
         }
     }
 }
@@ -196,6 +200,19 @@ impl<'a> BinOp<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Name<'a>(Token<'a>);
+
+impl<'a> Name<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        self.0.loc()
+    }
+
+    pub(crate) fn name(&self) -> &'a str {
+        self.0.slice()
+    }
+}
+
 pub struct Tokens<'a>(Peekable<Copied<std::slice::Iter<'a, Token<'a>>>>);
 
 impl<'a> Tokens<'a> {
@@ -256,11 +273,35 @@ pub fn program<'a>(
     let mut statements = Vec::new();
 
     while tokens.peek().is_ok() {
-        statements.push(statement(bump, tokens)?);
+        statements.push(declaration(bump, tokens)?);
     }
 
     tokens.eof()?;
     Ok(bump.alloc_slice_copy(&statements))
+}
+
+fn declaration<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    let token = tokens.peek()?;
+    Ok(match token.kind {
+        TokenKind::Var => vardecl(bump, tokens)?,
+        _ => statement(bump, tokens)?,
+    })
+}
+
+fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    tokens.consume(TokenKind::Var)?;
+    let name = Name(tokens.consume(TokenKind::Identifier)?);
+    let maybe_equal = tokens.peek()?;
+    let initialiser = if matches!(maybe_equal.kind, TokenKind::Equal) {
+        tokens.consume(TokenKind::Equal)?;
+        let initialiser = expression(bump, tokens)?;
+        Some(initialiser)
+    }
+    else {
+        None
+    };
+    tokens.consume(TokenKind::Semicolon)?;
+    Ok(Statement::Var(name, initialiser))
 }
 
 fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
@@ -336,6 +377,7 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
         LParen => grouping(bump, tokens)?,
         String | Number | True | False | Nil => literal(tokens)?,
         Minus | Bang => unary_op(bump, tokens)?,
+        Identifier => ident(tokens)?,
         // TODO: could error with “expected expression” error here
         _ => unexpected_token(
             &[LParen, String, Number, True, False, Nil, Minus, Bang],
@@ -382,6 +424,12 @@ fn literal<'a>(tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
         _ => unexpected_token(&[Number, String, True, False, Nil], token)?,
     };
     Ok(Expression::Literal(Literal { kind, token }))
+}
+
+fn ident<'a>(tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+    Ok(Expression::Ident(Name(
+        tokens.consume(TokenKind::Identifier)?,
+    )))
 }
 
 fn unexpected_token<'a>(expected: &'static [TokenKind], actual: Token<'a>) -> Result<!, Error<'a>> {

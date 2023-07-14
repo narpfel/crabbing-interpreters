@@ -3,6 +3,7 @@
 #![feature(lint_reasons)]
 #![feature(never_type)]
 
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::stdin;
@@ -50,6 +51,7 @@ struct Args {
 
 fn repl() -> Result<(), Box<dyn std::error::Error>> {
     let bump = &mut Bump::new();
+    let mut globals = HashMap::new();
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -90,7 +92,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
         };
-        let result = execute(stmts);
+        let result = execute(&mut globals, stmts);
         match result {
             Ok(value) =>
                 if !matches!(value, Value::Nil) {
@@ -188,6 +190,19 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
                     .finish()
                     .print(at.loc().cache())?;
             }
+            Err(eval::TypeError::NameError(name)) => {
+                let name_color = ariadne::Color::Magenta;
+                let message = format!(
+                    "cannot find name `{}` in this scope",
+                    name.name().fg(name_color),
+                );
+                name.loc()
+                    .report(ariadne::ReportKind::Error)
+                    .with_message(message)
+                    .with_label(Label::new(name.loc()).with_color(name_color))
+                    .finish()
+                    .print(name.loc().cache())?;
+            }
         }
     }
 }
@@ -204,7 +219,8 @@ pub fn run<'a>(
             bump.alloc_str(&std::fs::read_to_string(filename)?),
         )?;
         let ast = parse(program, bump, tokens)?;
-        execute(ast)?;
+        let mut globals = HashMap::new();
+        execute(&mut globals, ast)?;
     }
     else {
         repl()?;

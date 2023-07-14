@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -5,6 +6,7 @@ use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::Expression;
 use crate::parse::LiteralKind;
+use crate::parse::Name;
 use crate::parse::Statement;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
@@ -63,9 +65,14 @@ pub enum TypeError<'a> {
         rhs: Value,
         at: Expression<'a>,
     },
+    #[error("unbound name")]
+    NameError(Name<'a>),
 }
 
-pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
+pub fn eval<'a>(
+    globals: &mut HashMap<&'a str, Value>,
+    expr: &Expression<'a>,
+) -> Result<Value, TypeError<'a>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
@@ -77,7 +84,7 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
         },
         Expression::Unary(op, inner_expr) => {
             use UnaryOpKind::*;
-            let value = eval(inner_expr)?;
+            let value = eval(globals, inner_expr)?;
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
@@ -88,8 +95,8 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
         }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
-            let lhs = eval(lhs)?;
-            let rhs = eval(rhs)?;
+            let lhs = eval(globals, lhs)?;
+            let rhs = eval(globals, rhs)?;
             match (&lhs, op.kind, &rhs) {
                 (_, EqualEqual, _) => Bool(lhs == rhs),
                 (_, NotEqual, _) => Bool(lhs != rhs),
@@ -109,17 +116,34 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
                 _ => return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
             }
         }
-        Expression::Grouping { expr, .. } => eval(expr)?,
+        Expression::Grouping { expr, .. } => eval(globals, expr)?,
+        Expression::Ident(name) => globals
+            .get(name.name())
+            .cloned()
+            .ok_or(TypeError::NameError(*name))?,
     })
 }
 
-pub fn execute<'a>(program: &'a [Statement<'a>]) -> Result<Value, TypeError<'a>> {
+pub fn execute<'a>(
+    globals: &mut HashMap<&'a str, Value>,
+    program: &'a [Statement<'a>],
+) -> Result<Value, TypeError<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
-            Statement::Expression(expr) => eval(expr)?,
+            Statement::Expression(expr) => eval(globals, expr)?,
             Statement::Print(expr) => {
-                println!("{}", eval(expr)?);
+                println!("{}", eval(globals, expr)?);
+                Value::Nil
+            }
+            Statement::Var(name, initialiser) => {
+                let value = if let Some(initialiser) = initialiser {
+                    eval(globals, initialiser)?
+                }
+                else {
+                    Value::Nil
+                };
+                globals.insert(name.name(), value);
                 Value::Nil
             }
         }
@@ -136,7 +160,8 @@ mod tests {
 
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value, TypeError<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
-        eval(&ast)
+        let mut globals = HashMap::default();
+        eval(&mut globals, &ast)
     }
 
     #[rstest]
