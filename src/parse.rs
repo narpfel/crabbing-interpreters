@@ -41,6 +41,9 @@ pub enum Error<'a> {
 
     #[error("invalid assignment target {0:?}")]
     InvalidAssignmentTarget(Expression<'a>),
+
+    #[error("invalid for loop initialiser")]
+    InvalidForLoopInitialiser(Statement<'a>),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +65,12 @@ pub enum Statement<'a> {
     },
     While {
         condition: Expression<'a>,
+        body: &'a Statement<'a>,
+    },
+    For {
+        init: Option<&'a Statement<'a>>,
+        condition: Option<Expression<'a>>,
+        update: Option<Expression<'a>>,
         body: &'a Statement<'a>,
     },
 }
@@ -334,6 +343,7 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
         TokenKind::LBrace => Statement::Block(block(bump, tokens)?),
         TokenKind::If => if_statement(bump, tokens)?,
         TokenKind::While => while_loop(bump, tokens)?,
+        TokenKind::For => for_loop(bump, tokens)?,
         _ => expression_statement(bump, tokens)?,
     })
 }
@@ -383,6 +393,43 @@ fn while_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'
     tokens.consume(TokenKind::RParen)?;
     let body = statement(bump, tokens)?;
     Ok(Statement::While { condition, body: bump.alloc(body) })
+}
+
+fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    tokens.consume(TokenKind::For)?;
+    tokens.consume(TokenKind::LParen)?;
+    let token = tokens.peek()?;
+    let init = if matches!(token.kind, TokenKind::Semicolon) {
+        tokens.consume(TokenKind::Semicolon)?;
+        None
+    }
+    else {
+        let init = declaration(bump, tokens)?;
+        match init {
+            Statement::Expression(_) => (),
+            Statement::Var(_, _) => (),
+            _ => return Err(Error::InvalidForLoopInitialiser(init)),
+        }
+        Some(&*bump.alloc(init))
+    };
+    let token = tokens.peek()?;
+    let condition = if matches!(token.kind, TokenKind::Semicolon) {
+        None
+    }
+    else {
+        Some(expression(bump, tokens)?)
+    };
+    tokens.consume(TokenKind::Semicolon)?;
+    let token = tokens.peek()?;
+    let update = if matches!(token.kind, TokenKind::RParen) {
+        None
+    }
+    else {
+        Some(expression(bump, tokens)?)
+    };
+    tokens.consume(TokenKind::RParen)?;
+    let body = bump.alloc(statement(bump, tokens)?);
+    Ok(Statement::For { init, condition, update, body })
 }
 
 fn expression_statement<'a>(

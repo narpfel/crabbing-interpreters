@@ -204,6 +204,21 @@ pub fn execute<'a>(
                 }
                 Value::Nil
             }
+            Statement::For { init, condition, update, body } => {
+                if let Some(init) = init {
+                    execute(env, &[**init])?;
+                }
+                while condition
+                    .map_or(Ok(Value::Bool(true)), |cond| eval(env, &cond))?
+                    .is_truthy()
+                {
+                    execute(env, &[**body])?;
+                    if let Some(update) = update {
+                        eval(env, update)?;
+                    }
+                }
+                Value::Nil
+            }
         }
     }
     Ok(last_value)
