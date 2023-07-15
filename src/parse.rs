@@ -208,6 +208,8 @@ pub enum BinOpKind {
     Divide,
     Power,
     Assign,
+    And,
+    Or,
 }
 
 impl<'a> BinOp<'a> {
@@ -226,6 +228,8 @@ impl<'a> BinOp<'a> {
             Slash => BinOpKind::Divide,
             StarStar => BinOpKind::Power,
             Equal => BinOpKind::Assign,
+            And => BinOpKind::And,
+            Or => BinOpKind::Or,
             _ => unexpected_token_with_message("a binary operator", token)?,
         };
         Ok(Self { kind, token })
@@ -614,14 +618,14 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
         },
         Some(Infix(Plus | Minus)) => match right {
             Prefix(_) => Right,
-            Infix(Plus | Minus) => Left,
+            Infix(Or | And | Plus | Minus) => Left,
             Infix(Times | Divide | Power) => Right,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
             Infix(Assign) => Ambiguous,
         },
         Some(Infix(Times | Divide)) => match right {
             Prefix(_) => Right,
-            Infix(Plus | Minus | Times | Divide) => Left,
+            Infix(Or | And | Plus | Minus | Times | Divide) => Left,
             Infix(Power) => Right,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
             Infix(Assign) => Ambiguous,
@@ -629,19 +633,28 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
         Some(Infix(Power)) => match right {
             Prefix(_) => Right,
             Infix(Power) => Right,
-            Infix(Plus | Minus | Times | Divide) => Left,
+            Infix(Or | And | Plus | Minus | Times | Divide) => Left,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
             Infix(Assign) => Ambiguous,
         },
         Some(Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual)) =>
             match right {
                 Prefix(_) => Right,
+                Infix(Or | And) => Left,
                 Infix(Plus | Minus | Times | Divide | Power) => Right,
                 Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) =>
                     Ambiguous,
                 Infix(Assign) => Ambiguous,
             },
         Some(Infix(Assign)) => Right,
+        Some(Infix(Or)) => match right {
+            Infix(Assign) => Left,
+            _ => Right,
+        },
+        Some(Infix(And)) => match right {
+            Infix(Assign | Or | And) => Left,
+            _ => Right,
+        },
     }
 }
 
@@ -689,6 +702,9 @@ pub(crate) mod tests {
     )]
     #[case::assign_1_plus_2("a = 1 + 2", "(= a (+ 1.0 2.0))")]
     #[case::assign_assign("a = b = c", "(= a (= b (name c)))")]
+    #[case::one_plus_two_and_three("1 + 2 and 3", "(and (+ 1.0 2.0) 3.0)")]
+    #[case::and_or("1 and 2 or 3", "(or (and 1.0 2.0) 3.0)")]
+    #[case::or_and("1 or 2 and 3", "(or 1.0 (and 2.0 3.0))")]
     fn test_parser(#[case] src: &str, #[case] expected: &str) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);

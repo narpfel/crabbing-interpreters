@@ -139,25 +139,50 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
         }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
-            let lhs = eval(env, lhs)?;
-            let rhs = eval(env, rhs)?;
-            match (&lhs, op.kind, &rhs) {
-                (_, EqualEqual, _) => Bool(lhs == rhs),
-                (_, NotEqual, _) => Bool(lhs != rhs),
-                (String(lhs), Plus, String(rhs)) => String(Rc::from(format!("{}{}", lhs, rhs))),
-                (Number(lhs), _, Number(rhs)) => match op.kind {
-                    Plus => Number(lhs + rhs),
-                    Less => Bool(lhs < rhs),
-                    LessEqual => Bool(lhs <= rhs),
-                    Greater => Bool(lhs > rhs),
-                    GreaterEqual => Bool(lhs >= rhs),
-                    Minus => Number(lhs - rhs),
-                    Times => Number(lhs * rhs),
-                    Divide => Number(lhs / rhs),
-                    Power => Number(lhs.powf(*rhs)),
-                    EqualEqual | NotEqual | Assign => unreachable!(),
-                },
-                _ => return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
+            match op.kind {
+                And => {
+                    let lhs = eval(env, lhs)?;
+                    if lhs.is_truthy() {
+                        eval(env, rhs)?
+                    }
+                    else {
+                        lhs
+                    }
+                }
+                Or => {
+                    let lhs = eval(env, lhs)?;
+                    if lhs.is_truthy() {
+                        lhs
+                    }
+                    else {
+                        eval(env, rhs)?
+                    }
+                }
+                _ => {
+                    let lhs = eval(env, lhs)?;
+                    let rhs = eval(env, rhs)?;
+                    match (&lhs, op.kind, &rhs) {
+                        (_, And | Or, _) => unreachable!(),
+                        (_, EqualEqual, _) => Bool(lhs == rhs),
+                        (_, NotEqual, _) => Bool(lhs != rhs),
+                        (String(lhs), Plus, String(rhs)) =>
+                            String(Rc::from(format!("{}{}", lhs, rhs))),
+                        (Number(lhs), _, Number(rhs)) => match op.kind {
+                            Plus => Number(lhs + rhs),
+                            Less => Bool(lhs < rhs),
+                            LessEqual => Bool(lhs <= rhs),
+                            Greater => Bool(lhs > rhs),
+                            GreaterEqual => Bool(lhs >= rhs),
+                            Minus => Number(lhs - rhs),
+                            Times => Number(lhs * rhs),
+                            Divide => Number(lhs / rhs),
+                            Power => Number(lhs.powf(*rhs)),
+                            EqualEqual | NotEqual | Assign | And | Or => unreachable!(),
+                        },
+                        _ =>
+                            return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
+                    }
+                }
             }
         }
         Expression::Grouping { expr, .. } => eval(env, expr)?,
