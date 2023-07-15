@@ -198,6 +198,12 @@ pub fn execute<'a>(
                         None => Value::Nil,
                     }
                 },
+            Statement::While { condition, body } => {
+                while eval(env, condition)?.is_truthy() {
+                    execute(env, &[**body])?;
+                }
+                Value::Nil
+            }
         }
     }
     Ok(last_value)

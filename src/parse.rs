@@ -60,6 +60,10 @@ pub enum Statement<'a> {
         then: &'a Statement<'a>,
         or_else: Option<&'a Statement<'a>>,
     },
+    While {
+        condition: Expression<'a>,
+        body: &'a Statement<'a>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -329,6 +333,7 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
         TokenKind::Print => print(bump, tokens)?,
         TokenKind::LBrace => Statement::Block(block(bump, tokens)?),
         TokenKind::If => if_statement(bump, tokens)?,
+        TokenKind::While => while_loop(bump, tokens)?,
         _ => expression_statement(bump, tokens)?,
     })
 }
@@ -369,6 +374,15 @@ fn if_statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement
         None
     };
     Ok(Statement::If { condition, then, or_else })
+}
+
+fn while_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    tokens.consume(TokenKind::While)?;
+    tokens.consume(TokenKind::LParen)?;
+    let condition = expression(bump, tokens)?;
+    tokens.consume(TokenKind::RParen)?;
+    let body = statement(bump, tokens)?;
+    Ok(Statement::While { condition, body: bump.alloc(body) })
 }
 
 fn expression_statement<'a>(
