@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -69,10 +70,48 @@ pub enum TypeError<'a> {
     NameError(Name<'a>),
 }
 
-pub fn eval<'a>(
-    globals: &mut HashMap<&'a str, Value>,
-    expr: &Expression<'a>,
-) -> Result<Value, TypeError<'a>> {
+pub struct Environment<'a> {
+    scopes: Vec<std::collections::HashMap<&'a str, Value>>,
+}
+
+impl<'a> Environment<'a> {
+    pub fn new() -> Self {
+        Self { scopes: vec![HashMap::default()] }
+    }
+
+    fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.scopes.push(HashMap::default());
+        let result = f(self);
+        self.scopes.pop();
+        result
+    }
+
+    fn get(&self, name: &Name<'a>) -> Result<Value, TypeError<'a>> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(value) = scope.get(name.name()) {
+                return Ok(value.clone());
+            }
+        }
+
+        Err(TypeError::NameError(*name))
+    }
+
+    fn set(&mut self, name: &Name<'a>, value: Value) -> Result<(), TypeError<'a>> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Entry::Occupied(mut entry) = scope.entry(name.name()) {
+                entry.insert(value);
+                return Ok(());
+            }
+        }
+        Err(TypeError::NameError(*name))
+    }
+
+    fn insert(&mut self, name: &'a str, value: Value) {
+        self.scopes.last_mut().unwrap().insert(name, value);
+    }
+}
+
+pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
@@ -84,7 +123,7 @@ pub fn eval<'a>(
         },
         Expression::Unary(op, inner_expr) => {
             use UnaryOpKind::*;
-            let value = eval(globals, inner_expr)?;
+            let value = eval(env, inner_expr)?;
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
@@ -94,17 +133,14 @@ pub fn eval<'a>(
             }
         }
         Expression::Assign { target, value, .. } => {
-            let value = eval(globals, value)?;
-            match globals.get_mut(target.name()) {
-                Some(place) => *place = value.clone(),
-                None => return Err(TypeError::NameError(*target)),
-            }
+            let value = eval(env, value)?;
+            env.set(target, value.clone())?;
             return Ok(value);
         }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
-            let lhs = eval(globals, lhs)?;
-            let rhs = eval(globals, rhs)?;
+            let lhs = eval(env, lhs)?;
+            let rhs = eval(env, rhs)?;
             match (&lhs, op.kind, &rhs) {
                 (_, EqualEqual, _) => Bool(lhs == rhs),
                 (_, NotEqual, _) => Bool(lhs != rhs),
@@ -124,36 +160,34 @@ pub fn eval<'a>(
                 _ => return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
             }
         }
-        Expression::Grouping { expr, .. } => eval(globals, expr)?,
-        Expression::Ident(name) => globals
-            .get(name.name())
-            .cloned()
-            .ok_or(TypeError::NameError(*name))?,
+        Expression::Grouping { expr, .. } => eval(env, expr)?,
+        Expression::Ident(name) => env.get(name)?,
     })
 }
 
 pub fn execute<'a>(
-    globals: &mut HashMap<&'a str, Value>,
+    env: &mut Environment<'a>,
     program: &'a [Statement<'a>],
 ) -> Result<Value, TypeError<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
-            Statement::Expression(expr) => eval(globals, expr)?,
+            Statement::Expression(expr) => eval(env, expr)?,
             Statement::Print(expr) => {
-                println!("{}", eval(globals, expr)?);
+                println!("{}", eval(env, expr)?);
                 Value::Nil
             }
             Statement::Var(name, initialiser) => {
                 let value = if let Some(initialiser) = initialiser {
-                    eval(globals, initialiser)?
+                    eval(env, initialiser)?
                 }
                 else {
                     Value::Nil
                 };
-                globals.insert(name.name(), value);
+                env.insert(name.name(), value);
                 Value::Nil
             }
+            Statement::Block(block) => env.with_scope(|env| execute(env, block))?,
         }
     }
     Ok(last_value)
@@ -168,8 +202,8 @@ mod tests {
 
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value, TypeError<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
-        let mut globals = HashMap::default();
-        eval(&mut globals, &ast)
+        let mut env = Environment::new();
+        eval(&mut env, &ast)
     }
 
     #[rstest]

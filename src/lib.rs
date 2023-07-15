@@ -3,7 +3,6 @@
 #![feature(lint_reasons)]
 #![feature(never_type)]
 
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::stdin;
@@ -18,6 +17,7 @@ use bumpalo::Bump;
 use clap::Parser;
 
 use crate::eval::execute;
+use crate::eval::Environment;
 use crate::eval::Value;
 pub use crate::lex::lex;
 use crate::parse::parse;
@@ -51,7 +51,7 @@ struct Args {
 
 fn repl() -> Result<(), Box<dyn std::error::Error>> {
     let bump = &mut Bump::new();
-    let mut globals = HashMap::new();
+    let mut globals = Environment::new();
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -219,7 +219,7 @@ pub fn run<'a>(
             bump.alloc_str(&std::fs::read_to_string(filename)?),
         )?;
         let ast = parse(program, bump, tokens)?;
-        let mut globals = HashMap::new();
+        let mut globals = Environment::new();
         execute(&mut globals, ast)?;
     }
     else {

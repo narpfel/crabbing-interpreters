@@ -54,6 +54,7 @@ pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
     Var(Name<'a>, Option<Expression<'a>>),
+    Block(&'a [Statement<'a>]),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -321,6 +322,7 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
     let token = tokens.peek()?;
     Ok(match token.kind {
         TokenKind::Print => print(bump, tokens)?,
+        TokenKind::LBrace => Statement::Block(block(bump, tokens)?),
         _ => expression_statement(bump, tokens)?,
     })
 }
@@ -330,6 +332,20 @@ fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, E
     let expr = expression(bump, tokens)?;
     tokens.consume(TokenKind::Semicolon)?;
     Ok(Statement::Print(expr))
+}
+
+fn block<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<&'a [Statement<'a>], Error<'a>> {
+    tokens.consume(TokenKind::LBrace)?;
+    let mut statements = Vec::new();
+    loop {
+        let token = tokens.peek()?;
+        if matches!(token.kind, TokenKind::RBrace) {
+            tokens.consume(TokenKind::RBrace)?;
+            break;
+        }
+        statements.push(declaration(bump, tokens)?);
+    }
+    Ok(bump.alloc_slice_copy(&statements))
 }
 
 fn expression_statement<'a>(
