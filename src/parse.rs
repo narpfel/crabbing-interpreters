@@ -55,6 +55,11 @@ pub enum Statement<'a> {
     Print(Expression<'a>),
     Var(Name<'a>, Option<Expression<'a>>),
     Block(&'a [Statement<'a>]),
+    If {
+        condition: Expression<'a>,
+        then: &'a Statement<'a>,
+        or_else: Option<&'a Statement<'a>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -323,6 +328,7 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
     Ok(match token.kind {
         TokenKind::Print => print(bump, tokens)?,
         TokenKind::LBrace => Statement::Block(block(bump, tokens)?),
+        TokenKind::If => if_statement(bump, tokens)?,
         _ => expression_statement(bump, tokens)?,
     })
 }
@@ -346,6 +352,23 @@ fn block<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<&'a [Statement<'
         statements.push(declaration(bump, tokens)?);
     }
     Ok(bump.alloc_slice_copy(&statements))
+}
+
+fn if_statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    tokens.consume(TokenKind::If)?;
+    tokens.consume(TokenKind::LParen)?;
+    let condition = expression(bump, tokens)?;
+    tokens.consume(TokenKind::RParen)?;
+    let then = bump.alloc(statement(bump, tokens)?);
+    let token = tokens.peek();
+    let or_else = if matches!(token, Ok(Token { kind: TokenKind::Else, .. })) {
+        tokens.consume(TokenKind::Else)?;
+        Some(&*bump.alloc(statement(bump, tokens)?))
+    }
+    else {
+        None
+    };
+    Ok(Statement::If { condition, then, or_else })
 }
 
 fn expression_statement<'a>(

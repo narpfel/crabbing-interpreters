@@ -167,7 +167,7 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
 
 pub fn execute<'a>(
     env: &mut Environment<'a>,
-    program: &'a [Statement<'a>],
+    program: &[Statement<'a>],
 ) -> Result<Value, TypeError<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
@@ -188,6 +188,16 @@ pub fn execute<'a>(
                 Value::Nil
             }
             Statement::Block(block) => env.with_scope(|env| execute(env, block))?,
+            Statement::If { condition, then, or_else } =>
+                if eval(env, condition)?.is_truthy() {
+                    execute(env, &[**then])?
+                }
+                else {
+                    match or_else {
+                        Some(stmt) => execute(env, &[**stmt])?,
+                        None => Value::Nil,
+                    }
+                },
         }
     }
     Ok(last_value)

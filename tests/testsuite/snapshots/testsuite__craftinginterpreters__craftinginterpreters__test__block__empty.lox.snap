@@ -5,9 +5,9 @@ info:
   args:
     - craftinginterpreters/test/block/empty.lox
 ---
-success: false
-exit_code: 1
+success: true
+exit_code: 0
 ----- stdout -----
+ok
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: If, loc: craftinginterpreters/test/block/empty.lox:37..39 } }
