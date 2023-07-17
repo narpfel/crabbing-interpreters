@@ -215,29 +215,29 @@ pub fn execute<'a>(
             Statement::Block(block) => env.with_scope(|env| execute(env, block))?,
             Statement::If { condition, then, or_else } =>
                 if eval(env, condition)?.is_truthy() {
-                    execute(env, &[**then])?
+                    execute(env, std::slice::from_ref(then))?
                 }
                 else {
                     match or_else {
-                        Some(stmt) => execute(env, &[**stmt])?,
+                        Some(stmt) => execute(env, std::slice::from_ref(stmt))?,
                         None => Value::Nil,
                     }
                 },
             Statement::While { condition, body } => {
                 while eval(env, condition)?.is_truthy() {
-                    execute(env, &[**body])?;
+                    execute(env, std::slice::from_ref(body))?;
                 }
                 Value::Nil
             }
             Statement::For { init, condition, update, body } => env.with_scope(|env| {
                 if let Some(init) = init {
-                    execute(env, &[**init])?;
+                    execute(env, std::slice::from_ref(init))?;
                 }
                 while condition
                     .map_or(Ok(Value::Bool(true)), |cond| eval(env, &cond))?
                     .is_truthy()
                 {
-                    execute(env, &[**body])?;
+                    execute(env, std::slice::from_ref(body))?;
                     if let Some(update) = update {
                         eval(env, update)?;
                     }
