@@ -1,3 +1,5 @@
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 
 use insta_cmd::assert_cmd_snapshot;
@@ -14,6 +16,10 @@ fn testname() -> String {
         .unwrap()
         .to_string()
         .replace(":", "_")
+}
+
+fn as_relative(path: &Path) -> &Path {
+    path.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap()
 }
 
 #[test]
@@ -56,5 +62,14 @@ fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,
         Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin(src)
+    )
+}
+
+#[rstest]
+fn interpreter(#[files("tests/cases/**/*.lox")] path: PathBuf) {
+    let path = as_relative(&path);
+    assert_cmd_snapshot!(
+        path.display().to_string(),
+        Command::new(get_cargo_bin("crabbing-interpreters")).arg(path)
     )
 }

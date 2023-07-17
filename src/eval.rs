@@ -229,7 +229,7 @@ pub fn execute<'a>(
                 }
                 Value::Nil
             }
-            Statement::For { init, condition, update, body } => {
+            Statement::For { init, condition, update, body } => env.with_scope(|env| {
                 if let Some(init) = init {
                     execute(env, &[**init])?;
                 }
@@ -242,8 +242,8 @@ pub fn execute<'a>(
                         eval(env, update)?;
                     }
                 }
-                Value::Nil
-            }
+                Ok(Value::Nil)
+            })?,
         }
     }
     Ok(last_value)
