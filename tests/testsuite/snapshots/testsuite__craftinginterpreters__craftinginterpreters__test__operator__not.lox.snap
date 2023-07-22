@@ -5,9 +5,16 @@ info:
   args:
     - craftinginterpreters/test/operator/not.lox
 ---
-success: false
-exit_code: 1
+success: true
+exit_code: 0
 ----- stdout -----
+false
+true
+true
+false
+false
+true
+false
+false
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Fun, loc: craftinginterpreters/test/operator/not.lox:238..241 } }

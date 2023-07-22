@@ -73,6 +73,12 @@ pub enum Statement<'a> {
         update: Option<Expression<'a>>,
         body: &'a Statement<'a>,
     },
+    Function {
+        name: Name<'a>,
+        parameters: &'a [Name<'a>],
+        parameter_names: &'a [&'a str],
+        body: &'a [Statement<'a>],
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -95,6 +101,12 @@ pub enum Expression<'a> {
         equal: Token<'a>,
         value: &'a Expression<'a>,
     },
+    Call {
+        callee: &'a Expression<'a>,
+        l_paren: Token<'a>,
+        arguments: &'a [Expression<'a>],
+        r_paren: Token<'a>,
+    },
 }
 
 impl<'a> Expression<'a> {
@@ -106,6 +118,7 @@ impl<'a> Expression<'a> {
             Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
             Expression::Ident(name) => name.loc(),
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
+            Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
         }
     }
 
@@ -126,6 +139,16 @@ impl<'a> Expression<'a> {
             Expression::Ident(name) => format!("(name {})", name.name()),
             Expression::Assign { target, value, .. } =>
                 format!("(= {} {})", target.name(), value.as_sexpr()),
+            Expression::Call { callee, arguments, .. } => format!(
+                "(call {}{}{})",
+                callee.as_sexpr(),
+                if arguments.is_empty() { "" } else { " " },
+                arguments
+                    .iter()
+                    .map(Expression::as_sexpr)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
         }
     }
 }
@@ -320,6 +343,7 @@ fn declaration<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<
     let token = tokens.peek()?;
     Ok(match token.kind {
         TokenKind::Var => vardecl(bump, tokens)?,
+        TokenKind::Fun => function(bump, tokens)?,
         _ => statement(bump, tokens)?,
     })
 }
@@ -338,6 +362,38 @@ fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>,
     };
     tokens.consume(TokenKind::Semicolon)?;
     Ok(Statement::Var(name, initialiser))
+}
+
+fn function<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    tokens.consume(TokenKind::Fun)?;
+    let name = Name(tokens.consume(TokenKind::Identifier)?);
+    tokens.consume(TokenKind::LParen)?;
+    let mut parameters = Vec::new();
+    loop {
+        let token = tokens.peek()?;
+        if matches!(token.kind, TokenKind::RParen) {
+            break;
+        }
+        if matches!(token.kind, TokenKind::Identifier) {
+            let token = tokens.consume(TokenKind::Identifier)?;
+            parameters.push(Name(token));
+        }
+        let token = tokens.peek()?;
+        if matches!(token.kind, TokenKind::Comma) {
+            tokens.consume(TokenKind::Comma)?;
+        }
+        else {
+            break;
+        }
+    }
+    tokens.consume(TokenKind::RParen)?;
+    let body = block(bump, tokens)?;
+    Ok(Statement::Function {
+        name,
+        parameters: bump.alloc_slice_copy(&parameters),
+        parameter_names: bump.alloc_slice_fill_iter(parameters.iter().map(Name::name)),
+        body,
+    })
 }
 
 fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
@@ -463,6 +519,7 @@ fn expr_impl<'a>(
         let op = match token.kind {
             TokenKind::RParen => break,
             TokenKind::Semicolon => break,
+            TokenKind::Comma => break,
             _ => BinOp::new(token)?,
         };
 
@@ -494,13 +551,14 @@ fn expr_impl<'a>(
             }
         };
     }
+
     Ok(lhs)
 }
 
 fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
     use TokenKind::*;
     let token = tokens.peek()?;
-    Ok(match token.kind {
+    let mut expr = match token.kind {
         LParen => grouping(bump, tokens)?,
         String | Number | True | False | Nil => literal(tokens)?,
         Minus | Bang => unary_op(bump, tokens)?,
@@ -510,7 +568,45 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
             &[LParen, String, Number, True, False, Nil, Minus, Bang],
             token,
         )?,
-    })
+    };
+
+    while let Ok(Token { kind: TokenKind::LParen, .. }) = tokens.peek() {
+        let l_paren = tokens.consume(TokenKind::LParen)?;
+        let arguments = call_arguments(bump, tokens)?;
+        let r_paren = tokens.consume(TokenKind::RParen)?;
+        expr = Expression::Call {
+            callee: bump.alloc(expr),
+            l_paren,
+            arguments,
+            r_paren,
+        };
+    }
+
+    Ok(expr)
+}
+
+fn call_arguments<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a>,
+) -> Result<&'a [Expression<'a>], Error<'a>> {
+    let mut arguments = Vec::new();
+
+    loop {
+        let token = tokens.peek()?;
+        if matches!(token.kind, TokenKind::RParen) {
+            break;
+        }
+        arguments.push(expression(bump, tokens)?);
+        let token = tokens.peek()?;
+        if matches!(token.kind, TokenKind::Comma) {
+            tokens.consume(TokenKind::Comma)?;
+        }
+        else {
+            break;
+        }
+    }
+
+    Ok(bump.alloc_slice_copy(&arguments))
 }
 
 fn grouping<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
@@ -705,6 +801,10 @@ pub(crate) mod tests {
     #[case::one_plus_two_and_three("1 + 2 and 3", "(and (+ 1.0 2.0) 3.0)")]
     #[case::and_or("1 and 2 or 3", "(or (and 1.0 2.0) 3.0)")]
     #[case::or_and("1 or 2 and 3", "(or 1.0 (and 2.0 3.0))")]
+    #[case::call("f()", "(call (name f))")]
+    #[case::call_call("f()()", "(call (call (name f)))")]
+    #[case::call_call_with_args("f(1, 2)(3, 4)", "(call (call (name f) 1.0 2.0) 3.0 4.0)")]
+    #[case::call_with_trailing_comma("f(1, 2,)", "(call (name f) 1.0 2.0)")]
     fn test_parser(#[case] src: &str, #[case] expected: &str) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);

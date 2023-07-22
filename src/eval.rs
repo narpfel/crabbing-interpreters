@@ -1,7 +1,10 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::rc::Rc;
+use std::sync::OnceLock;
+use std::time::Instant;
 
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -13,20 +16,33 @@ use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Value {
+pub enum Value<'a> {
     Number(f64),
     String(Rc<str>),
     Bool(bool),
     Nil,
+    Function(Function<'a>),
+    NativeFunction(fn(Vec<Value<'a>>) -> Result<Value<'a>, TypeError<'a>>),
 }
 
-impl Value {
+#[derive(Clone)]
+pub struct Function<'a>(Rc<FunctionInner<'a>>);
+
+struct FunctionInner<'a> {
+    name: &'a str,
+    parameters: &'a [&'a str],
+    code: &'a [Statement<'a>],
+}
+
+impl Value<'_> {
     pub fn typ(&self) -> &'static str {
         match self {
             Value::Number(_) => "Number",
             Value::String(_) => "String",
             Value::Bool(_) => "Bool",
             Value::Nil => "Nil",
+            Value::Function(_) => "Function",
+            Value::NativeFunction(_) => "NativeFunction",
         }
     }
 
@@ -40,14 +56,34 @@ impl Value {
     }
 }
 
-impl Display for Value {
+impl Display for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Number(x) => write!(f, "{x}"),
             Value::String(s) => write!(f, "{s}"),
             Value::Bool(b) => write!(f, "{b}"),
             Value::Nil => write!(f, "nil"),
+            Value::Function(func) => write!(f, "{func:?}"),
+            Value::NativeFunction(_) => write!(f, "<native fn>"),
         }
+    }
+}
+
+impl Debug for Function<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<function {} at {:p}>", self.0.name, Rc::as_ptr(&self.0))
+    }
+}
+
+impl PartialEq for Function<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialOrd for Function<'_> {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        None
     }
 }
 
@@ -56,14 +92,14 @@ pub enum TypeError<'a> {
     #[error("invalid operand to unary operator")]
     InvalidUnaryOp {
         op: UnaryOp<'a>,
-        value: Value,
+        value: Value<'a>,
         at: Expression<'a>,
     },
     #[error("invalid operands to binary operator")]
     InvalidBinaryOp {
-        lhs: Value,
+        lhs: Value<'a>,
         op: BinOp<'a>,
-        rhs: Value,
+        rhs: Value<'a>,
         at: Expression<'a>,
     },
     #[error("unbound name")]
@@ -71,12 +107,25 @@ pub enum TypeError<'a> {
 }
 
 pub struct Environment<'a> {
-    scopes: Vec<std::collections::HashMap<&'a str, Value>>,
+    scopes: Vec<std::collections::HashMap<&'a str, Value<'a>>>,
 }
 
 impl<'a> Environment<'a> {
     pub fn new() -> Self {
-        Self { scopes: vec![HashMap::default()] }
+        let mut globals = HashMap::default();
+        globals.insert(
+            "clock",
+            Value::NativeFunction(|arguments| {
+                if !arguments.is_empty() {
+                    todo!("type (arity) error");
+                }
+                static START_TIME: OnceLock<Instant> = OnceLock::new();
+                Ok(Value::Number(
+                    START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
+                ))
+            }),
+        );
+        Self { scopes: vec![globals] }
     }
 
     fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
@@ -86,7 +135,20 @@ impl<'a> Environment<'a> {
         result
     }
 
-    fn get(&self, name: &Name<'a>) -> Result<Value, TypeError<'a>> {
+    fn with_stackframe<T>(
+        &mut self,
+        new_scope: HashMap<&'a str, Value<'a>>,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let globals = std::mem::take(&mut self.scopes[0]);
+        let mut scope = Self { scopes: vec![globals] };
+        scope.scopes.push(new_scope);
+        let result = scope.with_scope(f);
+        std::mem::swap(&mut self.scopes[0], &mut scope.scopes[0]);
+        result
+    }
+
+    fn get(&self, name: &Name<'a>) -> Result<Value<'a>, TypeError<'a>> {
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(name.name()) {
                 return Ok(value.clone());
@@ -96,7 +158,7 @@ impl<'a> Environment<'a> {
         Err(TypeError::NameError(*name))
     }
 
-    fn set(&mut self, name: &Name<'a>, value: Value) -> Result<(), TypeError<'a>> {
+    fn set(&mut self, name: &Name<'a>, value: Value<'a>) -> Result<(), TypeError<'a>> {
         for scope in self.scopes.iter_mut().rev() {
             if let Entry::Occupied(mut entry) = scope.entry(name.name()) {
                 entry.insert(value);
@@ -106,12 +168,15 @@ impl<'a> Environment<'a> {
         Err(TypeError::NameError(*name))
     }
 
-    fn insert(&mut self, name: &'a str, value: Value) {
+    fn insert(&mut self, name: &'a str, value: Value<'a>) {
         self.scopes.last_mut().unwrap().insert(name, value);
     }
 }
 
-pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Value, TypeError<'a>> {
+pub fn eval<'a>(
+    env: &mut Environment<'a>,
+    expr: &Expression<'a>,
+) -> Result<Value<'a>, TypeError<'a>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
@@ -185,6 +250,35 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
                 }
             }
         }
+        Expression::Call { callee, arguments, .. } => {
+            let callee = eval(env, callee)?;
+            match callee {
+                Value::Function(func) => {
+                    if arguments.len() != func.0.parameters.len() {
+                        todo!("type error: parameter count mismatch");
+                    }
+                    let arguments = *arguments;
+                    let params = func.0.parameters;
+                    let new_scope = params
+                        .iter()
+                        .zip(arguments.iter())
+                        .map(|(&param, arg)| {
+                            let arg = eval(env, arg)?;
+                            Ok((param, arg))
+                        })
+                        .collect::<Result<_, _>>()?;
+                    env.with_stackframe(new_scope, |env| execute(env, func.0.code))?
+                }
+                Value::NativeFunction(func) => {
+                    let arguments = arguments
+                        .iter()
+                        .map(|arg| eval(env, arg))
+                        .collect::<Result<_, _>>()?;
+                    func(arguments)?
+                }
+                _ => todo!("type error: not callable"),
+            }
+        }
         Expression::Grouping { expr, .. } => eval(env, expr)?,
         Expression::Ident(name) => env.get(name)?,
     })
@@ -193,7 +287,7 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
 pub fn execute<'a>(
     env: &mut Environment<'a>,
     program: &[Statement<'a>],
-) -> Result<Value, TypeError<'a>> {
+) -> Result<Value<'a>, TypeError<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
@@ -244,6 +338,22 @@ pub fn execute<'a>(
                 }
                 Ok(Value::Nil)
             })?,
+            Statement::Function {
+                name,
+                parameters: _,
+                parameter_names,
+                body,
+            } => {
+                env.insert(
+                    name.name(),
+                    Value::Function(Function(Rc::new(FunctionInner {
+                        name: name.name(),
+                        parameters: parameter_names,
+                        code: body,
+                    }))),
+                );
+                Value::Nil
+            }
         }
     }
     Ok(last_value)
@@ -256,7 +366,7 @@ mod tests {
 
     use super::*;
 
-    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value, TypeError<'a>> {
+    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, TypeError<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         let mut env = Environment::new();
         eval(&mut env, &ast)
@@ -279,14 +389,15 @@ mod tests {
     #[case::negation("!27", Value::Bool(false))]
     #[case::negation("!true", Value::Bool(false))]
     #[case::negation("!false", Value::Bool(true))]
-    fn test_eval(#[case] src: &str, #[case] expected: Value) {
-        let bump = &Bump::new();
+    fn test_eval(#[case] src: &'static str, #[case] expected: Value) {
+        // FIXME: remove the leak
+        let bump = Box::leak(Box::new(Bump::new()));
         pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
     }
 
     macro_rules! check {
         ($body:expr) => {
-            for<'a> |result: Result<Value, TypeError<'a>>| -> () {
+            for<'a> |result: Result<Value<'a>, TypeError<'a>>| -> () {
                 #[allow(clippy::redundant_closure_call)]
                 let () = $body(result);
             }
@@ -329,7 +440,7 @@ mod tests {
     )]
     fn test_type_error(
         #[case] src: &str,
-        #[case] expected: impl for<'a> FnOnce(Result<Value, TypeError<'a>>),
+        #[case] expected: impl for<'a> FnOnce(Result<Value<'a>, TypeError<'a>>),
     ) {
         let bump = &Bump::new();
         expected(eval_str(bump, src));
