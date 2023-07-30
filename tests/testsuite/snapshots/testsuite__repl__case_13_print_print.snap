@@ -8,7 +8,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0mParse error
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Print, loc: <input>:6..11 } }
-[0mλ» [1m[0m
+[0mλ» [1m[0m[0mλ» [1m[0m
 ----- stderr -----
+[line 1] Error at 'print': Expect expression.

@@ -6,8 +6,20 @@ info:
     - craftinginterpreters/test/operator/add_string_nil.lox
 ---
 success: false
-exit_code: 1
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-InvalidBinaryOp { lhs: String("s"), op: BinOp { kind: Plus, token: Token { kind: Plus, loc: craftinginterpreters/test/operator/add_string_nil.lox:4..5 } }, rhs: Nil, at: Binary { lhs: Literal(Literal { kind: String("s"), token: Token { kind: String, loc: craftinginterpreters/test/operator/add_string_nil.lox:0..3 } }), op: BinOp { kind: Plus, token: Token { kind: Plus, loc: craftinginterpreters/test/operator/add_string_nil.lox:4..5 } }, rhs: Literal(Literal { kind: Nil, token: Token { kind: Nil, loc: craftinginterpreters/test/operator/add_string_nil.lox:6..9 } }) } }
+Error: type error in binary operator `+`: lhs has type `String`, but rhs has type `Nil`
+   ╭─[craftinginterpreters/test/operator/add_string_nil.lox:1:1]
+   │
+ 1 │ "s" + nil; // expect runtime error: Operands must be two numbers or two strings.
+   │ ─┬─ ┬ ─┬─  
+   │  │  │  ╰─── this is of type `Nil`
+   │  │  │      
+   │  │  ╰────── the operator in question
+   │  │         
+   │  ╰───────── this is of type `String`
+   │ 
+   │ Help: operator `+` can only be applied to two numbers or two strings
+───╯

@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/string/unterminated.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-LexerError { at: craftinginterpreters/test/string/unterminated.lox:40..71 }
+[line 2] Error: Unterminated string.

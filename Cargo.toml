@@ -8,7 +8,6 @@ ariadne = { version = "0.3.0", features = ["auto-color"] }
 bumpalo = "3.13.0"
 clap = { version = "4.3.4", features = ["derive"] }
 logos = "0.13.0"
-thiserror = "1.0.40"
 
 [dev-dependencies]
 insta-cmd = { git = "https://github.com/narpfel/insta-cmd", branch = "target-dir-slow" }

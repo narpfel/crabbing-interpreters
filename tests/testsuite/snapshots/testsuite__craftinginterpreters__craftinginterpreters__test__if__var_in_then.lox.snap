@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/if/var_in_then.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Var, loc: craftinginterpreters/test/if/var_in_then.lox:57..60 } }
+[line 2] Error at 'var': Expect expression.

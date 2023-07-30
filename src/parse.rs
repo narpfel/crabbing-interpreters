@@ -6,51 +6,112 @@ use bumpalo::Bump;
 use crate::lex::Loc;
 use crate::lex::Token;
 use crate::lex::TokenKind;
+use crate::Report;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error<'a> {
-    #[error("eof")]
-    Eof(#[from] Eof),
-
-    #[error("expected eof")]
-    ExpectedEof { actual: Token<'a> },
-
-    #[error("expected one of {expected:?} but got {actual:?}")]
+    Eof(Eof),
+    ExpectedEof {
+        actual: Token<'a>,
+    },
     UnexpectedToken {
         expected: &'static [TokenKind],
         actual: Token<'a>,
     },
-
-    #[error("expected {expected:?} but got {actual:?}")]
     UnexpectedTokenWithKind {
         expected: TokenKind,
         actual: Token<'a>,
     },
-
-    #[error("expected {expected} but got {actual:?}")]
     UnexpectedTokenMsg {
         expected: &'static str,
         actual: Token<'a>,
     },
-
-    #[error("ambiguous precedendes for operators {left_op_token:?} and {right_op:?}")]
     AmbiguousPrecedences {
         left_op_token: Token<'a>,
         right_op: BinOp<'a>,
     },
-
-    #[error("invalid assignment target {0:?}")]
-    InvalidAssignmentTarget(Expression<'a>),
-
-    #[error("invalid for loop initialiser")]
+    InvalidAssignmentTarget {
+        lhs: Expression<'a>,
+        equal: Token<'a>,
+        rhs: Expression<'a>,
+    },
     InvalidForLoopInitialiser(Statement<'a>),
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Eof {
-    #[error("eof")]
-    Eof,
+impl From<Eof> for Error<'_> {
+    fn from(value: Eof) -> Self {
+        Self::Eof(value)
+    }
 }
+
+impl Report for Error<'_> {
+    fn print(&self) {
+        match self {
+            Error::Eof(_) => eprintln!("Unexpected end of file"),
+            Error::ExpectedEof { actual } => {
+                eprintln!(
+                    "[line {}] Error at '{}': Expected EOF",
+                    actual.loc().line(),
+                    actual.slice(),
+                );
+            }
+            Error::UnexpectedToken { expected, actual } => {
+                eprintln!(
+                    "[line {}] Error at '{}': Expect one of the following tokens: {:?}",
+                    actual.loc().line(),
+                    actual.slice(),
+                    expected,
+                );
+            }
+            Error::UnexpectedTokenWithKind { expected, actual } => {
+                let message = format!(
+                    "[line {}] Error at '{}': Expect {}.",
+                    actual.loc().line(),
+                    actual.slice(),
+                    match expected {
+                        TokenKind::Identifier => "variable name".to_owned(),
+                        _ => format!("{expected:?}"),
+                    },
+                );
+                eprintln!("{message}");
+            }
+            Error::UnexpectedTokenMsg { expected, actual } => {
+                eprintln!(
+                    "[line {}] Error at '{}': Expect {}.",
+                    actual.loc().line(),
+                    actual.slice(),
+                    expected,
+                );
+            }
+            Error::AmbiguousPrecedences { left_op_token, right_op } => {
+                eprintln!(
+                    "[line {}] Error at '{}': ambiguous precedences for operators `{}` and `{}`",
+                    left_op_token.loc().line(),
+                    left_op_token.slice(),
+                    left_op_token.slice(),
+                    right_op.token.slice(),
+                );
+            }
+            Error::InvalidAssignmentTarget { equal, .. } => {
+                eprintln!(
+                    "[line {}] Error at '{}': Invalid assignment target.",
+                    equal.loc().line(),
+                    equal.slice(),
+                );
+            }
+            Error::InvalidForLoopInitialiser(_) => {
+                eprintln!("[line ??] Error at '??': Invalid for loop initialiser");
+            }
+        }
+    }
+
+    fn exit_code(&self) -> i32 {
+        65
+    }
+}
+
+#[derive(Debug)]
+pub struct Eof;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Statement<'a> {
@@ -536,20 +597,23 @@ fn expr_impl<'a>(
         // eat the `op` token
         let _ = tokens.next();
         let rhs = expr_impl(bump, tokens, Some((op.token, Operator::Infix(op.kind))))?;
-        lhs = if matches!(op.kind, BinOpKind::Assign) {
-            Expression::Assign {
-                target: as_assignment_target(lhs)?,
-                equal: op.token,
-                value: bump.alloc(rhs),
+        lhs =
+            if matches!(op.kind, BinOpKind::Assign) {
+                Expression::Assign {
+                    target: as_assignment_target(lhs).map_err(|()| {
+                        Error::InvalidAssignmentTarget { lhs, equal: op.token, rhs }
+                    })?,
+                    equal: op.token,
+                    value: bump.alloc(rhs),
+                }
             }
-        }
-        else {
-            Expression::Binary {
-                lhs: bump.alloc(lhs),
-                op,
-                rhs: bump.alloc(rhs),
-            }
-        };
+            else {
+                Expression::Binary {
+                    lhs: bump.alloc(lhs),
+                    op,
+                    rhs: bump.alloc(rhs),
+                }
+            };
     }
 
     Ok(lhs)
@@ -564,10 +628,7 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
         Minus | Bang => unary_op(bump, tokens)?,
         Identifier => ident(tokens)?,
         // TODO: could error with “expected expression” error here
-        _ => unexpected_token(
-            &[LParen, String, Number, True, False, Nil, Minus, Bang],
-            token,
-        )?,
+        _ => unexpected_token_with_message("expression", token)?,
     };
 
     while let Ok(Token { kind: TokenKind::LParen, .. }) = tokens.peek() {
@@ -666,12 +727,12 @@ fn unexpected_token_with_message<'a>(
     Err(Error::UnexpectedTokenMsg { expected, actual })
 }
 
-fn as_assignment_target(lhs: Expression) -> Result<Name, Error> {
+fn as_assignment_target(lhs: Expression) -> Result<Name, ()> {
     if let Expression::Ident(name) = lhs {
         Ok(name)
     }
     else {
-        Err(Error::InvalidAssignmentTarget(lhs))
+        Err(())
     }
 }
 
@@ -684,7 +745,7 @@ where
 
 impl<'a> NotEof<'a> for Option<Token<'a>> {
     fn not_eof(self) -> Result<Token<'a>, Eof> {
-        self.ok_or(Eof::Eof)
+        self.ok_or(Eof)
     }
 }
 
@@ -838,7 +899,10 @@ pub(crate) mod tests {
             actual: Token { kind: TokenKind::Number, .. },
         }),
     )]
-    #[case::expect_expr_in_parens("()", check_err!(Error::UnexpectedToken { .. }))]
+    #[case::expect_expr_in_parens(
+        "()",
+        check_err!(Error::UnexpectedTokenMsg { expected: "expression", .. }),
+    )]
     #[case::unclosed_paren("(1 + 2", check_err!(Error::Eof(_)))]
     #[case::one_plus("1+", check_err!(Error::Eof(_)))]
     #[case::comparison_of_gt("1 > 2 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]

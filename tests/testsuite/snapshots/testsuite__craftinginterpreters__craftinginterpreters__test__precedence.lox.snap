@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/precedence.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-AmbiguousPrecedences { left_op_token: Token { kind: EqualEqual, loc: craftinginterpreters/test/precedence.lox:314..316 }, right_op: BinOp { kind: Less, token: Token { kind: Less, loc: craftinginterpreters/test/precedence.lox:319..320 } } }
+[line 14] Error at '==': ambiguous precedences for operators `==` and `<`

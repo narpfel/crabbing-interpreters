@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/print/missing_argument.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Semicolon, loc: craftinginterpreters/test/print/missing_argument.lox:50..51 } }
+[line 2] Error at ';': Expect expression.

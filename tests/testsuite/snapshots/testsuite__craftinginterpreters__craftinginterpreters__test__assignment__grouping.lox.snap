@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/assignment/grouping.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-InvalidAssignmentTarget(Grouping { l_paren: Token { kind: LParen, loc: craftinginterpreters/test/assignment/grouping.lox:13..14 }, expr: Ident(Name(Token { kind: Identifier, loc: craftinginterpreters/test/assignment/grouping.lox:14..15 })), r_paren: Token { kind: RParen, loc: craftinginterpreters/test/assignment/grouping.lox:15..16 } })
+[line 2] Error at '=': Invalid assignment target.

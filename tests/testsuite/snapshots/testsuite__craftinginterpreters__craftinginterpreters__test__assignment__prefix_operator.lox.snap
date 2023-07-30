@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/assignment/prefix_operator.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-InvalidAssignmentTarget(Unary(UnaryOp { kind: Not, token: Token { kind: Bang, loc: craftinginterpreters/test/assignment/prefix_operator.lox:13..14 } }, Ident(Name(Token { kind: Identifier, loc: craftinginterpreters/test/assignment/prefix_operator.lox:14..15 }))))
+[line 2] Error at '=': Invalid assignment target.

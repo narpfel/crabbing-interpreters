@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/number/leading_dot.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Dot, loc: craftinginterpreters/test/number/leading_dot.lox:45..46 } }
+[line 2] Error at '.': Expect expression.

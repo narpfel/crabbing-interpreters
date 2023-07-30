@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/unexpected_character.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-LexerError { at: craftinginterpreters/test/unexpected_character.lox:106..107 }
+[line 3] Error: Unterminated string.

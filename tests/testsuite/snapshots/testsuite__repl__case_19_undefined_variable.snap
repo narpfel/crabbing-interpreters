@@ -8,12 +8,12 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0mError: cannot find name `y` in this scope
+[0mλ» [1m[0m[0mλ» [1m[0m
+----- stderr -----
+Error: Undefined variable `y`.
    ╭─[<input>:1:23]
    │
  1 │ var x = 42; print x + y;
    │                       ─  
    │                           
 ───╯
-[0mλ» [1m[0m
------ stderr -----

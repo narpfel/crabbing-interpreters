@@ -1,7 +1,5 @@
-use std::io;
 use std::ops::Range;
 use std::path::Path;
-use std::path::PathBuf;
 
 use bumpalo::Bump;
 use logos::Logos;
@@ -67,6 +65,18 @@ impl std::fmt::Debug for Loc<'_> {
 }
 
 impl<'a> Loc<'a> {
+    pub(crate) fn line(&self) -> usize {
+        self.src
+            .split_inclusive('\n')
+            .scan(0, |offset, line| {
+                *offset += line.len();
+                Some(*offset)
+            })
+            .position(|offset| self.span.start < offset)
+            .unwrap()
+            + 1
+    }
+
     pub(crate) fn file(&self) -> &'a Path {
         self.file
     }
@@ -254,16 +264,19 @@ impl TokenKind {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error<'a> {
-    #[error("lexer error at {at:?}")]
-    LexerError { at: crate::lex::Loc<'a> },
-    #[error("could not read file `{filename}`")]
-    IoError {
-        filename: PathBuf,
-        #[backtrace]
-        source: io::Error,
-    },
+#[derive(Debug)]
+pub struct Error<'a> {
+    at: crate::lex::Loc<'a>,
+}
+
+impl crate::Report for Error<'_> {
+    fn print(&self) {
+        eprintln!("[line {}] Error: Unterminated string.", self.at.line())
+    }
+
+    fn exit_code(&self) -> i32 {
+        65
+    }
 }
 
 pub fn lex<'a>(
@@ -283,7 +296,7 @@ pub fn lex<'a>(
                 span: Span { start: span.start, end: span.end },
             };
             Ok(Token {
-                kind: kind.map_err(|()| Error::LexerError { at: loc })?,
+                kind: kind.map_err(|()| Error { at: loc })?,
                 loc,
             })
         })

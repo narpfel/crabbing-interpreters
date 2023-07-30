@@ -6,8 +6,20 @@ info:
     - craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox
 ---
 success: false
-exit_code: 1
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-InvalidBinaryOp { lhs: String("1"), op: BinOp { kind: LessEqual, token: Token { kind: LessEqual, loc: craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox:4..6 } }, rhs: Number(1.0), at: Binary { lhs: Literal(Literal { kind: String("1"), token: Token { kind: String, loc: craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox:0..3 } }), op: BinOp { kind: LessEqual, token: Token { kind: LessEqual, loc: craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox:4..6 } }, rhs: Literal(Literal { kind: Number(1.0), token: Token { kind: Number, loc: craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox:7..8 } }) } }
+Error: type error in binary operator `<=`: lhs has type `String`, but rhs has type `Number`
+   ╭─[craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox:1:1]
+   │
+ 1 │ "1" <= 1; // expect runtime error: Operands must be numbers.
+   │ ─┬─ ─┬ ┬  
+   │  │   │ ╰── this is of type `Number`
+   │  │   │    
+   │  │   ╰──── the operator in question
+   │  │        
+   │  ╰──────── this is of type `String`
+   │ 
+   │ Help: operator `<=` can only be applied to numbers
+───╯

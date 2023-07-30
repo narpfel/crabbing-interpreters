@@ -8,7 +8,9 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0mError: type error in binary operator `+`: lhs has type `Bool`, but rhs has type `Bool`
+[0mλ» [1m[0m[0mλ» [1m[0m
+----- stderr -----
+Error: type error in binary operator `+`: lhs has type `Bool`, but rhs has type `Bool`
    ╭─[<input>:1:1]
    │
  1 │ true + false;
@@ -19,7 +21,5 @@ exit_code: 0
    │   │           
    │   ╰─────────── this is of type `Bool`
    │ 
-   │ Help: operator `+` can only be applied to numbers or strings
+   │ Help: operator `+` can only be applied to two numbers or two strings
 ───╯
-[0mλ» [1m[0m
------ stderr -----

@@ -6,6 +6,9 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
 
+use ariadne::Fmt;
+use ariadne::Label;
+
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::Expression;
@@ -14,6 +17,7 @@ use crate::parse::Name;
 use crate::parse::Statement;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
+use crate::Report;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -22,7 +26,7 @@ pub enum Value<'a> {
     Bool(bool),
     Nil,
     Function(Function<'a>),
-    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, TypeError<'b>>),
+    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, Error<'b>>),
 }
 
 #[derive(Clone)]
@@ -87,23 +91,133 @@ impl PartialOrd for Function<'_> {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum TypeError<'a> {
-    #[error("invalid operand to unary operator")]
+#[derive(Debug)]
+pub enum Error<'a> {
     InvalidUnaryOp {
         op: UnaryOp<'a>,
         value: Value<'a>,
         at: Expression<'a>,
     },
-    #[error("invalid operands to binary operator")]
     InvalidBinaryOp {
         lhs: Value<'a>,
         op: BinOp<'a>,
         rhs: Value<'a>,
         at: Expression<'a>,
     },
-    #[error("unbound name")]
-    NameError(Name<'a>),
+    UndefinedName(Name<'a>),
+}
+
+impl Report for Error<'_> {
+    fn print(&self) {
+        match self {
+            Error::InvalidUnaryOp { op, value, at } => {
+                let Expression::Unary(operator, operand) = at
+                else {
+                    unreachable!()
+                };
+
+                let operand_color = ariadne::Color::Blue;
+                let operator_color = ariadne::Color::Green;
+                let expected_type_color = ariadne::Color::Magenta;
+
+                let message = format!(
+                    "type error in unary operator `{op}`: operand has type `{actual}` but `{op}` requires type `{expected}`",
+                    op = operator.token.slice().fg(operator_color),
+                    actual = value.typ().fg(operand_color),
+                    expected = "Number".fg(expected_type_color),
+                );
+
+                let labels = [
+                    Label::new(operand.loc())
+                        .with_message(format!(
+                            "this is of type `{}`",
+                            value.typ().fg(operand_color),
+                        ))
+                        .with_color(operand_color)
+                        .with_order(1),
+                    Label::new(operator.loc())
+                        .with_message("the operator in question")
+                        .with_color(operator_color)
+                        .with_order(2),
+                ];
+
+                at.loc()
+                    .report(ariadne::ReportKind::Error)
+                    .with_message(message)
+                    .with_labels(labels)
+                    .with_help(format!(
+                        "operator `{}` can only be applied to numbers",
+                        op.token.slice().fg(operator_color),
+                    ))
+                    .finish()
+                    .eprint(at.loc().cache())
+                    .unwrap();
+            }
+            Error::InvalidBinaryOp { lhs, op, rhs, at, .. } => {
+                let Expression::Binary { lhs: lhs_expr, rhs: rhs_expr, .. } = at
+                else {
+                    unreachable!()
+                };
+
+                let lhs_color = ariadne::Color::Blue;
+                let op_color = ariadne::Color::Magenta;
+                let rhs_color = ariadne::Color::Green;
+
+                let possible_types = match op.kind {
+                    BinOpKind::Plus => "two numbers or two strings",
+                    _ => "numbers",
+                };
+                let message = format!(
+                    "type error in binary operator `{}`: lhs has type `{}`, but rhs has type `{}`",
+                    op.token.slice().fg(op_color),
+                    lhs.typ().fg(lhs_color),
+                    rhs.typ().fg(rhs_color),
+                );
+
+                let labels = [
+                    Label::new(rhs_expr.loc())
+                        .with_message(format!("this is of type `{}`", rhs.typ().fg(rhs_color)))
+                        .with_color(rhs_color)
+                        .with_order(1),
+                    Label::new(op.loc())
+                        .with_message("the operator in question")
+                        .with_color(op_color)
+                        .with_order(2),
+                    Label::new(lhs_expr.loc())
+                        .with_message(format!("this is of type `{}`", lhs.typ().fg(lhs_color)))
+                        .with_color(lhs_color)
+                        .with_order(3),
+                ];
+
+                at.loc()
+                    .report(ariadne::ReportKind::Error)
+                    .with_message(message)
+                    .with_labels(labels)
+                    .with_help(format!(
+                        "operator `{}` can only be applied to {possible_types}",
+                        op.token.slice().fg(op_color),
+                    ))
+                    .finish()
+                    .eprint(at.loc().cache())
+                    .unwrap();
+            }
+            Error::UndefinedName(name) => {
+                let name_color = ariadne::Color::Magenta;
+                let message = format!("Undefined variable `{}`.", name.name().fg(name_color),);
+                name.loc()
+                    .report(ariadne::ReportKind::Error)
+                    .with_message(message)
+                    .with_label(Label::new(name.loc()).with_color(name_color))
+                    .finish()
+                    .eprint(name.loc().cache())
+                    .unwrap();
+            }
+        }
+    }
+
+    fn exit_code(&self) -> i32 {
+        70
+    }
 }
 
 pub struct Environment<'a> {
@@ -148,24 +262,24 @@ impl<'a> Environment<'a> {
         result
     }
 
-    fn get(&self, name: &Name<'a>) -> Result<Value<'a>, TypeError<'a>> {
+    fn get(&self, name: &Name<'a>) -> Result<Value<'a>, Error<'a>> {
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(name.name()) {
                 return Ok(value.clone());
             }
         }
 
-        Err(TypeError::NameError(*name))
+        Err(Error::UndefinedName(*name))
     }
 
-    fn set(&mut self, name: &Name<'a>, value: Value<'a>) -> Result<(), TypeError<'a>> {
+    fn set(&mut self, name: &Name<'a>, value: Value<'a>) -> Result<(), Error<'a>> {
         for scope in self.scopes.iter_mut().rev() {
             if let Entry::Occupied(mut entry) = scope.entry(name.name()) {
                 entry.insert(value);
                 return Ok(());
             }
         }
-        Err(TypeError::NameError(*name))
+        Err(Error::UndefinedName(*name))
     }
 
     fn insert(&mut self, name: &'a str, value: Value<'a>) {
@@ -173,10 +287,7 @@ impl<'a> Environment<'a> {
     }
 }
 
-pub fn eval<'a>(
-    env: &mut Environment<'a>,
-    expr: &Expression<'a>,
-) -> Result<Value<'a>, TypeError<'a>> {
+pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Value<'a>, Error<'a>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
@@ -192,7 +303,7 @@ pub fn eval<'a>(
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
-                    _ => return Err(TypeError::InvalidUnaryOp { op: *op, value, at: *expr }),
+                    _ => return Err(Error::InvalidUnaryOp { op: *op, value, at: *expr }),
                 },
                 Not => Bool(!value.is_truthy()),
             }
@@ -244,8 +355,7 @@ pub fn eval<'a>(
                             Power => Number(lhs.powf(*rhs)),
                             EqualEqual | NotEqual | Assign | And | Or => unreachable!(),
                         },
-                        _ =>
-                            return Err(TypeError::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
+                        _ => return Err(Error::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
                     }
                 }
             }
@@ -287,7 +397,7 @@ pub fn eval<'a>(
 pub fn execute<'a>(
     env: &mut Environment<'a>,
     program: &[Statement<'a>],
-) -> Result<Value<'a>, TypeError<'a>> {
+) -> Result<Value<'a>, Error<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
@@ -366,7 +476,7 @@ mod tests {
 
     use super::*;
 
-    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, TypeError<'a>> {
+    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         let mut env = Environment::new();
         eval(&mut env, &ast)
@@ -396,7 +506,7 @@ mod tests {
 
     macro_rules! check {
         ($body:expr) => {
-            for<'a> |result: Result<Value<'a>, TypeError<'a>>| -> () {
+            for<'a> |result: Result<Value<'a>, Error<'a>>| -> () {
                 #[allow(clippy::redundant_closure_call)]
                 let () = $body(result);
             }
@@ -412,7 +522,7 @@ mod tests {
     #[rstest]
     #[case::add_nil(
         "42 + nil",
-        check_err!(TypeError::InvalidBinaryOp {
+        check_err!(Error::InvalidBinaryOp {
             lhs: Value::Number(42.0),
             op: BinOp { kind: BinOpKind::Plus, token: _ },
             rhs: Value::Nil,
@@ -421,7 +531,7 @@ mod tests {
     )]
     #[case::type_error_in_grouping(
         "(nil - 2) + 27",
-        check_err!(TypeError::InvalidBinaryOp {
+        check_err!(Error::InvalidBinaryOp {
             lhs: Value::Nil,
             op: BinOp { kind: BinOpKind::Minus, token: _ },
             rhs: Value::Number(2.0),
@@ -430,7 +540,7 @@ mod tests {
     )]
     #[case::type_error_in_grouping(
         "42 + (nil * 2)",
-        check_err!(TypeError::InvalidBinaryOp {
+        check_err!(Error::InvalidBinaryOp {
             lhs: Value::Nil,
             op: BinOp { kind: BinOpKind::Times, token: _ },
             rhs: Value::Number(2.0),
@@ -439,7 +549,7 @@ mod tests {
     )]
     fn test_type_error(
         #[case] src: &str,
-        #[case] expected: impl for<'a> FnOnce(Result<Value<'a>, TypeError<'a>>),
+        #[case] expected: impl for<'a> FnOnce(Result<Value<'a>, Error<'a>>),
     ) {
         let bump = &Bump::new();
         expected(eval_str(bump, src));

@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/assignment/to_this.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Class, loc: craftinginterpreters/test/assignment/to_this.lox:0..5 } }
+[line 1] Error at 'class': Expect expression.

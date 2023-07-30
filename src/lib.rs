@@ -11,8 +11,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-use ariadne::Fmt;
-use ariadne::Label;
 use bumpalo::Bump;
 use clap::Parser;
 
@@ -22,7 +20,6 @@ use crate::eval::Value;
 pub use crate::lex::lex;
 use crate::parse::parse;
 use crate::parse::program;
-use crate::parse::Expression;
 
 mod eval;
 mod lex;
@@ -42,6 +39,33 @@ impl AllocPath for Bump {
     }
 }
 
+pub trait Report {
+    fn print(&self);
+    fn exit_code(&self) -> i32;
+}
+
+impl<'a, T> From<T> for Box<dyn Report + 'a>
+where
+    T: Report + 'a,
+{
+    fn from(value: T) -> Self {
+        Box::new(value)
+    }
+}
+
+impl<T> Report for T
+where
+    T: std::error::Error,
+{
+    fn print(&self) {
+        eprintln!("{self:?}");
+    }
+
+    fn exit_code(&self) -> i32 {
+        42
+    }
+}
+
 /// Crabbing Interpreters
 #[derive(Debug, Parser)]
 struct Args {
@@ -49,7 +73,7 @@ struct Args {
     filename: Option<PathBuf>,
 }
 
-fn repl() -> Result<(), Box<dyn std::error::Error>> {
+fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
     let mut globals = Environment::new();
     let mut line = String::new();
@@ -79,7 +103,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
             let tokens = match lex(bump, "<input>", &line) {
                 Ok(tokens) => tokens,
                 Err(err) => {
-                    eprintln!("{:?}", err);
+                    err.print();
                     continue 'repl;
                 }
             };
@@ -87,7 +111,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(stmts) => break stmts,
                 Err(parse::Error::Eof(_)) => (),
                 Err(err) => {
-                    println!("Parse error\n{:?}", err);
+                    err.print();
                     continue 'repl;
                 }
             };
@@ -98,111 +122,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
                 if !matches!(value, Value::Nil) {
                     println!("\x1B[38;2;170;034;255m\x1B[1m=> {}\x1B[0m", value);
                 },
-            Err(eval::TypeError::InvalidUnaryOp { op, value, at }) => {
-                let Expression::Unary(operator, operand) = at
-                else {
-                    unreachable!()
-                };
-
-                let operand_color = ariadne::Color::Blue;
-                let operator_color = ariadne::Color::Green;
-                let expected_type_color = ariadne::Color::Magenta;
-
-                let message = format!(
-                     "type error in unary operator `{op}`: operand has type `{actual}` but `{op}` requires type `{expected}`",
-                     op = operator.token.slice().fg(operator_color),
-                     actual = value.typ().fg(operand_color),
-                     expected = "Number".fg(expected_type_color),
-                 );
-
-                let labels = [
-                    Label::new(operand.loc())
-                        .with_message(format!(
-                            "this is of type `{}`",
-                            value.typ().fg(operand_color),
-                        ))
-                        .with_color(operand_color)
-                        .with_order(1),
-                    Label::new(operator.loc())
-                        .with_message("the operator in question")
-                        .with_color(operator_color)
-                        .with_order(2),
-                ];
-
-                at.loc()
-                    .report(ariadne::ReportKind::Error)
-                    .with_message(message)
-                    .with_labels(labels)
-                    .with_help(format!(
-                        "operator `{}` can only be applied to numbers",
-                        op.token.slice().fg(operator_color),
-                    ))
-                    .finish()
-                    .print(at.loc().cache())?;
-            }
-            Err(eval::TypeError::InvalidBinaryOp { lhs, op, rhs, at, .. }) => {
-                let Expression::Binary { lhs: lhs_expr, rhs: rhs_expr, .. } = at
-                else {
-                    unreachable!()
-                };
-
-                let lhs_color = ariadne::Color::Blue;
-                let op_color = ariadne::Color::Magenta;
-                let rhs_color = ariadne::Color::Green;
-
-                let message = format!(
-                    "type error in binary operator `{}`: lhs has type `{}`, but rhs has type `{}`",
-                    op.token.slice().fg(op_color),
-                    lhs.typ().fg(lhs_color),
-                    rhs.typ().fg(rhs_color),
-                );
-
-                let labels = [
-                    Label::new(rhs_expr.loc())
-                        .with_message(format!("this is of type `{}`", rhs.typ().fg(rhs_color)))
-                        .with_color(rhs_color)
-                        .with_order(1),
-                    Label::new(op.loc())
-                        .with_message("the operator in question")
-                        .with_color(op_color)
-                        .with_order(2),
-                    Label::new(lhs_expr.loc())
-                        .with_message(format!("this is of type `{}`", lhs.typ().fg(lhs_color)))
-                        .with_color(lhs_color)
-                        .with_order(3),
-                ];
-
-                let or_strings = if matches!(op.kind, crate::parse::BinOpKind::Plus) {
-                    " or strings"
-                }
-                else {
-                    ""
-                };
-
-                at.loc()
-                    .report(ariadne::ReportKind::Error)
-                    .with_message(message)
-                    .with_labels(labels)
-                    .with_help(format!(
-                        "operator `{}` can only be applied to numbers{or_strings}",
-                        op.token.slice().fg(op_color),
-                    ))
-                    .finish()
-                    .print(at.loc().cache())?;
-            }
-            Err(eval::TypeError::NameError(name)) => {
-                let name_color = ariadne::Color::Magenta;
-                let message = format!(
-                    "cannot find name `{}` in this scope",
-                    name.name().fg(name_color),
-                );
-                name.loc()
-                    .report(ariadne::ReportKind::Error)
-                    .with_message(message)
-                    .with_label(Label::new(name.loc()).with_color(name_color))
-                    .finish()
-                    .print(name.loc().cache())?;
-            }
+            Err(err) => err.print(),
         }
     }
 }
@@ -210,7 +130,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
 pub fn run<'a>(
     bump: &'a Bump,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
-) -> Result<(), Box<dyn std::error::Error + 'a>> {
+) -> Result<(), Box<dyn Report + 'a>> {
     let args = Args::parse_from(args);
     if let Some(filename) = args.filename {
         let tokens = lex(

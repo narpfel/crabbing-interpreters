@@ -6,8 +6,8 @@ info:
     - craftinginterpreters/test/if/fun_in_else.lox
 ---
 success: false
-exit_code: 1
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Fun, loc: craftinginterpreters/test/if/fun_in_else.lox:68..71 } }
+[line 2] Error at 'fun': Expect expression.

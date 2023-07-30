@@ -6,8 +6,14 @@ info:
     - craftinginterpreters/test/assignment/undefined.lox
 ---
 success: false
-exit_code: 1
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-NameError(Name(Token { kind: Identifier, loc: craftinginterpreters/test/assignment/undefined.lox:0..7 }))
+Error: Undefined variable `unknown`.
+   ╭─[craftinginterpreters/test/assignment/undefined.lox:1:1]
+   │
+ 1 │ unknown = "what"; // expect runtime error: Undefined variable 'unknown'.
+   │ ───────  
+   │           
+───╯

@@ -8,7 +8,9 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0mError: type error in binary operator `/`: lhs has type `Number`, but rhs has type `String`
+[0mλ» [1m[0m[0mλ» [1m[0m
+----- stderr -----
+Error: type error in binary operator `/`: lhs has type `Number`, but rhs has type `String`
    ╭─[<input>:1:1]
    │
  1 │ 42 / "string";
@@ -21,5 +23,3 @@ exit_code: 0
    │ 
    │ Help: operator `/` can only be applied to numbers
 ───╯
-[0mλ» [1m[0m
------ stderr -----

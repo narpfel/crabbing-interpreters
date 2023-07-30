@@ -6,8 +6,14 @@ info:
     - craftinginterpreters/test/string/error_after_multiline.lox
 ---
 success: false
-exit_code: 1
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-NameError(Name(Token { kind: Identifier, loc: craftinginterpreters/test/string/error_after_multiline.lox:92..95 }))
+Error: Undefined variable `err`.
+   ╭─[craftinginterpreters/test/string/error_after_multiline.lox:7:1]
+   │
+ 7 │ err; // // expect runtime error: Undefined variable 'err'.
+   │ ───  
+   │       
+───╯
