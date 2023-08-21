@@ -5,6 +5,7 @@
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::io;
 use std::io::stdin;
 use std::io::stdout;
@@ -83,6 +84,40 @@ impl Report for IoError {
 
     fn exit_code(&self) -> i32 {
         74
+    }
+}
+
+trait Sliced {
+    fn slice(&self) -> impl Display + '_;
+}
+
+impl Sliced for String {
+    fn slice(&self) -> impl Display + '_ {
+        self.as_str()
+    }
+}
+
+impl Sliced for &str {
+    fn slice(&self) -> impl Display + '_ {
+        self
+    }
+}
+
+impl Sliced for usize {
+    fn slice(&self) -> impl Display + '_ {
+        *self
+    }
+}
+
+impl Sliced for &usize {
+    fn slice(&self) -> impl Display + '_ {
+        self
+    }
+}
+
+impl Sliced for &Value<'_> {
+    fn slice(&self) -> impl Display + '_ {
+        self
     }
 }
 

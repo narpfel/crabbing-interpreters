@@ -1,0 +1,15 @@
+[package]
+name = "crabbing-interpreters-derive-report"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+indexmap = "2.0.0"
+itertools = "0.11.0"
+proc-macro2 = "1.0.66"
+quote = "1.0.32"
+regex = "1.9.1"
+syn = "2.0.27"

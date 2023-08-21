@@ -1,0 +1,7 @@
+[package]
+name = "variant-types"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+variant-types-derive = { path = "../variant-types-derive" }

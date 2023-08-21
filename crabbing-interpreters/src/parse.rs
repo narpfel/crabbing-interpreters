@@ -2,6 +2,7 @@ use std::iter::Copied;
 use std::iter::Peekable;
 
 use bumpalo::Bump;
+use variant_types::derive_variant_types;
 
 use crate::lex::Loc;
 use crate::lex::Token;
@@ -142,6 +143,7 @@ pub enum Statement<'a> {
     },
 }
 
+#[derive_variant_types]
 #[derive(Debug, Clone, Copy)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
@@ -183,6 +185,10 @@ impl<'a> Expression<'a> {
         }
     }
 
+    pub(crate) fn slice(&self) -> &'a str {
+        self.loc().slice()
+    }
+
     #[cfg(test)]
     pub fn as_sexpr(&self) -> String {
         match self {
@@ -197,9 +203,9 @@ impl<'a> Expression<'a> {
                 rhs.as_sexpr(),
             ),
             Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
-            Expression::Ident(name) => format!("(name {})", name.name()),
+            Expression::Ident(name) => format!("(name {})", name.slice()),
             Expression::Assign { target, value, .. } =>
-                format!("(= {} {})", target.name(), value.as_sexpr()),
+                format!("(= {} {})", target.slice(), value.as_sexpr()),
             Expression::Call { callee, arguments, .. } => format!(
                 "(call {}{}{})",
                 callee.as_sexpr(),
@@ -258,6 +264,10 @@ impl<'a> UnaryOp<'a> {
     pub(crate) fn loc(&self) -> Loc<'a> {
         self.token.loc()
     }
+
+    pub(crate) fn slice(&self) -> &'a str {
+        self.token.slice()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -275,6 +285,10 @@ pub struct BinOp<'a> {
 impl<'a> BinOp<'a> {
     pub(crate) fn loc(&self) -> Loc<'a> {
         self.token.loc()
+    }
+
+    pub(crate) fn slice(&self) -> &'a str {
+        self.token.slice()
     }
 }
 
@@ -328,7 +342,7 @@ impl<'a> Name<'a> {
         self.0.loc()
     }
 
-    pub(crate) fn name(&self) -> &'a str {
+    pub(crate) fn slice(&self) -> &'a str {
         self.0.slice()
     }
 }
@@ -452,7 +466,7 @@ fn function<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
     Ok(Statement::Function {
         name,
         parameters: bump.alloc_slice_copy(&parameters),
-        parameter_names: bump.alloc_slice_fill_iter(parameters.iter().map(Name::name)),
+        parameter_names: bump.alloc_slice_fill_iter(parameters.iter().map(Name::slice)),
         body,
     })
 }

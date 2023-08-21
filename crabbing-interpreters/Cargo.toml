@@ -1,0 +1,18 @@
+[package]
+name = "crabbing-interpreters"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ariadne = { version = "0.3.0", features = ["auto-color"] }
+bumpalo = "3.13.0"
+clap = { version = "4.3.4", features = ["derive"] }
+crabbing-interpreters-derive-report = { path = "../crabbing-interpreters-derive-report" }
+logos = "0.13.0"
+variant-types = { path = "../variant-types" }
+variant-types-derive = { path = "../variant-types-derive" }
+
+[dev-dependencies]
+insta-cmd = { git = "https://github.com/narpfel/insta-cmd", branch = "target-dir-slow" }
+pretty_assertions = { version = "1.4.0", features = ["unstable"] }
+rstest = { version = "0.18.1", default-features = false }

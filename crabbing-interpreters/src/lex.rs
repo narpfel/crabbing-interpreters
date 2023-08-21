@@ -89,6 +89,10 @@ impl<'a> Loc<'a> {
         self.span.start..self.span.end
     }
 
+    pub(crate) fn slice(&self) -> &'a str {
+        &self.src[self.span()]
+    }
+
     pub(crate) fn until(self, other: Self) -> Self {
         assert_eq!(self.file, other.file);
         assert_eq!(self.src, other.src);

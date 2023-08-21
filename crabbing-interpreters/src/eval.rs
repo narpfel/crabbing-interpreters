@@ -6,18 +6,23 @@ use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use ariadne::Fmt;
-use ariadne::Label;
+use ariadne::Color::Blue;
+use ariadne::Color::Green;
+use ariadne::Color::Magenta;
+use ariadne::Color::Red;
+use crabbing_interpreters_derive_report::Report;
+use variant_types::IntoVariant;
 
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::Expression;
+use crate::parse::ExpressionTypes;
 use crate::parse::LiteralKind;
 use crate::parse::Name;
 use crate::parse::Statement;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
-use crate::Report;
+use crate::Sliced;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -26,7 +31,7 @@ pub enum Value<'a> {
     Bool(bool),
     Nil,
     Function(Function<'a>),
-    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, Error<'b>>),
+    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
 }
 
 #[derive(Clone)]
@@ -91,133 +96,86 @@ impl PartialOrd for Function<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Report)]
+#[exit_code(70)]
 pub enum Error<'a> {
+    #[error("type error in unary operator `{op}`: operand has type `{actual}` but `{op}` requires type `{expected}`")]
+    #[with(
+        actual = value.typ(),
+        #[colour(Green)]
+        expected = "Number",
+    )]
+    #[help("operator `{op}` can only be applied to numbers")]
     InvalidUnaryOp {
         op: UnaryOp<'a>,
         value: Value<'a>,
-        at: Expression<'a>,
+        #[diagnostics(
+            0(label = "the operator in question", colour = Red),
+            1(label = "this is of type `{actual}`", colour = Blue),
+        )]
+        at: ExpressionTypes::Unary<'a>,
     },
+
+    #[error("type error in binary operator `{op}`: lhs has type `{lhs_type}`, but rhs has type `{rhs_type}`")]
+    #[with(
+        lhs_type = lhs.typ(),
+        rhs_type = rhs.typ(),
+        possible_types = match op.kind {
+            BinOpKind::Plus => "two numbers or two strings",
+            _ => "numbers",
+        },
+    )]
+    #[help("operator `{op}` can only be applied to {possible_types}")]
     InvalidBinaryOp {
         lhs: Value<'a>,
         op: BinOp<'a>,
         rhs: Value<'a>,
-        at: Expression<'a>,
+        #[diagnostics(
+            lhs(label = "this is of type `{lhs_type}`", colour = Blue),
+            op(label = "the operator in question", colour = Magenta),
+            rhs(label = "this is of type `{rhs_type}`", colour = Green),
+        )]
+        at: ExpressionTypes::Binary<'a>,
     },
-    UndefinedName(Name<'a>),
+
+    #[error("Undefined variable `{at}`.")]
+    UndefinedName {
+        #[diagnostics(0(colour = Magenta))]
+        at: ExpressionTypes::Ident<'a>,
+    },
+
+    #[error("not callable: `{callee}` is of type `{callee_type}`")]
+    #[with(
+        callee_type = callee.typ(),
+    )]
+    Uncallable {
+        callee: Value<'a>,
+        #[diagnostics(
+            callee(label = "this expression is of type `{callee_type}`", colour = Red),
+        )]
+        at: ExpressionTypes::Call<'a>,
+    },
+
+    #[error("arity error: `{callee}` expects {expected} args but {actual} args were passed")]
+    #[with(
+        actual = at.arguments.len(),
+    )]
+    ArityMismatch {
+        callee: Value<'a>,
+        expected: usize,
+        #[diagnostics(
+            callee(label = "expects {expected} arguments", colour = Red),
+        )]
+        at: ExpressionTypes::Call<'a>,
+    },
 }
 
-impl Report for Error<'_> {
-    fn print(&self) {
-        match self {
-            Error::InvalidUnaryOp { op, value, at } => {
-                let Expression::Unary(operator, operand) = at
-                else {
-                    unreachable!()
-                };
-
-                let operand_color = ariadne::Color::Blue;
-                let operator_color = ariadne::Color::Green;
-                let expected_type_color = ariadne::Color::Magenta;
-
-                let message = format!(
-                    "type error in unary operator `{op}`: operand has type `{actual}` but `{op}` requires type `{expected}`",
-                    op = operator.token.slice().fg(operator_color),
-                    actual = value.typ().fg(operand_color),
-                    expected = "Number".fg(expected_type_color),
-                );
-
-                let labels = [
-                    Label::new(operand.loc())
-                        .with_message(format!(
-                            "this is of type `{}`",
-                            value.typ().fg(operand_color),
-                        ))
-                        .with_color(operand_color)
-                        .with_order(1),
-                    Label::new(operator.loc())
-                        .with_message("the operator in question")
-                        .with_color(operator_color)
-                        .with_order(2),
-                ];
-
-                at.loc()
-                    .report(ariadne::ReportKind::Error)
-                    .with_message(message)
-                    .with_labels(labels)
-                    .with_help(format!(
-                        "operator `{}` can only be applied to numbers",
-                        op.token.slice().fg(operator_color),
-                    ))
-                    .finish()
-                    .eprint(at.loc().cache())
-                    .unwrap();
-            }
-            Error::InvalidBinaryOp { lhs, op, rhs, at, .. } => {
-                let Expression::Binary { lhs: lhs_expr, rhs: rhs_expr, .. } = at
-                else {
-                    unreachable!()
-                };
-
-                let lhs_color = ariadne::Color::Blue;
-                let op_color = ariadne::Color::Magenta;
-                let rhs_color = ariadne::Color::Green;
-
-                let possible_types = match op.kind {
-                    BinOpKind::Plus => "two numbers or two strings",
-                    _ => "numbers",
-                };
-                let message = format!(
-                    "type error in binary operator `{}`: lhs has type `{}`, but rhs has type `{}`",
-                    op.token.slice().fg(op_color),
-                    lhs.typ().fg(lhs_color),
-                    rhs.typ().fg(rhs_color),
-                );
-
-                let labels = [
-                    Label::new(rhs_expr.loc())
-                        .with_message(format!("this is of type `{}`", rhs.typ().fg(rhs_color)))
-                        .with_color(rhs_color)
-                        .with_order(1),
-                    Label::new(op.loc())
-                        .with_message("the operator in question")
-                        .with_color(op_color)
-                        .with_order(2),
-                    Label::new(lhs_expr.loc())
-                        .with_message(format!("this is of type `{}`", lhs.typ().fg(lhs_color)))
-                        .with_color(lhs_color)
-                        .with_order(3),
-                ];
-
-                at.loc()
-                    .report(ariadne::ReportKind::Error)
-                    .with_message(message)
-                    .with_labels(labels)
-                    .with_help(format!(
-                        "operator `{}` can only be applied to {possible_types}",
-                        op.token.slice().fg(op_color),
-                    ))
-                    .finish()
-                    .eprint(at.loc().cache())
-                    .unwrap();
-            }
-            Error::UndefinedName(name) => {
-                let name_color = ariadne::Color::Magenta;
-                let message = format!("Undefined variable `{}`.", name.name().fg(name_color),);
-                name.loc()
-                    .report(ariadne::ReportKind::Error)
-                    .with_message(message)
-                    .with_label(Label::new(name.loc()).with_color(name_color))
-                    .finish()
-                    .eprint(name.loc().cache())
-                    .unwrap();
-            }
-        }
-    }
-
-    fn exit_code(&self) -> i32 {
-        70
-    }
+pub enum NativeError<'a> {
+    #[expect(unused)]
+    Error(Error<'a>),
+    ArityMismatch {
+        expected: usize,
+    },
 }
 
 pub struct Environment<'a> {
@@ -231,7 +189,7 @@ impl<'a> Environment<'a> {
             "clock",
             Value::NativeFunction(|arguments| {
                 if !arguments.is_empty() {
-                    todo!("type (arity) error");
+                    return Err(NativeError::ArityMismatch { expected: 0 });
                 }
                 static START_TIME: OnceLock<Instant> = OnceLock::new();
                 Ok(Value::Number(
@@ -264,22 +222,26 @@ impl<'a> Environment<'a> {
 
     fn get(&self, name: &Name<'a>) -> Result<Value<'a>, Error<'a>> {
         for scope in self.scopes.iter().rev() {
-            if let Some(value) = scope.get(name.name()) {
+            if let Some(value) = scope.get(name.slice()) {
                 return Ok(value.clone());
             }
         }
 
-        Err(Error::UndefinedName(*name))
+        Err(Error::UndefinedName {
+            at: Expression::Ident(*name).into_variant(),
+        })
     }
 
     fn set(&mut self, name: &Name<'a>, value: Value<'a>) -> Result<(), Error<'a>> {
         for scope in self.scopes.iter_mut().rev() {
-            if let Entry::Occupied(mut entry) = scope.entry(name.name()) {
+            if let Entry::Occupied(mut entry) = scope.entry(name.slice()) {
                 entry.insert(value);
                 return Ok(());
             }
         }
-        Err(Error::UndefinedName(*name))
+        Err(Error::UndefinedName {
+            at: Expression::Ident(*name).into_variant(),
+        })
     }
 
     fn insert(&mut self, name: &'a str, value: Value<'a>) {
@@ -303,7 +265,12 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
-                    _ => return Err(Error::InvalidUnaryOp { op: *op, value, at: *expr }),
+                    _ =>
+                        return Err(Error::InvalidUnaryOp {
+                            op: *op,
+                            value,
+                            at: expr.into_variant(),
+                        }),
                 },
                 Not => Bool(!value.is_truthy()),
             }
@@ -355,7 +322,13 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
                             Power => Number(lhs.powf(*rhs)),
                             EqualEqual | NotEqual | Assign | And | Or => unreachable!(),
                         },
-                        _ => return Err(Error::InvalidBinaryOp { lhs, op: *op, rhs, at: *expr }),
+                        _ =>
+                            return Err(Error::InvalidBinaryOp {
+                                lhs,
+                                op: *op,
+                                rhs,
+                                at: expr.into_variant(),
+                            }),
                     }
                 }
             }
@@ -363,9 +336,13 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
         Expression::Call { callee, arguments, .. } => {
             let callee = eval(env, callee)?;
             match callee {
-                Value::Function(func) => {
+                Value::Function(ref func) => {
                     if arguments.len() != func.0.parameters.len() {
-                        todo!("type error: parameter count mismatch");
+                        return Err(Error::ArityMismatch {
+                            callee: callee.clone(),
+                            expected: func.0.parameters.len(),
+                            at: expr.into_variant(),
+                        });
                     }
                     let arguments = *arguments;
                     let params = func.0.parameters;
@@ -384,9 +361,16 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
                         .iter()
                         .map(|arg| eval(env, arg))
                         .collect::<Result<_, _>>()?;
-                    func(arguments)?
+                    func(arguments).map_err(|err| match err {
+                        NativeError::Error(err) => err,
+                        NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                            callee,
+                            expected,
+                            at: expr.into_variant(),
+                        },
+                    })?
                 }
-                _ => todo!("type error: not callable"),
+                _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
         Expression::Grouping { expr, .. } => eval(env, expr)?,
@@ -413,7 +397,7 @@ pub fn execute<'a>(
                 else {
                     Value::Nil
                 };
-                env.insert(name.name(), value);
+                env.insert(name.slice(), value);
                 Value::Nil
             }
             Statement::Block(block) => env.with_scope(|env| execute(env, block))?,
@@ -455,9 +439,9 @@ pub fn execute<'a>(
                 body,
             } => {
                 env.insert(
-                    name.name(),
+                    name.slice(),
                     Value::Function(Function(Rc::new(FunctionInner {
-                        name: name.name(),
+                        name: name.slice(),
                         parameters: parameter_names,
                         code: body,
                     }))),

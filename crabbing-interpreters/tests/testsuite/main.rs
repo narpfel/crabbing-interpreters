@@ -18,8 +18,8 @@ fn testname() -> String {
         .replace(':', "_")
 }
 
-fn as_relative(path: &Path) -> &Path {
-    path.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap()
+fn relative_to(path: &Path, target: impl AsRef<Path>) -> &Path {
+    path.strip_prefix(target.as_ref()).unwrap()
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn repl(testname: String, #[case] src: &str) {
 
 #[rstest]
 fn interpreter(#[files("tests/cases/**/*.lox")] path: PathBuf) {
-    let path = as_relative(&path);
+    let path = relative_to(&path, env!("CARGO_MANIFEST_DIR"));
     assert_cmd_snapshot!(
         path.display().to_string(),
         Command::new(get_cargo_bin("crabbing-interpreters")).arg(path)
