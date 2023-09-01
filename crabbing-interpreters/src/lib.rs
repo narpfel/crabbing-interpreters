@@ -12,6 +12,7 @@ use std::io::stdout;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use bumpalo::Bump;
 use clap::Parser;
@@ -120,6 +121,8 @@ impl Sliced for &Value<'_> {
 struct Args {
     /// filename
     filename: Option<PathBuf>,
+    #[arg(short, long)]
+    times: bool,
 }
 
 fn repl() -> Result<(), Box<dyn Report>> {
@@ -176,23 +179,34 @@ fn repl() -> Result<(), Box<dyn Report>> {
     }
 }
 
+fn time<T>(step: &str, print: bool, f: impl FnOnce() -> T) -> T {
+    let start = Instant::now();
+    let result = f();
+    if print {
+        println!("{step}: {:?}", start.elapsed());
+    }
+    result
+}
+
 pub fn run<'a>(
     bump: &'a Bump,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> Result<(), Box<dyn Report + 'a>> {
     let args = Args::parse_from(args);
     if let Some(filename) = args.filename {
-        let tokens = lex(
-            bump,
-            bump.alloc_path(&filename),
-            bump.alloc_str(
-                &std::fs::read_to_string(&filename)
-                    .map_err(|err| IoError { path: filename, io_error: err })?,
-            ),
-        )?;
-        let ast = parse(program, bump, tokens)?;
+        let tokens = time("lex", args.times, || -> Result<_, Box<dyn Report>> {
+            Ok(lex(
+                bump,
+                bump.alloc_path(&filename),
+                bump.alloc_str(
+                    &std::fs::read_to_string(&filename)
+                        .map_err(|err| IoError { path: filename, io_error: err })?,
+                ),
+            )?)
+        })?;
+        let ast = time("ast", args.times, || parse(program, bump, tokens))?;
         let mut globals = Environment::new();
-        execute(&mut globals, ast)?;
+        time("exe", args.times, || execute(&mut globals, ast))?;
     }
     else {
         repl()?;
