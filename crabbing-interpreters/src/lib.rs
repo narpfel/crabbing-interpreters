@@ -6,6 +6,7 @@
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
+use std::fmt::Write as _;
 use std::io;
 use std::io::stdin;
 use std::io::stdout;
@@ -16,6 +17,7 @@ use std::time::Instant;
 
 use bumpalo::Bump;
 use clap::Parser;
+use scope::resolve_names;
 
 use crate::eval::execute;
 use crate::eval::Environment;
@@ -27,6 +29,7 @@ use crate::parse::program;
 mod eval;
 mod lex;
 mod parse;
+mod scope;
 
 pub trait AllocPath {
     fn alloc_path(&self, path: impl AsRef<Path>) -> &Path;
@@ -122,6 +125,8 @@ struct Args {
     /// filename
     filename: Option<PathBuf>,
     #[arg(short, long)]
+    scopes: bool,
+    #[arg(short, long)]
     times: bool,
 }
 
@@ -168,7 +173,8 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             };
         };
-        let result = execute(&mut globals, stmts);
+        let stmts = resolve_names(bump, &["clock"], stmts);
+        let result = execute(&mut globals, 0, stmts);
         match result {
             Ok(value) =>
                 if !matches!(value, Value::Nil) {
@@ -205,8 +211,19 @@ pub fn run<'a>(
             )?)
         })?;
         let ast = time("ast", args.times, || parse(program, bump, tokens))?;
-        let mut globals = Environment::new();
-        time("exe", args.times, || execute(&mut globals, ast))?;
+        let scoped_ast = time("scp", args.times, || {
+            scope::resolve_names(bump, &["clock"], ast)
+        });
+        if args.scopes {
+            println!("(program");
+            let mut sexpr = String::new();
+            for stmt in scoped_ast {
+                write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
+            }
+            println!("{})", sexpr.trim_end());
+        }
+        let mut stack = time("stk", args.times, Environment::new);
+        time("exe", args.times, || execute(&mut stack, 0, scoped_ast))?;
     }
     else {
         repl()?;

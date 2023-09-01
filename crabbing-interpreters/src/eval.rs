@@ -1,5 +1,3 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -15,13 +13,13 @@ use variant_types::IntoVariant;
 
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
-use crate::parse::Expression;
-use crate::parse::ExpressionTypes;
 use crate::parse::LiteralKind;
-use crate::parse::Name;
-use crate::parse::Statement;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
+use crate::scope::Expression;
+use crate::scope::ExpressionTypes;
+use crate::scope::Slot;
+use crate::scope::Statement;
 use crate::Sliced;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -141,7 +139,7 @@ pub enum Error<'a> {
     #[error("Undefined variable `{at}`.")]
     UndefinedName {
         #[diagnostics(0(colour = Magenta))]
-        at: ExpressionTypes::Ident<'a>,
+        at: ExpressionTypes::NameError<'a>,
     },
 
     #[error("not callable: `{callee}` is of type `{callee_type}`")]
@@ -178,78 +176,49 @@ pub enum NativeError<'a> {
     },
 }
 
-pub struct Environment<'a> {
-    scopes: Vec<std::collections::HashMap<&'a str, Value<'a>>>,
-}
+pub struct Environment<'a>(Box<[Value<'a>; 100_000]>);
 
 impl<'a> Environment<'a> {
     pub fn new() -> Self {
-        let mut globals = HashMap::default();
-        globals.insert(
-            "clock",
-            Value::NativeFunction(|arguments| {
-                if !arguments.is_empty() {
-                    return Err(NativeError::ArityMismatch { expected: 0 });
-                }
-                static START_TIME: OnceLock<Instant> = OnceLock::new();
-                Ok(Value::Number(
-                    START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
-                ))
-            }),
-        );
-        Self { scopes: vec![globals] }
-    }
-
-    fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.scopes.push(HashMap::default());
-        let result = f(self);
-        self.scopes.pop();
-        result
-    }
-
-    fn with_stackframe<T>(
-        &mut self,
-        new_scope: HashMap<&'a str, Value<'a>>,
-        f: impl FnOnce(&mut Self) -> T,
-    ) -> T {
-        let globals = std::mem::take(&mut self.scopes[0]);
-        let mut scope = Self { scopes: vec![globals] };
-        scope.scopes.push(new_scope);
-        let result = scope.with_scope(f);
-        std::mem::swap(&mut self.scopes[0], &mut scope.scopes[0]);
-        result
-    }
-
-    fn get(&self, name: &Name<'a>) -> Result<Value<'a>, Error<'a>> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(value) = scope.get(name.slice()) {
-                return Ok(value.clone());
+        let mut globals: Box<[Value<'a>; 100_000]> = vec![Value::Nil; 100_000]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap();
+        globals[0] = Value::NativeFunction(|arguments| {
+            if !arguments.is_empty() {
+                return Err(NativeError::ArityMismatch { expected: 0 });
             }
-        }
-
-        Err(Error::UndefinedName {
-            at: Expression::Ident(*name).into_variant(),
-        })
+            static START_TIME: OnceLock<Instant> = OnceLock::new();
+            Ok(Value::Number(
+                START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
+            ))
+        });
+        Self(globals)
     }
 
-    fn set(&mut self, name: &Name<'a>, value: Value<'a>) -> Result<(), Error<'a>> {
-        for scope in self.scopes.iter_mut().rev() {
-            if let Entry::Occupied(mut entry) = scope.entry(name.slice()) {
-                entry.insert(value);
-                return Ok(());
-            }
-        }
-        Err(Error::UndefinedName {
-            at: Expression::Ident(*name).into_variant(),
-        })
+    fn get(&self, offset: usize, slot: Slot) -> Result<Value<'a>, Error<'a>> {
+        let index = match slot {
+            Slot::Local(slot) => offset + slot,
+            Slot::Global(slot) => slot,
+        };
+        Ok(self.0[index].clone())
     }
 
-    fn insert(&mut self, name: &'a str, value: Value<'a>) {
-        self.scopes.last_mut().unwrap().insert(name, value);
+    fn set(&mut self, offset: usize, slot: Slot, value: Value<'a>) -> Result<(), Error<'a>> {
+        let index = match slot {
+            Slot::Local(slot) => offset + slot,
+            Slot::Global(slot) => slot,
+        };
+        self.0[index] = value;
+        Ok(())
     }
 }
 
-pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Value<'a>, Error<'a>> {
+pub fn eval<'a>(
+    env: &mut Environment<'a>,
+    offset: usize,
+    expr: &Expression<'a>,
+) -> Result<Value<'a>, Error<'a>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
@@ -261,7 +230,7 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
         },
         Expression::Unary(op, inner_expr) => {
             use UnaryOpKind::*;
-            let value = eval(env, inner_expr)?;
+            let value = eval(env, offset, inner_expr)?;
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
@@ -276,34 +245,34 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
             }
         }
         Expression::Assign { target, value, .. } => {
-            let value = eval(env, value)?;
-            env.set(target, value.clone())?;
+            let value = eval(env, offset, value)?;
+            env.set(offset, *target, value.clone())?;
             return Ok(value);
         }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
             match op.kind {
                 And => {
-                    let lhs = eval(env, lhs)?;
+                    let lhs = eval(env, offset, lhs)?;
                     if lhs.is_truthy() {
-                        eval(env, rhs)?
+                        eval(env, offset, rhs)?
                     }
                     else {
                         lhs
                     }
                 }
                 Or => {
-                    let lhs = eval(env, lhs)?;
+                    let lhs = eval(env, offset, lhs)?;
                     if lhs.is_truthy() {
                         lhs
                     }
                     else {
-                        eval(env, rhs)?
+                        eval(env, offset, rhs)?
                     }
                 }
                 _ => {
-                    let lhs = eval(env, lhs)?;
-                    let rhs = eval(env, rhs)?;
+                    let lhs = eval(env, offset, lhs)?;
+                    let rhs = eval(env, offset, rhs)?;
                     match (&lhs, op.kind, &rhs) {
                         (_, And | Or, _) => unreachable!(),
                         (_, EqualEqual, _) => Bool(lhs == rhs),
@@ -333,8 +302,13 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
                 }
             }
         }
-        Expression::Call { callee, arguments, .. } => {
-            let callee = eval(env, callee)?;
+        Expression::Call {
+            callee,
+            arguments,
+            stack_size_at_callsite,
+            ..
+        } => {
+            let callee = eval(env, offset, callee)?;
             match callee {
                 Value::Function(ref func) => {
                     if arguments.len() != func.0.parameters.len() {
@@ -345,21 +319,18 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
                         });
                     }
                     let arguments = *arguments;
-                    let params = func.0.parameters;
-                    let new_scope = params
-                        .iter()
-                        .zip(arguments.iter())
-                        .map(|(&param, arg)| {
-                            let arg = eval(env, arg)?;
-                            Ok((param, arg))
-                        })
-                        .collect::<Result<_, _>>()?;
-                    env.with_stackframe(new_scope, |env| execute(env, func.0.code))?
+                    arguments.iter().enumerate().try_for_each(|(i, arg)| {
+                        let arg = eval(env, offset, arg)?;
+                        env.set(offset + stack_size_at_callsite, Slot::Local(i), arg)?;
+                        Ok(())
+                    })?;
+                    execute(env, offset + stack_size_at_callsite, func.0.code)?
+                    // FIXME: truncate env here to drop the callee’s locals
                 }
                 Value::NativeFunction(func) => {
                     let arguments = arguments
                         .iter()
-                        .map(|arg| eval(env, arg))
+                        .map(|arg| eval(env, offset, arg))
                         .collect::<Result<_, _>>()?;
                     func(arguments).map_err(|err| match err {
                         NativeError::Error(err) => err,
@@ -373,79 +344,88 @@ pub fn eval<'a>(env: &mut Environment<'a>, expr: &Expression<'a>) -> Result<Valu
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
-        Expression::Grouping { expr, .. } => eval(env, expr)?,
-        Expression::Ident(name) => env.get(name)?,
+        Expression::Grouping { expr, .. } => eval(env, offset, expr)?,
+        Expression::Local(_, slot) => env.get(offset, Slot::Local(*slot))?,
+        Expression::Global(_, slot) => env.get(offset, Slot::Global(*slot))?,
+        Expression::NameError(_) => Err(Error::UndefinedName { at: expr.into_variant() })?,
+        Expression::AssignNameError { target_name, value, .. } => {
+            eval(env, offset, value)?;
+            Err(Error::UndefinedName { at: *target_name })?
+        }
     })
 }
 
 pub fn execute<'a>(
     env: &mut Environment<'a>,
+    offset: usize,
     program: &[Statement<'a>],
 ) -> Result<Value<'a>, Error<'a>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
-            Statement::Expression(expr) => eval(env, expr)?,
+            Statement::Expression(expr) => eval(env, offset, expr)?,
             Statement::Print(expr) => {
-                println!("{}", eval(env, expr)?);
+                println!("{}", eval(env, offset, expr)?);
                 Value::Nil
             }
-            Statement::Var(name, initialiser) => {
+            Statement::Var(_, slot, initialiser) => {
                 let value = if let Some(initialiser) = initialiser {
-                    eval(env, initialiser)?
+                    eval(env, offset, initialiser)?
                 }
                 else {
                     Value::Nil
                 };
-                env.insert(name.slice(), value);
+                env.set(offset, Slot::Local(*slot), value)?;
                 Value::Nil
             }
-            Statement::Block(block) => env.with_scope(|env| execute(env, block))?,
+            Statement::Block(block) => execute(env, offset, block)?,
             Statement::If { condition, then, or_else } =>
-                if eval(env, condition)?.is_truthy() {
-                    execute(env, std::slice::from_ref(then))?
+                if eval(env, offset, condition)?.is_truthy() {
+                    execute(env, offset, std::slice::from_ref(then))?
                 }
                 else {
                     match or_else {
-                        Some(stmt) => execute(env, std::slice::from_ref(stmt))?,
+                        Some(stmt) => execute(env, offset, std::slice::from_ref(stmt))?,
                         None => Value::Nil,
                     }
                 },
             Statement::While { condition, body } => {
-                while eval(env, condition)?.is_truthy() {
-                    execute(env, std::slice::from_ref(body))?;
+                while eval(env, offset, condition)?.is_truthy() {
+                    execute(env, offset, std::slice::from_ref(body))?;
                 }
                 Value::Nil
             }
-            Statement::For { init, condition, update, body } => env.with_scope(|env| {
+            Statement::For { init, condition, update, body } => {
                 if let Some(init) = init {
-                    execute(env, std::slice::from_ref(init))?;
+                    execute(env, offset, std::slice::from_ref(init))?;
                 }
                 while condition
-                    .map_or(Ok(Value::Bool(true)), |cond| eval(env, &cond))?
+                    .map_or(Ok(Value::Bool(true)), |cond| eval(env, offset, &cond))?
                     .is_truthy()
                 {
-                    execute(env, std::slice::from_ref(body))?;
+                    execute(env, offset, std::slice::from_ref(body))?;
                     if let Some(update) = update {
-                        eval(env, update)?;
+                        eval(env, offset, update)?;
                     }
                 }
                 Ok(Value::Nil)
-            })?,
+            }?,
             Statement::Function {
                 name,
+                slot,
                 parameters: _,
                 parameter_names,
                 body,
             } => {
-                env.insert(
-                    name.slice(),
+                env.set(
+                    offset,
+                    Slot::Local(*slot),
                     Value::Function(Function(Rc::new(FunctionInner {
                         name: name.slice(),
                         parameters: parameter_names,
                         code: body,
                     }))),
-                );
+                )?;
                 Value::Nil
             }
         }
@@ -459,11 +439,17 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::parse;
+    use crate::scope;
 
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
-        let mut env = Environment::new();
-        eval(&mut env, &ast)
+        let program = std::slice::from_ref(bump.alloc(parse::Statement::Expression(ast)));
+        let [scope::Statement::Expression(scoped_ast)] = scope::resolve_names(bump, &[], program)
+        else {
+            unreachable!()
+        };
+        eval(&mut Environment::new(), 0, scoped_ast)
     }
 
     #[rstest]

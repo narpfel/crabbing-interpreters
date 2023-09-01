@@ -2,7 +2,6 @@ use std::iter::Copied;
 use std::iter::Peekable;
 
 use bumpalo::Bump;
-use variant_types::derive_variant_types;
 
 use crate::lex::Loc;
 use crate::lex::Token;
@@ -135,6 +134,8 @@ pub enum Statement<'a> {
         update: Option<Expression<'a>>,
         body: &'a Statement<'a>,
     },
+    // FIXME: functions should know their stack frame’s size to make it possible to reserve enough
+    // space before calling them and to drop the frame after the call returns
     Function {
         name: Name<'a>,
         parameters: &'a [Name<'a>],
@@ -143,7 +144,6 @@ pub enum Statement<'a> {
     },
 }
 
-#[derive_variant_types]
 #[derive(Debug, Clone, Copy)]
 pub enum Expression<'a> {
     Literal(Literal<'a>),
@@ -173,22 +173,6 @@ pub enum Expression<'a> {
 }
 
 impl<'a> Expression<'a> {
-    pub(crate) fn loc(&self) -> Loc<'a> {
-        match self {
-            Expression::Literal(lit) => lit.loc(),
-            Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
-            Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
-            Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
-            Expression::Ident(name) => name.loc(),
-            Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
-            Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
-        }
-    }
-
-    pub(crate) fn slice(&self) -> &'a str {
-        self.loc().slice()
-    }
-
     #[cfg(test)]
     pub fn as_sexpr(&self) -> String {
         match self {
@@ -242,8 +226,7 @@ pub enum LiteralKind<'a> {
 }
 
 impl LiteralKind<'_> {
-    #[cfg(test)]
-    fn value_string(self) -> String {
+    pub(crate) fn value_string(self) -> String {
         match self {
             LiteralKind::Number(x) => format!("{x:?}"),
             LiteralKind::String(s) => s.to_owned(),
