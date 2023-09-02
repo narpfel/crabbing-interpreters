@@ -1,0 +1,9 @@
+fun f() {
+    var a = 42;
+    var b = 27;
+    print f;
+    print a;
+    print b;
+}
+
+f();

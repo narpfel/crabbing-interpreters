@@ -24,7 +24,10 @@ struct Scope<'a> {
 }
 
 #[derive(Debug)]
-struct Scopes<'a>(Vec<Scope<'a>>);
+struct Scopes<'a> {
+    scopes: Vec<Scope<'a>>,
+    offset: usize,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Slot {
@@ -42,7 +45,7 @@ impl Slot {
 }
 
 impl<'a> Locals<'a> {
-    fn lookup(&self, name: &Name<'a>) -> Option<usize> {
+    fn lookup(&self, name: &Name) -> Option<usize> {
         self.0
             .iter()
             .rev()
@@ -59,56 +62,70 @@ impl Scope<'_> {
 
 impl<'a> Scopes<'a> {
     fn new(global_names: &[&'a str]) -> Self {
-        let mut scopes = Scopes(vec![Scope::new()]);
-        let last = scopes.0.last_mut().unwrap().locals.0.last_mut().unwrap();
-        for (i, name) in global_names.iter().enumerate() {
-            last.insert(name, i);
+        let mut scopes = Scopes { scopes: vec![Scope::new()], offset: 0 };
+        for name in global_names {
+            scopes.add_str(name);
         }
         scopes
     }
 
-    fn add(&mut self, name: &Name<'a>, slot: &mut usize) -> usize {
-        let last = self.0.last_mut().unwrap().locals.0.last_mut().unwrap();
-        let new_slot = *slot;
-        last.insert(name.slice(), new_slot);
-        *slot += 1;
-        new_slot
+    fn add(&mut self, name: &Name<'a>) -> usize {
+        self.add_str(name.slice())
     }
 
-    fn lookup(&self, name: &Name<'a>) -> Option<Slot> {
-        let last = self.0.last().unwrap();
+    fn add_str(&mut self, name: &'a str) -> usize {
+        // FIXME: return `DuplicateNameError` if `name` is already present in innermost
+        // scope
+        let last = self.scopes.last_mut().unwrap().locals.0.last_mut().unwrap();
+        let slot = self.offset;
+        last.insert(name, slot);
+        self.offset += 1;
+        slot
+    }
+
+    fn lookup(&self, name: &Name) -> Option<Slot> {
+        let last = self.scopes.last().unwrap();
         match last.locals.lookup(name) {
             Some(slot) => Some(Slot::Local(slot)),
             None => self.lookup_global(name),
         }
     }
 
-    fn lookup_local_innermost(&self, name: &Name<'a>) -> Option<usize> {
-        let last = self.0.last().unwrap().locals.0.last().unwrap();
+    fn lookup_local_innermost(&self, name: &Name) -> Option<usize> {
+        let last = self.scopes.last().unwrap().locals.0.last().unwrap();
         last.get(name.slice()).cloned()
     }
 
-    fn lookup_global(&self, name: &Name<'a>) -> Option<Slot> {
-        let globals = self.0.first().unwrap();
+    fn lookup_global(&self, name: &Name) -> Option<Slot> {
+        let globals = self.scopes.first().unwrap();
         globals.locals.lookup(name).map(Slot::Global)
     }
 
     fn with_block<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.0.last_mut().unwrap().locals.0.push(Default::default());
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .locals
+            .0
+            .push(Default::default());
+        let old_offset = self.offset;
         let result = f(self);
-        self.0.last_mut().unwrap().locals.0.pop();
+        self.offset = old_offset;
+        self.scopes.last_mut().unwrap().locals.0.pop();
         result
     }
 
     fn with_function<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.0.push(Scope::new());
+        self.scopes.push(Scope::new());
+        let old_offset = std::mem::take(&mut self.offset);
         let result = f(self);
-        self.0.pop();
+        self.scopes.pop();
+        self.offset = old_offset;
         result
     }
 
     fn current_stack_size(&self) -> usize {
-        self.0
+        self.scopes
             .last()
             .unwrap()
             .locals
@@ -321,21 +338,19 @@ pub(crate) fn resolve_names<'a>(
     program: &'a [crate::parse::Statement<'a>],
 ) -> &'a [Statement<'a>] {
     let mut scopes = Scopes::new(global_names);
-    let mut offset = global_names.len();
     // FIXME: The global scope actually has a special case in that it allows
     // capturing names in closures before they have been defined (using these
     // captured names yields a name error as usual).
     bump.alloc_slice_fill_iter(
         program
             .iter()
-            .map(|stmt| resolve_stmt(bump, &mut scopes, &mut offset, stmt)),
+            .map(|stmt| resolve_stmt(bump, &mut scopes, stmt)),
     )
 }
 
 fn resolve_stmt<'a>(
     bump: &'a Bump,
     scopes: &mut Scopes<'a>,
-    offset: &mut usize,
     stmt: &'a parse::Statement<'a>,
 ) -> Statement<'a> {
     use parse::Statement::*;
@@ -347,42 +362,32 @@ fn resolve_stmt<'a>(
             // global scope
             let slot = scopes
                 .lookup_local_innermost(name)
-                .unwrap_or_else(|| scopes.add(name, offset));
+                .unwrap_or_else(|| scopes.add(name));
             Statement::Var(
                 *name,
                 slot,
                 init.as_ref().map(|init| resolve_expr(bump, scopes, init)),
             )
         }
-        Block(stmts) => {
-            let mut offset = *offset;
+        Block(stmts) =>
             scopes.with_block(|scopes| {
-                Statement::Block(
-                    bump.alloc_slice_fill_iter(
-                        stmts
-                            .iter()
-                            .map(|stmt| resolve_stmt(bump, scopes, &mut offset, stmt)),
-                    ),
-                )
-            })
-        }
+                Statement::Block(bump.alloc_slice_fill_iter(
+                    stmts.iter().map(|stmt| resolve_stmt(bump, scopes, stmt)),
+                ))
+            }),
         If { condition, then, or_else } => Statement::If {
             condition: resolve_expr(bump, scopes, condition),
-            then: bump.alloc(resolve_stmt(bump, scopes, offset, then)),
-            or_else: or_else
-                .map(|or_else| &*bump.alloc(resolve_stmt(bump, scopes, offset, or_else))),
+            then: bump.alloc(resolve_stmt(bump, scopes, then)),
+            or_else: or_else.map(|or_else| &*bump.alloc(resolve_stmt(bump, scopes, or_else))),
         },
         While { condition, body } => Statement::While {
             condition: resolve_expr(bump, scopes, condition),
-            body: bump.alloc(resolve_stmt(bump, scopes, offset, body)),
+            body: bump.alloc(resolve_stmt(bump, scopes, body)),
         },
         For { init, condition, update, body } => {
             let (init, condition, update, body) = scopes.with_block(|scopes| {
-                let mut offset = *offset;
-                let init =
-                    init.map(|init| &*bump.alloc(resolve_stmt(bump, scopes, &mut offset, init)));
+                let init = init.map(|init| &*bump.alloc(resolve_stmt(bump, scopes, init)));
                 let (condition, update, body) = scopes.with_block(|scopes| {
-                    let mut offset = offset;
                     (
                         condition
                             .as_ref()
@@ -390,7 +395,7 @@ fn resolve_stmt<'a>(
                         update
                             .as_ref()
                             .map(|update| resolve_expr(bump, scopes, update)),
-                        bump.alloc(resolve_stmt(bump, scopes, &mut offset, body)),
+                        bump.alloc(resolve_stmt(bump, scopes, body)),
                     )
                 });
                 (init, condition, update, body)
@@ -402,19 +407,18 @@ fn resolve_stmt<'a>(
             // global scope
             let slot = scopes
                 .lookup_local_innermost(name)
-                .unwrap_or_else(|| scopes.add(name, offset));
+                .unwrap_or_else(|| scopes.add(name));
             Statement::Function {
                 name: *name,
                 slot,
                 parameters,
                 parameter_names,
                 body: scopes.with_function(|scopes| {
-                    for (mut i, name) in parameters.iter().enumerate() {
-                        scopes.add(name, &mut i);
+                    for name in *parameters {
+                        scopes.add(name);
                     }
                     bump.alloc_slice_fill_iter(
-                        body.iter()
-                            .map(|stmt| resolve_stmt(bump, scopes, &mut parameters.len(), stmt)),
+                        body.iter().map(|stmt| resolve_stmt(bump, scopes, stmt)),
                     )
                 }),
             }

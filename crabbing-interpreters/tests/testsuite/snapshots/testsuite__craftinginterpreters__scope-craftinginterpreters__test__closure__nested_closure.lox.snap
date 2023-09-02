@@ -15,20 +15,20 @@ exit_code: 0
    (fun f1 @2 []
       (block
          (var a @0 "a")
-         (fun f2 @0 []
+         (fun f2 @1 []
             (block
                (var b @0 "b")
-               (fun f3 @0 []
+               (fun f3 @1 []
                   (block
                      (var c @0 "c")
-                     (fun f4 @0 []
+                     (fun f4 @1 []
                         (block
                            (print (name-error a))
                            (print (name-error b))
                            (print (name-error c))))
-                     (expr (= f (global 1) (local f4 @0)))))
-               (expr (call +1 (local f3 @0)))))
-         (expr (call +1 (local f2 @0)))))
+                     (expr (= f (global 1) (local f4 @1)))))
+               (expr (call +2 (local f3 @1)))))
+         (expr (call +2 (local f2 @1)))))
    (expr (call +3 (local f1 @2)))
    (expr (call +3 (local f @1))))
 
