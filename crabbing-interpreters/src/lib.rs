@@ -29,6 +29,7 @@ use crate::parse::program;
 
 mod eval;
 mod lex;
+mod nonempty;
 mod parse;
 mod scope;
 

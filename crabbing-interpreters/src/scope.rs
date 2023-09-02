@@ -7,6 +7,7 @@ use variant_types_derive::derive_variant_types;
 
 use crate::lex::Loc;
 use crate::lex::Token;
+use crate::nonempty;
 use crate::parse;
 use crate::parse::BinOp;
 use crate::parse::Literal;
@@ -15,17 +16,17 @@ use crate::parse::UnaryOp;
 
 const EMPTY: &str = "";
 
-#[derive(Debug)]
-struct Locals<'a>(Vec<HashMap<&'a str, usize>>);
+#[derive(Debug, Default)]
+struct Locals<'a>(nonempty::Vec<HashMap<&'a str, usize>>);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Scope<'a> {
     locals: Locals<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Scopes<'a> {
-    scopes: Vec<Scope<'a>>,
+    scopes: nonempty::Vec<Scope<'a>>,
     offset: usize,
 }
 
@@ -44,7 +45,15 @@ impl Slot {
     }
 }
 
-impl<'a> Locals<'a> {
+impl Locals<'_> {
+    fn push(&mut self) {
+        self.0.push(Default::default())
+    }
+
+    fn pop(&mut self) {
+        self.0.pop();
+    }
+
     fn lookup(&self, name: &Name) -> Option<usize> {
         self.0
             .iter()
@@ -55,14 +64,18 @@ impl<'a> Locals<'a> {
 }
 
 impl Scope<'_> {
-    fn new() -> Self {
-        Self { locals: Locals(vec![HashMap::new()]) }
+    fn push(&mut self) {
+        self.locals.push()
+    }
+
+    fn pop(&mut self) {
+        self.locals.pop()
     }
 }
 
 impl<'a> Scopes<'a> {
     fn new(global_names: &[&'a str]) -> Self {
-        let mut scopes = Scopes { scopes: vec![Scope::new()], offset: 0 };
+        let mut scopes = Scopes::default();
         for name in global_names {
             scopes.add_str(name);
         }
@@ -76,7 +89,7 @@ impl<'a> Scopes<'a> {
     fn add_str(&mut self, name: &'a str) -> usize {
         // FIXME: return `DuplicateNameError` if `name` is already present in innermost
         // scope
-        let last = self.scopes.last_mut().unwrap().locals.0.last_mut().unwrap();
+        let last = self.scopes.last_mut().locals.0.last_mut();
         let slot = self.offset;
         last.insert(name, slot);
         self.offset += 1;
@@ -84,7 +97,7 @@ impl<'a> Scopes<'a> {
     }
 
     fn lookup(&self, name: &Name) -> Option<Slot> {
-        let last = self.scopes.last().unwrap();
+        let last = self.scopes.last();
         match last.locals.lookup(name) {
             Some(slot) => Some(Slot::Local(slot)),
             None => self.lookup_global(name),
@@ -92,34 +105,29 @@ impl<'a> Scopes<'a> {
     }
 
     fn lookup_local_innermost(&self, name: &Name) -> Option<usize> {
-        let last = self.scopes.last().unwrap().locals.0.last().unwrap();
+        let last = self.scopes.last().locals.0.last();
         last.get(name.slice()).cloned()
     }
 
     fn lookup_global(&self, name: &Name) -> Option<Slot> {
-        let globals = self.scopes.first().unwrap();
+        let globals = self.scopes.first();
         globals.locals.lookup(name).map(Slot::Global)
     }
 
     fn with_block<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.scopes
-            .last_mut()
-            .unwrap()
-            .locals
-            .0
-            .push(Default::default());
+        self.scopes.last_mut().push();
         let old_offset = self.offset;
         let result = f(self);
         self.offset = old_offset;
-        self.scopes.last_mut().unwrap().locals.0.pop();
+        self.scopes.last_mut().pop();
         result
     }
 
     fn with_function<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.scopes.push(Scope::new());
+        self.push();
         let old_offset = std::mem::take(&mut self.offset);
         let result = f(self);
-        self.scopes.pop();
+        self.pop();
         self.offset = old_offset;
         result
     }
@@ -127,13 +135,20 @@ impl<'a> Scopes<'a> {
     fn current_stack_size(&self) -> usize {
         self.scopes
             .last()
-            .unwrap()
             .locals
             .0
             .iter()
             .rev()
             .find_map(|map| map.values().max().map(|n| n + 1))
             .unwrap_or(0)
+    }
+
+    fn push(&mut self) {
+        self.scopes.push(Scope::default())
+    }
+
+    fn pop(&mut self) {
+        self.scopes.pop();
     }
 }
 
