@@ -210,12 +210,12 @@ impl<'a> Environment<'a> {
         Ok(self.stack[index].clone())
     }
 
-    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<Value<'a>, Error<'a>> {
-        Ok(self.stack[*self
+    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Error<'a>> {
+        let slot = *self
             .globals
             .get(name.slice())
-            .ok_or(Error::UndefinedName { at: ExpressionTypes::NameError(name) })?]
-        .clone())
+            .ok_or(Error::UndefinedName { at: ExpressionTypes::NameError(name) })?;
+        Ok((slot, self.stack[slot].clone()))
     }
 
     fn set(&mut self, offset: usize, slot: Slot, value: Value<'a>) -> Result<(), Error<'a>> {
@@ -360,9 +360,13 @@ pub fn eval<'a>(
         }
         Expression::Grouping { expr, .. } => eval(env, offset, expr)?,
         Expression::Local(_, slot) => env.get(offset, Slot::Local(*slot))?,
-        Expression::Global(global) => match global {
-            GlobalName::ByName(name) => env.get_global_by_name(name)?,
-            GlobalName::BySlot(_, slot) => env.get(offset, Slot::Global(*slot))?,
+        Expression::Global(global) => match global.get() {
+            GlobalName::ByName(name) => {
+                let (slot, value) = env.get_global_by_name(name)?;
+                global.set(GlobalName::BySlot(name, slot));
+                value
+            }
+            GlobalName::BySlot(_, slot) => env.get(offset, Slot::Global(slot))?,
         },
         Expression::NameError(_) => Err(Error::UndefinedName { at: expr.into_variant() })?,
         Expression::AssignNameError { target_name, value, .. } => {
@@ -453,11 +457,17 @@ pub fn execute<'a>(
 #[cfg(test)]
 mod tests {
     use bumpalo::Bump;
+    use rstest::fixture;
     use rstest::rstest;
 
     use super::*;
     use crate::parse;
     use crate::scope;
+
+    #[fixture]
+    fn bump() -> Bump {
+        Bump::new()
+    }
 
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
@@ -491,8 +501,7 @@ mod tests {
     #[case::precedence_of_addition_and_negation("3 + -5", Value::Number(-2.0))]
     #[case::precedence_of_negation_and_power("-2 ** 2", Value::Number(-4.0))]
     #[case::precedence_of_power_and_negation("2 ** -2", Value::Number(0.25))]
-    fn test_eval(#[case] src: &'static str, #[case] expected: Value) {
-        let bump = &Bump::new();
+    fn test_eval<'a>(bump: &'a Bump, #[case] src: &'static str, #[case] expected: Value<'a>) {
         pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
     }
 

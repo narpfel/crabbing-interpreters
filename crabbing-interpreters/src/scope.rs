@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::primitive::usize;
@@ -295,7 +296,7 @@ pub enum Expression<'a> {
         r_paren: Token<'a>,
     },
     Local(&'a Name<'a>, usize),
-    Global(GlobalName<'a>),
+    Global(&'a Cell<crate::scope::GlobalName<'a>>),
     Assign {
         target_name: &'a Name<'a>,
         target: Slot,
@@ -326,7 +327,7 @@ impl<'a> Expression<'a> {
             Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
             Expression::Local(name, _) => name.loc(),
             Expression::Global(global) => {
-                let (GlobalName::ByName(name) | GlobalName::BySlot(name, _)) = *global;
+                let (GlobalName::ByName(name) | GlobalName::BySlot(name, _)) = global.get();
                 name.loc()
             }
             Expression::Assign { target_name, value, .. } => target_name.loc().until(value.loc()),
@@ -375,7 +376,7 @@ impl<'a> Expression<'a> {
                     .join(" "),
             ),
             Expression::Local(name, slot) => format!("(local {} @{slot})", name.slice()),
-            Expression::Global(global) => match *global {
+            Expression::Global(global) => match global.get() {
                 GlobalName::ByName(name) => format!("(global-by-name {})", name.slice()),
                 GlobalName::BySlot(name, slot) => format!("(global {} @{slot})", name.slice()),
             },
@@ -506,8 +507,9 @@ fn resolve_expr<'a>(
         },
         Ident(name) => match scopes.lookup(name) {
             Some(Slot::Local(slot)) => Expression::Local(name, slot),
-            Some(Slot::Global(slot)) => Expression::Global(GlobalName::BySlot(name, slot)),
-            None => Expression::Global(GlobalName::ByName(name)),
+            Some(Slot::Global(slot)) =>
+                Expression::Global(bump.alloc(Cell::new(GlobalName::BySlot(name, slot)))),
+            None => Expression::Global(bump.alloc(Cell::new(GlobalName::ByName(name)))),
         },
         Assign { target, equal, value } => match scopes.lookup(target) {
             Some(target_slot) => Expression::Assign {
