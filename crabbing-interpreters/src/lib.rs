@@ -141,7 +141,7 @@ enum StopAt {
 
 fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
-    let mut globals = Environment::new();
+    let mut globals = Environment::new([("clock", 0)].into_iter().collect());
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -182,7 +182,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             };
         };
-        let stmts = match resolve_names(bump, &["clock"], stmts) {
+        let (stmts, _) = match resolve_names(bump, &["clock"], stmts) {
             Ok(stmts) => stmts,
             Err(err) => {
                 err.print();
@@ -226,7 +226,7 @@ pub fn run<'a>(
             )?)
         })?;
         let ast = time("ast", args.times, || parse(program, bump, tokens))?;
-        let scoped_ast = time("scp", args.times, || {
+        let (scoped_ast, global_name_offsets) = time("scp", args.times, || {
             scope::resolve_names(bump, &["clock"], ast)
         })?;
         if args.scopes {
@@ -240,7 +240,7 @@ pub fn run<'a>(
                 return Ok(());
             }
         }
-        let mut stack = time("stk", args.times, Environment::new);
+        let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
         time("exe", args.times, || execute(&mut stack, 0, scoped_ast))?;
     }
     else {

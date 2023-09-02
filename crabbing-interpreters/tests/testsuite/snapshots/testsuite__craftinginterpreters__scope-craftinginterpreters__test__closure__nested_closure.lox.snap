@@ -23,9 +23,9 @@ exit_code: 0
                      (var c @0 "c")
                      (fun f4 @1 []
                         (block
-                           (print (name-error a))
-                           (print (name-error b))
-                           (print (name-error c))))
+                           (print (global-by-name a))
+                           (print (global-by-name b))
+                           (print (global-by-name c))))
                      (expr (= f (global 1) (local f4 @1)))))
                (expr (call +2 (local f3 @1)))))
          (expr (call +2 (local f2 @1)))))

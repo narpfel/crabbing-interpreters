@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -14,10 +15,12 @@ use variant_types::IntoVariant;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::LiteralKind;
+use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
+use crate::scope::GlobalName;
 use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::Sliced;
@@ -176,10 +179,13 @@ pub enum NativeError<'a> {
     },
 }
 
-pub struct Environment<'a>(Box<[Value<'a>; 100_000]>);
+pub struct Environment<'a> {
+    stack: Box<[Value<'a>; 100_000]>,
+    globals: HashMap<&'a str, usize>,
+}
 
 impl<'a> Environment<'a> {
-    pub fn new() -> Self {
+    pub fn new(global_names: HashMap<&'a str, usize>) -> Self {
         let mut globals: Box<[Value<'a>; 100_000]> = vec![Value::Nil; 100_000]
             .into_boxed_slice()
             .try_into()
@@ -193,7 +199,7 @@ impl<'a> Environment<'a> {
                 START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
             ))
         });
-        Self(globals)
+        Self { stack: globals, globals: global_names }
     }
 
     fn get(&self, offset: usize, slot: Slot) -> Result<Value<'a>, Error<'a>> {
@@ -201,7 +207,15 @@ impl<'a> Environment<'a> {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
         };
-        Ok(self.0[index].clone())
+        Ok(self.stack[index].clone())
+    }
+
+    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<Value<'a>, Error<'a>> {
+        Ok(self.stack[*self
+            .globals
+            .get(name.slice())
+            .ok_or(Error::UndefinedName { at: ExpressionTypes::NameError(name) })?]
+        .clone())
     }
 
     fn set(&mut self, offset: usize, slot: Slot, value: Value<'a>) -> Result<(), Error<'a>> {
@@ -209,7 +223,7 @@ impl<'a> Environment<'a> {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
         };
-        self.0[index] = value;
+        self.stack[index] = value;
         Ok(())
     }
 }
@@ -346,7 +360,10 @@ pub fn eval<'a>(
         }
         Expression::Grouping { expr, .. } => eval(env, offset, expr)?,
         Expression::Local(_, slot) => env.get(offset, Slot::Local(*slot))?,
-        Expression::Global(_, slot) => env.get(offset, Slot::Global(*slot))?,
+        Expression::Global(global) => match global {
+            GlobalName::ByName(name) => env.get_global_by_name(name)?,
+            GlobalName::BySlot(_, slot) => env.get(offset, Slot::Global(*slot))?,
+        },
         Expression::NameError(_) => Err(Error::UndefinedName { at: expr.into_variant() })?,
         Expression::AssignNameError { target_name, value, .. } => {
             eval(env, offset, value)?;
@@ -445,12 +462,12 @@ mod tests {
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         let program = std::slice::from_ref(bump.alloc(parse::Statement::Expression(ast)));
-        let Ok([scope::Statement::Expression(scoped_ast)]) =
+        let Ok(([scope::Statement::Expression(scoped_ast)], global_name_offsets)) =
             scope::resolve_names(bump, &[], program)
         else {
             unreachable!()
         };
-        eval(&mut Environment::new(), 0, scoped_ast)
+        eval(&mut Environment::new(global_name_offsets), 0, scoped_ast)
     }
 
     #[rstest]

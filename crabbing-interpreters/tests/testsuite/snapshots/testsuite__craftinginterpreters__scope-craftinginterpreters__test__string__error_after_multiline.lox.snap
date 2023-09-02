@@ -12,6 +12,6 @@ exit_code: 0
 ----- stdout -----
 (program
    (var a @1 "1\n2\n3\n")
-   (expr (name-error err)))
+   (expr (global-by-name err)))
 
 ----- stderr -----

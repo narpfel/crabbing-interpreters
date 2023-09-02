@@ -273,6 +273,12 @@ impl Statement<'_> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum GlobalName<'a> {
+    ByName(&'a Name<'a>),
+    BySlot(&'a Name<'a>, usize),
+}
+
 #[derive_variant_types]
 #[derive(Debug, Clone, Copy)]
 pub enum Expression<'a> {
@@ -289,7 +295,7 @@ pub enum Expression<'a> {
         r_paren: Token<'a>,
     },
     Local(&'a Name<'a>, usize),
-    Global(&'a Name<'a>, usize),
+    Global(GlobalName<'a>),
     Assign {
         target_name: &'a Name<'a>,
         target: Slot,
@@ -319,7 +325,10 @@ impl<'a> Expression<'a> {
             Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
             Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
             Expression::Local(name, _) => name.loc(),
-            Expression::Global(name, _) => name.loc(),
+            Expression::Global(global) => {
+                let (GlobalName::ByName(name) | GlobalName::BySlot(name, _)) = *global;
+                name.loc()
+            }
             Expression::Assign { target_name, value, .. } => target_name.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
             Expression::NameError(name) => name.loc(),
@@ -366,7 +375,10 @@ impl<'a> Expression<'a> {
                     .join(" "),
             ),
             Expression::Local(name, slot) => format!("(local {} @{slot})", name.slice()),
-            Expression::Global(name, slot) => format!("(global {} @{slot})", name.slice()),
+            Expression::Global(global) => match *global {
+                GlobalName::ByName(name) => format!("(global-by-name {})", name.slice()),
+                GlobalName::BySlot(name, slot) => format!("(global {} @{slot})", name.slice()),
+            },
             Expression::NameError(name) => format!("(name-error {})", name.slice()),
             Expression::AssignNameError { target_name, value, .. } => format!(
                 "(=-name-error {} {})",
@@ -381,17 +393,15 @@ pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
     global_names: &[&'a str],
     program: &'a [crate::parse::Statement<'a>],
-) -> Result<&'a [Statement<'a>], Error<'a>> {
+) -> Result<(&'a [Statement<'a>], HashMap<&'a str, usize>), Error<'a>> {
     let mut scopes = Scopes::new(global_names);
-    // FIXME: The global scope actually has a special case in that it allows
-    // capturing names in closures before they have been defined (using these
-    // captured names yields a name error as usual).
-    Ok(&*bump.alloc_slice_copy(
+    let stmts = &*bump.alloc_slice_copy(
         &program
             .iter()
             .map(|stmt| resolve_stmt(bump, &mut scopes, stmt))
             .collect::<Result<Vec<_>, _>>()?,
-    ))
+    );
+    Ok((stmts, scopes.scopes.first().locals.0.first().clone()))
 }
 
 fn resolve_stmt<'a>(
@@ -496,8 +506,8 @@ fn resolve_expr<'a>(
         },
         Ident(name) => match scopes.lookup(name) {
             Some(Slot::Local(slot)) => Expression::Local(name, slot),
-            Some(Slot::Global(slot)) => Expression::Global(name, slot),
-            None => Expression::NameError(name),
+            Some(Slot::Global(slot)) => Expression::Global(GlobalName::BySlot(name, slot)),
+            None => Expression::Global(GlobalName::ByName(name)),
         },
         Assign { target, equal, value } => match scopes.lookup(target) {
             Some(target_slot) => Expression::Assign {

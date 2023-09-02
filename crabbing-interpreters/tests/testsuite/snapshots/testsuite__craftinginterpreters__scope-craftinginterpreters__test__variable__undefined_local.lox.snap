@@ -12,6 +12,6 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (print (name-error notDefined))))
+      (print (global-by-name notDefined))))
 
 ----- stderr -----

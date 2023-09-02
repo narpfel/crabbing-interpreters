@@ -17,8 +17,8 @@ exit_code: 0
          (var b @1 "b")
          (fun g @2 []
             (block
-               (print (name-error b))
-               (print (name-error a))))
+               (print (global-by-name b))
+               (print (global-by-name a))))
          (expr (call +3 (local g @2)))))
    (expr (call +2 (local f @1))))
 

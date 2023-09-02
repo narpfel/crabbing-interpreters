@@ -14,7 +14,7 @@ exit_code: 0
    (if
       false
       (block
-         (print (name-error notDefined)))
+         (print (global-by-name notDefined)))
       ∅)
    (print "ok"))
 
