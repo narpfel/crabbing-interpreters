@@ -5,8 +5,15 @@ info:
   args:
     - craftinginterpreters/test/variable/duplicate_local.lox
 ---
-success: true
-exit_code: 0
+success: false
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
+Error: Already a variable with this name in this scope: `a`
+   ╭─[craftinginterpreters/test/variable/duplicate_local.lox:3:7]
+   │
+ 3 │   var a = "other"; // Error at 'a': Already a variable with this name in this scope.
+   │       ─  
+   │           
+───╯

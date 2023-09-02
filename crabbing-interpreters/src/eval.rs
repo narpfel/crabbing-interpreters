@@ -445,7 +445,8 @@ mod tests {
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         let program = std::slice::from_ref(bump.alloc(parse::Statement::Expression(ast)));
-        let [scope::Statement::Expression(scoped_ast)] = scope::resolve_names(bump, &[], program)
+        let Ok([scope::Statement::Expression(scoped_ast)]) =
+            scope::resolve_names(bump, &[], program)
         else {
             unreachable!()
         };

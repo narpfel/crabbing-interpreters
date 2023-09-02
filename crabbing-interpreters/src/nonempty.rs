@@ -14,6 +14,10 @@ impl<T> Vec<T> {
         Vec(vec![value])
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn push(&mut self, value: T) {
         self.0.push(value)
     }

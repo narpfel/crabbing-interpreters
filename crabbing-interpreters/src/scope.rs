@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::primitive::usize;
 
+use ariadne::Color::Red;
 use bumpalo::Bump;
+use crabbing_interpreters_derive_report::Report;
 use itertools::Itertools as _;
 use variant_types_derive::derive_variant_types;
 
@@ -35,6 +37,16 @@ struct Scopes<'a> {
 pub enum Slot {
     Local(usize),
     Global(usize),
+}
+
+#[derive(Debug, Report)]
+#[exit_code(65)]
+pub enum Error<'a> {
+    #[error("Already a variable with this name in this scope: `{at}`")]
+    DuplicateDefinition {
+        #[diagnostics(0(colour = Red))]
+        at: Name<'a>,
+    },
 }
 
 impl Slot {
@@ -88,8 +100,18 @@ impl<'a> Scopes<'a> {
         scopes
     }
 
-    fn add(&mut self, name: &Name<'a>) -> usize {
-        self.add_str(name.slice())
+    fn add(&mut self, name: &Name<'a>) -> Result<usize, Error<'a>> {
+        if self.is_in_globals() {
+            return Ok(self
+                .lookup_local_innermost(name)
+                .unwrap_or_else(|| self.add_str(name.slice())));
+        }
+        else if self.lookup_local_innermost(name).is_some() {
+            return Err(Error::DuplicateDefinition { at: *name });
+        }
+        else {
+            Ok(self.add_str(name.slice()))
+        }
     }
 
     fn add_str(&mut self, name: &'a str) -> usize {
@@ -153,6 +175,10 @@ impl<'a> Scopes<'a> {
 
     fn pop(&mut self) {
         self.scopes.pop();
+    }
+
+    fn is_in_globals(&self) -> bool {
+        self.scopes.len() == 1 && self.scopes.last().locals.0.len() == 1
     }
 }
 
@@ -355,78 +381,79 @@ pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
     global_names: &[&'a str],
     program: &'a [crate::parse::Statement<'a>],
-) -> &'a [Statement<'a>] {
+) -> Result<&'a [Statement<'a>], Error<'a>> {
     let mut scopes = Scopes::new(global_names);
     // FIXME: The global scope actually has a special case in that it allows
     // capturing names in closures before they have been defined (using these
     // captured names yields a name error as usual).
-    bump.alloc_slice_fill_iter(
-        program
+    Ok(&*bump.alloc_slice_copy(
+        &program
             .iter()
-            .map(|stmt| resolve_stmt(bump, &mut scopes, stmt)),
-    )
+            .map(|stmt| resolve_stmt(bump, &mut scopes, stmt))
+            .collect::<Result<Vec<_>, _>>()?,
+    ))
 }
 
 fn resolve_stmt<'a>(
     bump: &'a Bump,
     scopes: &mut Scopes<'a>,
     stmt: &'a parse::Statement<'a>,
-) -> Statement<'a> {
+) -> Result<Statement<'a>, Error<'a>> {
     use parse::Statement::*;
-    match stmt {
+    Ok(match stmt {
         Expression(expr) => Statement::Expression(resolve_expr(bump, scopes, expr)),
         Print(expr) => Statement::Print(resolve_expr(bump, scopes, expr)),
         Var(name, init) => {
-            // FIXME: multiple definitions of the same name should be an error if not in
-            // global scope
-            let slot = scopes
-                .lookup_local_innermost(name)
-                .unwrap_or_else(|| scopes.add(name));
+            let slot = scopes.add(name)?;
             Statement::Var(
                 *name,
                 slot,
                 init.as_ref().map(|init| resolve_expr(bump, scopes, init)),
             )
         }
-        Block(stmts) =>
-            scopes.with_block(|scopes| {
-                Statement::Block(bump.alloc_slice_fill_iter(
-                    stmts.iter().map(|stmt| resolve_stmt(bump, scopes, stmt)),
-                ))
-            }),
+        Block(stmts) => scopes.with_block(|scopes| {
+            Ok(Statement::Block(
+                bump.alloc_slice_copy(
+                    &stmts
+                        .iter()
+                        .map(|stmt| resolve_stmt(bump, scopes, stmt))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+            ))
+        })?,
         If { condition, then, or_else } => Statement::If {
             condition: resolve_expr(bump, scopes, condition),
-            then: bump.alloc(resolve_stmt(bump, scopes, then)),
-            or_else: or_else.map(|or_else| &*bump.alloc(resolve_stmt(bump, scopes, or_else))),
+            then: bump.alloc(resolve_stmt(bump, scopes, then)?),
+            or_else: or_else
+                .map(|or_else| Ok(&*bump.alloc(resolve_stmt(bump, scopes, or_else)?)))
+                .transpose()?,
         },
         While { condition, body } => Statement::While {
             condition: resolve_expr(bump, scopes, condition),
-            body: bump.alloc(resolve_stmt(bump, scopes, body)),
+            body: bump.alloc(resolve_stmt(bump, scopes, body)?),
         },
         For { init, condition, update, body } => {
             let (init, condition, update, body) = scopes.with_block(|scopes| {
-                let init = init.map(|init| &*bump.alloc(resolve_stmt(bump, scopes, init)));
+                let init = init
+                    .map(|init| Ok(&*bump.alloc(resolve_stmt(bump, scopes, init)?)))
+                    .transpose()?;
                 let (condition, update, body) = scopes.with_block(|scopes| {
-                    (
+                    Ok((
                         condition
                             .as_ref()
                             .map(|condition| resolve_expr(bump, scopes, condition)),
                         update
                             .as_ref()
                             .map(|update| resolve_expr(bump, scopes, update)),
-                        bump.alloc(resolve_stmt(bump, scopes, body)),
-                    )
-                });
-                (init, condition, update, body)
-            });
+                        bump.alloc(resolve_stmt(bump, scopes, body)?),
+                    ))
+                })?;
+                Ok((init, condition, update, body))
+            })?;
             Statement::For { init, condition, update, body }
         }
         Function { name, parameters, parameter_names, body } => {
-            // FIXME: multiple definitions of the same name should be an error if not in
-            // global scope
-            let slot = scopes
-                .lookup_local_innermost(name)
-                .unwrap_or_else(|| scopes.add(name));
+            let slot = scopes.add(name)?;
             Statement::Function {
                 name: *name,
                 slot,
@@ -434,15 +461,18 @@ fn resolve_stmt<'a>(
                 parameter_names,
                 body: scopes.with_function(|scopes| {
                     for name in *parameters {
-                        scopes.add(name);
+                        scopes.add(name)?;
                     }
-                    bump.alloc_slice_fill_iter(
-                        body.iter().map(|stmt| resolve_stmt(bump, scopes, stmt)),
-                    )
-                }),
+                    Ok(bump.alloc_slice_copy(
+                        &body
+                            .iter()
+                            .map(|stmt| resolve_stmt(bump, scopes, stmt))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ))
+                })?,
             }
         }
-    }
+    })
 }
 
 fn resolve_expr<'a>(

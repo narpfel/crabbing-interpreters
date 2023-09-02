@@ -5,8 +5,15 @@ info:
   args:
     - craftinginterpreters/test/variable/duplicate_parameter.lox
 ---
-success: true
-exit_code: 0
+success: false
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
+Error: Already a variable with this name in this scope: `arg`
+   ╭─[craftinginterpreters/test/variable/duplicate_parameter.lox:2:9]
+   │
+ 2 │         arg) { // Error at 'arg': Already a variable with this name in this scope.
+   │         ───  
+   │               
+───╯

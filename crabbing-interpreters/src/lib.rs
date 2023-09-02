@@ -182,7 +182,13 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             };
         };
-        let stmts = resolve_names(bump, &["clock"], stmts);
+        let stmts = match resolve_names(bump, &["clock"], stmts) {
+            Ok(stmts) => stmts,
+            Err(err) => {
+                err.print();
+                continue 'repl;
+            }
+        };
         let result = execute(&mut globals, 0, stmts);
         match result {
             Ok(value) =>
@@ -222,7 +228,7 @@ pub fn run<'a>(
         let ast = time("ast", args.times, || parse(program, bump, tokens))?;
         let scoped_ast = time("scp", args.times, || {
             scope::resolve_names(bump, &["clock"], ast)
-        });
+        })?;
         if args.scopes {
             println!("(program");
             let mut sexpr = String::new();

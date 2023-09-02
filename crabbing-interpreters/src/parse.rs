@@ -318,7 +318,7 @@ impl<'a> BinOp<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Name<'a>(Token<'a>);
+pub struct Name<'a>(pub(crate) Token<'a>);
 
 impl<'a> Name<'a> {
     pub(crate) fn loc(&self) -> Loc<'a> {
