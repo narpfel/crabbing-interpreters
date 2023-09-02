@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::primitive::usize;
 
 use bumpalo::Bump;
+use itertools::Itertools as _;
 use variant_types_derive::derive_variant_types;
 
 use crate::lex::Loc;
@@ -76,6 +77,11 @@ impl Scope<'_> {
 impl<'a> Scopes<'a> {
     fn new(global_names: &[&'a str]) -> Self {
         let mut scopes = Scopes::default();
+        let duplicate_names = global_names.iter().duplicates().collect_vec();
+        assert!(
+            duplicate_names.is_empty(),
+            "duplicates in builtin global names are not permitted: {duplicate_names:?}",
+        );
         for name in global_names {
             scopes.add_str(name);
         }
@@ -87,8 +93,6 @@ impl<'a> Scopes<'a> {
     }
 
     fn add_str(&mut self, name: &'a str) -> usize {
-        // FIXME: return `DuplicateNameError` if `name` is already present in innermost
-        // scope
         let last = self.scopes.last_mut().locals.0.last_mut();
         let slot = self.offset;
         last.insert(name, slot);

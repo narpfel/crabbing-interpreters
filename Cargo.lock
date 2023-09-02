@@ -182,6 +182,7 @@ dependencies = [
  "crabbing-interpreters-derive-report",
  "insta",
  "insta-cmd",
+ "itertools",
  "logos",
  "pretty_assertions",
  "rstest",

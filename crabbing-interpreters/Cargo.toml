@@ -8,6 +8,7 @@ ariadne = { version = "0.3.0", features = ["auto-color"] }
 bumpalo = "3.13.0"
 clap = { version = "4.3.4", features = ["derive"] }
 crabbing-interpreters-derive-report = { path = "../crabbing-interpreters-derive-report" }
+itertools = "0.11.0"
 logos = "0.13.0"
 variant-types = { path = "../variant-types" }
 variant-types-derive = { path = "../variant-types-derive" }
