@@ -143,7 +143,7 @@ pub enum Error<'a> {
     #[error("Undefined variable `{at}`.")]
     UndefinedName {
         #[diagnostics(0(colour = Magenta))]
-        at: ExpressionTypes::NameError<'a>,
+        at: Name<'a>,
     },
 
     #[error("not callable: `{callee}` is of type `{callee_type}`")]
@@ -215,7 +215,7 @@ impl<'a> Environment<'a> {
         self.globals
             .get(name.slice())
             .copied()
-            .ok_or(Error::UndefinedName { at: ExpressionTypes::NameError(name) })
+            .ok_or(Error::UndefinedName { at: *name })
     }
 
     fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Error<'a>> {
@@ -385,11 +385,6 @@ pub fn eval<'a>(
             }
             GlobalName::BySlot(_, slot) => env.get(offset, Slot::Global(slot))?,
         },
-        Expression::NameError(_) => Err(Error::UndefinedName { at: expr.into_variant() })?,
-        Expression::AssignNameError { target_name, value, .. } => {
-            eval(env, offset, value)?;
-            Err(Error::UndefinedName { at: *target_name })?
-        }
     })
 }
 

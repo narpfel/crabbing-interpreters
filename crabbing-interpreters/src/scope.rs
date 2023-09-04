@@ -327,12 +327,6 @@ pub enum Expression<'a> {
         r_paren: Token<'a>,
         stack_size_at_callsite: usize,
     },
-    NameError(&'a Name<'a>),
-    AssignNameError {
-        target_name: ExpressionTypes::NameError<'a>,
-        equal: Token<'a>,
-        value: &'a Expression<'a>,
-    },
 }
 
 impl<'a> Expression<'a> {
@@ -349,9 +343,6 @@ impl<'a> Expression<'a> {
             }
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
-            Expression::NameError(name) => name.loc(),
-            Expression::AssignNameError { target_name, value, .. } =>
-                target_name.loc().until(value.loc()),
         }
     }
 
@@ -393,12 +384,6 @@ impl<'a> Expression<'a> {
                 GlobalName::ByName(name) => format!("(global-by-name {})", name.slice()),
                 GlobalName::BySlot(name, slot) => format!("(global {} @{slot})", name.slice()),
             },
-            Expression::NameError(name) => format!("(name-error {})", name.slice()),
-            Expression::AssignNameError { target_name, value, .. } => format!(
-                "(=-name-error {} {})",
-                target_name.slice(),
-                value.as_sexpr()
-            ),
         }
     }
 }
