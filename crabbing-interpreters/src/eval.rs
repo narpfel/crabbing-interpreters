@@ -18,6 +18,7 @@ use crate::parse::LiteralKind;
 use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
+use crate::scope::AssignTarget;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
 use crate::scope::GlobalName;
@@ -210,11 +211,15 @@ impl<'a> Environment<'a> {
         Ok(self.stack[index].clone())
     }
 
-    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Error<'a>> {
-        let slot = *self
-            .globals
+    fn get_global_slot_by_name(&self, name: &'a Name<'a>) -> Result<usize, Error<'a>> {
+        self.globals
             .get(name.slice())
-            .ok_or(Error::UndefinedName { at: ExpressionTypes::NameError(name) })?;
+            .copied()
+            .ok_or(Error::UndefinedName { at: ExpressionTypes::NameError(name) })
+    }
+
+    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Error<'a>> {
+        let slot = self.get_global_slot_by_name(name)?;
         Ok((slot, self.stack[slot].clone()))
     }
 
@@ -260,7 +265,19 @@ pub fn eval<'a>(
         }
         Expression::Assign { target, value, .. } => {
             let value = eval(env, offset, value)?;
-            env.set(offset, *target, value.clone())?;
+            match target {
+                AssignTarget::Local(_, slot) =>
+                    env.set(offset, Slot::Local(*slot), value.clone())?,
+                AssignTarget::Global(target) => match target.get() {
+                    GlobalName::ByName(name) => {
+                        let slot = env.get_global_slot_by_name(name)?;
+                        target.set(GlobalName::BySlot(name, slot));
+                        env.set(offset, Slot::Global(slot), value.clone())?
+                    }
+                    GlobalName::BySlot(_, slot) =>
+                        env.set(offset, Slot::Global(slot), value.clone())?,
+                },
+            }
             return Ok(value);
         }
         Expression::Binary { lhs, op, rhs } => {

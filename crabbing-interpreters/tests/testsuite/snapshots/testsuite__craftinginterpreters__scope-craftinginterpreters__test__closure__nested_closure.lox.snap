@@ -26,7 +26,7 @@ exit_code: 0
                            (print (global-by-name a))
                            (print (global-by-name b))
                            (print (global-by-name c))))
-                     (expr (= f (global 1) (local f4 @1)))))
+                     (expr (= (global f @1) (local f4 @1)))))
                (expr (call +2 (local f3 @1)))))
          (expr (call +2 (local f2 @1)))))
    (expr (call +3 (local f1 @2)))

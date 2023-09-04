@@ -14,13 +14,13 @@ exit_code: 0
    (var c @1 0.0)
    (while
       (< (local c @1) 3.0)
-      (print (= c (local 1) (+ (local c @1) 1.0))))
+      (print (= (local c @1) (+ (local c @1) 1.0))))
    (var a @2 0.0)
    (while
       (< (local a @2) 3.0)
       (block
          (print (local a @2))
-         (expr (= a (local 2) (+ (local a @2) 1.0)))))
+         (expr (= (local a @2) (+ (local a @2) 1.0)))))
    (while
       false
       (if

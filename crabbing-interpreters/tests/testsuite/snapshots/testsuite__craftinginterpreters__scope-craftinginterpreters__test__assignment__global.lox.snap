@@ -13,9 +13,9 @@ exit_code: 0
 (program
    (var a @1 "before")
    (print (local a @1))
-   (expr (= a (local 1) "after"))
+   (expr (= (local a @1) "after"))
    (print (local a @1))
-   (print (= a (local 1) "arg"))
+   (print (= (local a @1) "arg"))
    (print (local a @1)))
 
 ----- stderr -----

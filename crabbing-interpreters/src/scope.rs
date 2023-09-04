@@ -50,15 +50,6 @@ pub enum Error<'a> {
     },
 }
 
-impl Slot {
-    fn as_sexpr(&self) -> String {
-        match self {
-            Slot::Local(slot) => format!("(local {slot})"),
-            Slot::Global(slot) => format!("(global {slot})"),
-        }
-    }
-}
-
 impl Locals<'_> {
     fn push(&mut self) {
         self.0.push(Default::default())
@@ -280,6 +271,33 @@ pub enum GlobalName<'a> {
     BySlot(&'a Name<'a>, usize),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AssignTarget<'a> {
+    Local(&'a Name<'a>, usize),
+    Global(&'a Cell<crate::scope::GlobalName<'a>>),
+}
+
+impl<'a> AssignTarget<'a> {
+    fn as_sexpr(&self) -> String {
+        match self {
+            AssignTarget::Local(name, slot) => format!("(local {} @{slot})", name.slice()),
+            AssignTarget::Global(target) => match target.get() {
+                GlobalName::ByName(name) => format!("(global-by-name {})", name.slice()),
+                GlobalName::BySlot(name, slot) => format!("(global {} @{slot})", name.slice()),
+            },
+        }
+    }
+
+    fn loc(&self) -> Loc<'a> {
+        match self {
+            AssignTarget::Local(name, _) => name.loc(),
+            AssignTarget::Global(target) => match target.get() {
+                GlobalName::ByName(name) | GlobalName::BySlot(name, _) => name.loc(),
+            },
+        }
+    }
+}
+
 #[derive_variant_types]
 #[derive(Debug, Clone, Copy)]
 pub enum Expression<'a> {
@@ -298,8 +316,7 @@ pub enum Expression<'a> {
     Local(&'a Name<'a>, usize),
     Global(&'a Cell<crate::scope::GlobalName<'a>>),
     Assign {
-        target_name: &'a Name<'a>,
-        target: Slot,
+        target: AssignTarget<'a>,
         equal: Token<'a>,
         value: &'a Expression<'a>,
     },
@@ -330,7 +347,7 @@ impl<'a> Expression<'a> {
                 let (GlobalName::ByName(name) | GlobalName::BySlot(name, _)) = global.get();
                 name.loc()
             }
-            Expression::Assign { target_name, value, .. } => target_name.loc().until(value.loc()),
+            Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
             Expression::NameError(name) => name.loc(),
             Expression::AssignNameError { target_name, value, .. } =>
@@ -354,12 +371,8 @@ impl<'a> Expression<'a> {
                 rhs.as_sexpr(),
             ),
             Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
-            Expression::Assign { target_name, target, value, .. } => format!(
-                "(= {} {} {})",
-                target_name.slice(),
-                target.as_sexpr(),
-                value.as_sexpr(),
-            ),
+            Expression::Assign { target, value, .. } =>
+                format!("(= {} {})", target.as_sexpr(), value.as_sexpr()),
             Expression::Call {
                 callee,
                 arguments,
@@ -511,19 +524,19 @@ fn resolve_expr<'a>(
                 Expression::Global(bump.alloc(Cell::new(GlobalName::BySlot(name, slot)))),
             None => Expression::Global(bump.alloc(Cell::new(GlobalName::ByName(name)))),
         },
-        Assign { target, equal, value } => match scopes.lookup(target) {
-            Some(target_slot) => Expression::Assign {
-                target_name: target,
-                target: target_slot,
+        Assign { target, equal, value } => {
+            let target = match scopes.lookup(target) {
+                Some(Slot::Global(slot)) =>
+                    AssignTarget::Global(bump.alloc(Cell::new(GlobalName::BySlot(target, slot)))),
+                Some(Slot::Local(slot)) => AssignTarget::Local(target, slot),
+                None => AssignTarget::Global(bump.alloc(Cell::new(GlobalName::ByName(target)))),
+            };
+            Expression::Assign {
+                target,
                 equal: *equal,
                 value: bump.alloc(resolve_expr(bump, scopes, value)),
-            },
-            None => Expression::AssignNameError {
-                target_name: ExpressionTypes::NameError(target),
-                equal: *equal,
-                value: bump.alloc(resolve_expr(bump, scopes, value)),
-            },
-        },
+            }
+        }
         Call { callee, l_paren, arguments, r_paren } => Expression::Call {
             callee: bump.alloc(resolve_expr(bump, scopes, callee)),
             l_paren: *l_paren,

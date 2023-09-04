@@ -26,7 +26,7 @@ exit_code: 0
       ∅)
    (var a @1 false)
    (if
-      (= a (local 1) true)
+      (= (local a @1) true)
       (print (local a @1))
       ∅))
 

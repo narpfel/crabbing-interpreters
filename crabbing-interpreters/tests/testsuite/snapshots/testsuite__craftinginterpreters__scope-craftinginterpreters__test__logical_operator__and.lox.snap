@@ -18,7 +18,7 @@ exit_code: 0
    (print (and (and 1.0 2.0) 3.0))
    (var a @1 "before")
    (var b @2 "before")
-   (expr (and (and (group (= a (local 1) true)) (group (= b (local 2) false))) (group (= a (local 1) "bad"))))
+   (expr (and (and (group (= (local a @1) true)) (group (= (local b @2) false))) (group (= (local a @1) "bad"))))
    (print (local a @1))
    (print (local b @2)))
 

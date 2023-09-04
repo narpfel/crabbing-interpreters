@@ -21,7 +21,7 @@ exit_code: 0
          (var a @1 "a")
          (fun f @2 []
             (block
-               (expr (=-name-error capturedVar "after"))))
+               (expr (= (global-by-name capturedVar) "after"))))
          (expr (call +3 (global caller @1) (local f @2)))))
    (expr (call +3 (local callCaller @2))))
 

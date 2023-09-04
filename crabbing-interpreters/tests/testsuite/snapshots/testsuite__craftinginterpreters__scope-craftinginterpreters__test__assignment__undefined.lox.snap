@@ -11,6 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (expr (=-name-error unknown "what")))
+   (expr (= (global-by-name unknown) "what")))
 
 ----- stderr -----

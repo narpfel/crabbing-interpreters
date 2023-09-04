@@ -18,7 +18,7 @@ exit_code: 0
          (fun f_ @3 []
             (block
                (print (global a @2))))
-         (expr (= f (local 1) (local f_ @3))))
+         (expr (= (local f @1) (local f_ @3))))
       (block
          (var b @2 "b")
          (expr (call +3 (local f @1))))))

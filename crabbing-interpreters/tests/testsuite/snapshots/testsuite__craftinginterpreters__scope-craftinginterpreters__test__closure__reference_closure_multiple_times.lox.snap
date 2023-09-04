@@ -18,7 +18,7 @@ exit_code: 0
          (block
             (print (global a @2))
             (print (global a @2))))
-      (expr (= f (local 1) (local f_ @3))))
+      (expr (= (local f @1) (local f_ @3))))
    (expr (call +2 (local f @1))))
 
 ----- stderr -----
