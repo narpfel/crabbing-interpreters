@@ -276,6 +276,16 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
 
             #exit_code
         }
+
+        impl #impl_generics crate::Report for Box<#name #ty_generics> #where_clause {
+            fn print(&self) {
+                self.as_ref().print()
+            }
+
+            fn exit_code(&self) -> i32 {
+                self.as_ref().exit_code()
+            }
+        }
     );
 
     Ok(expanded)

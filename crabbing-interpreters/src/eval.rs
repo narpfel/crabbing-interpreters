@@ -173,11 +173,8 @@ pub enum Error<'a> {
 }
 
 pub enum NativeError<'a> {
-    #[expect(unused)]
     Error(Error<'a>),
-    ArityMismatch {
-        expected: usize,
-    },
+    ArityMismatch { expected: usize },
 }
 
 pub struct Environment<'a> {
@@ -203,7 +200,7 @@ impl<'a> Environment<'a> {
         Self { stack: globals, globals: global_names }
     }
 
-    fn get(&self, offset: usize, slot: Slot) -> Result<Value<'a>, Error<'a>> {
+    fn get(&self, offset: usize, slot: Slot) -> Result<Value<'a>, Box<Error<'a>>> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
@@ -211,19 +208,19 @@ impl<'a> Environment<'a> {
         Ok(self.stack[index].clone())
     }
 
-    fn get_global_slot_by_name(&self, name: &'a Name<'a>) -> Result<usize, Error<'a>> {
+    fn get_global_slot_by_name(&self, name: &'a Name<'a>) -> Result<usize, Box<Error<'a>>> {
         self.globals
             .get(name.slice())
             .copied()
-            .ok_or(Error::UndefinedName { at: *name })
+            .ok_or_else(|| Box::new(Error::UndefinedName { at: *name }))
     }
 
-    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Error<'a>> {
+    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Box<Error<'a>>> {
         let slot = self.get_global_slot_by_name(name)?;
         Ok((slot, self.stack[slot].clone()))
     }
 
-    fn set(&mut self, offset: usize, slot: Slot, value: Value<'a>) -> Result<(), Error<'a>> {
+    fn set(&mut self, offset: usize, slot: Slot, value: Value<'a>) -> Result<(), Box<Error<'a>>> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
@@ -237,7 +234,7 @@ pub fn eval<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     expr: &Expression<'a>,
-) -> Result<Value<'a>, Error<'a>> {
+) -> Result<Value<'a>, Box<Error<'a>>> {
     use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
@@ -253,12 +250,7 @@ pub fn eval<'a>(
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
-                    _ =>
-                        return Err(Error::InvalidUnaryOp {
-                            op: *op,
-                            value,
-                            at: expr.into_variant(),
-                        }),
+                    _ => Err(Error::InvalidUnaryOp { op: *op, value, at: expr.into_variant() })?,
                 },
                 Not => Bool(!value.is_truthy()),
             }
@@ -322,13 +314,12 @@ pub fn eval<'a>(
                             Power => Number(lhs.powf(*rhs)),
                             EqualEqual | NotEqual | Assign | And | Or => unreachable!(),
                         },
-                        _ =>
-                            return Err(Error::InvalidBinaryOp {
-                                lhs,
-                                op: *op,
-                                rhs,
-                                at: expr.into_variant(),
-                            }),
+                        _ => Err(Error::InvalidBinaryOp {
+                            lhs,
+                            op: *op,
+                            rhs,
+                            at: expr.into_variant(),
+                        })?,
                     }
                 }
             }
@@ -343,17 +334,17 @@ pub fn eval<'a>(
             match callee {
                 Value::Function(ref func) => {
                     if arguments.len() != func.0.parameters.len() {
-                        return Err(Error::ArityMismatch {
+                        Err(Error::ArityMismatch {
                             callee: callee.clone(),
                             expected: func.0.parameters.len(),
                             at: expr.into_variant(),
-                        });
+                        })?;
                     }
                     let arguments = *arguments;
                     arguments.iter().enumerate().try_for_each(|(i, arg)| {
                         let arg = eval(env, offset, arg)?;
                         env.set(offset + stack_size_at_callsite, Slot::Local(i), arg)?;
-                        Ok(())
+                        Ok::<(), Box<Error<'a>>>(())
                     })?;
                     execute(env, offset + stack_size_at_callsite, func.0.code)?
                     // FIXME: truncate env here to drop the callee’s locals
@@ -392,7 +383,7 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
-) -> Result<Value<'a>, Error<'a>> {
+) -> Result<Value<'a>, Box<Error<'a>>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
@@ -441,7 +432,7 @@ pub fn execute<'a>(
                         eval(env, offset, update)?;
                     }
                 }
-                Ok(Value::Nil)
+                Ok::<_, Error<'a>>(Value::Nil)
             }?,
             Statement::Function {
                 name,
@@ -489,7 +480,7 @@ mod tests {
         else {
             unreachable!()
         };
-        eval(&mut Environment::new(global_name_offsets), 0, scoped_ast)
+        eval(&mut Environment::new(global_name_offsets), 0, scoped_ast).map_err(|e| *e)
     }
 
     #[rstest]
