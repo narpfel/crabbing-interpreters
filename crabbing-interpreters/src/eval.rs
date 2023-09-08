@@ -424,7 +424,8 @@ pub fn execute<'a>(
                     execute(env, offset, std::slice::from_ref(init))?;
                 }
                 while condition
-                    .map_or(Ok(Value::Bool(true)), |cond| eval(env, offset, &cond))?
+                    .as_ref()
+                    .map_or(Ok(Value::Bool(true)), |cond| eval(env, offset, cond))?
                     .is_truthy()
                 {
                     execute(env, offset, std::slice::from_ref(body))?;
