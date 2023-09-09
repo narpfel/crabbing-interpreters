@@ -4,10 +4,20 @@ info:
   program: crabbing-interpreters
   args:
     - craftinginterpreters/test/while/return_inside.lox
+    - "--scopes"
+    - "--stop-at=scopes"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-i
+(program
+   (fun f @1 []
+      (block
+         (while
+            true
+            (block
+               (var i @0 "i")
+               (return (local i @0))))))
+   (print (call +2 (local f @1))))
 
 ----- stderr -----

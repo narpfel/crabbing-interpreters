@@ -241,6 +241,7 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
 
                     #[allow(clippy::double_parens)]
                     #[allow(clippy::redundant_closure_call)]
+                    #[allow(clippy::useless_format)]
                     at.loc()
                         .report(::ariadne::ReportKind::Error)
                         .with_message((#error_msg)())

@@ -1,0 +1,22 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/return/after_else.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f @1 []
+      (block
+         (if
+            false
+            (expr "no")
+            (return "ok"))))
+   (print (call +2 (local f @1))))
+
+----- stderr -----

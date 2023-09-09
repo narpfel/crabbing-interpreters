@@ -48,6 +48,21 @@ pub enum Error<'a> {
         #[diagnostics(0(colour = Red))]
         at: Name<'a>,
     },
+
+    #[error("Can’t return from top-level code.")]
+    TopLevelReturn {
+        #[diagnostics(0(colour = Red))]
+        at: ErrorAtToken<'a>,
+    },
+}
+
+#[derive(Debug)]
+pub struct ErrorAtToken<'a>(Token<'a>);
+
+impl<'a> ErrorAtToken<'a> {
+    fn loc(&self) -> Loc<'a> {
+        self.0.loc()
+    }
 }
 
 impl Locals<'_> {
@@ -172,6 +187,10 @@ impl<'a> Scopes<'a> {
     fn is_in_globals(&self) -> bool {
         self.scopes.len() == 1 && self.scopes.last().locals.0.len() == 1
     }
+
+    fn is_in_function(&self) -> bool {
+        self.scopes.len() != 1
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -202,6 +221,7 @@ pub enum Statement<'a> {
         parameter_names: &'a [&'a str],
         body: &'a [Statement<'a>],
     },
+    Return(Option<Expression<'a>>),
 }
 
 impl Statement<'_> {
@@ -256,6 +276,10 @@ impl Statement<'_> {
                 Statement::Block(body).as_sexpr(indent).trim_end(),
                 name = name.slice(),
                 params = parameter_names.join(" "),
+            ),
+            Statement::Return(expr) => format!(
+                "(return {})",
+                expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr()),
             ),
         };
         result.lines().fold(String::new(), |mut s, line| {
@@ -481,6 +505,13 @@ fn resolve_stmt<'a>(
                 })?,
             }
         }
+        Return(return_token, expr) =>
+            if !scopes.is_in_function() {
+                Err(Error::TopLevelReturn { at: ErrorAtToken(*return_token) })?
+            }
+            else {
+                Statement::Return(expr.as_ref().map(|expr| resolve_expr(bump, scopes, expr)))
+            },
     })
 }
 

@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/return/in_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f @1 []
+      (block
+         (return "ok")
+         (print "bad")))
+   (print (call +2 (local f @1))))
+
+----- stderr -----

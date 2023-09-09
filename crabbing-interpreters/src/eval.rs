@@ -98,6 +98,18 @@ impl PartialOrd for Function<'_> {
     }
 }
 
+#[derive(Debug)]
+pub enum ControlFlow<T, E> {
+    Return(T),
+    Error(E),
+}
+
+impl<T, E> From<E> for ControlFlow<T, E> {
+    fn from(value: E) -> Self {
+        ControlFlow::Error(value)
+    }
+}
+
 #[derive(Debug, Report)]
 #[exit_code(70)]
 pub enum Error<'a> {
@@ -346,7 +358,11 @@ pub fn eval<'a>(
                         env.set(offset + stack_size_at_callsite, Slot::Local(i), arg)?;
                         Ok::<(), Box<Error<'a>>>(())
                     })?;
-                    execute(env, offset + stack_size_at_callsite, func.0.code)?
+                    match execute(env, offset + stack_size_at_callsite, func.0.code) {
+                        Ok(value) => Ok(value),
+                        Err(ControlFlow::Return(value)) => Ok(value),
+                        Err(ControlFlow::Error(err)) => Err(err),
+                    }?
                     // FIXME: truncate env here to drop the callee’s locals
                 }
                 Value::NativeFunction(func) => {
@@ -383,7 +399,7 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
-) -> Result<Value<'a>, Box<Error<'a>>> {
+) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
@@ -433,7 +449,7 @@ pub fn execute<'a>(
                         eval(env, offset, update)?;
                     }
                 }
-                Ok::<_, Error<'a>>(Value::Nil)
+                Ok::<_, Box<Error<'a>>>(Value::Nil)
             }?,
             Statement::Function {
                 name,
@@ -452,6 +468,12 @@ pub fn execute<'a>(
                     }))),
                 )?;
                 Value::Nil
+            }
+            Statement::Return(expr) => {
+                let return_value = expr
+                    .as_ref()
+                    .map_or(Ok(Value::Nil), |expr| eval(env, offset, expr))?;
+                Err(ControlFlow::Return(return_value))?
             }
         }
     }

@@ -18,14 +18,15 @@ use std::time::Instant;
 use bumpalo::Bump;
 use clap::Parser;
 use clap::ValueEnum;
-use scope::resolve_names;
 
 use crate::eval::execute;
+use crate::eval::ControlFlow;
 use crate::eval::Environment;
 use crate::eval::Value;
 pub use crate::lex::lex;
 use crate::parse::parse;
 use crate::parse::program;
+use crate::scope::resolve_names;
 
 mod eval;
 mod lex;
@@ -191,11 +192,11 @@ fn repl() -> Result<(), Box<dyn Report>> {
         };
         let result = execute(&mut globals, 0, stmts);
         match result {
-            Ok(value) =>
+            Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
                     println!("\x1B[38;2;170;034;255m\x1B[1m=> {}\x1B[0m", value);
                 },
-            Err(err) => err.print(),
+            Err(ControlFlow::Error(err)) => err.print(),
         }
     }
 }
@@ -241,7 +242,10 @@ pub fn run<'a>(
             }
         }
         let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
-        time("exe", args.times, || execute(&mut stack, 0, scoped_ast))?;
+        match time("exe", args.times, || execute(&mut stack, 0, scoped_ast)) {
+            Ok(_) | Err(ControlFlow::Return(_)) => (),
+            Err(ControlFlow::Error(err)) => Err(err)?,
+        };
     }
     else {
         repl()?;

@@ -142,6 +142,7 @@ pub enum Statement<'a> {
         parameter_names: &'a [&'a str],
         body: &'a [Statement<'a>],
     },
+    Return(Token<'a>, Option<Expression<'a>>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -462,6 +463,7 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
         TokenKind::If => if_statement(bump, tokens)?,
         TokenKind::While => while_loop(bump, tokens)?,
         TokenKind::For => for_loop(bump, tokens)?,
+        TokenKind::Return => return_stmt(bump, tokens)?,
         _ => expression_statement(bump, tokens)?,
     })
 }
@@ -548,6 +550,19 @@ fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
     tokens.consume(TokenKind::RParen)?;
     let body = bump.alloc(statement(bump, tokens)?);
     Ok(Statement::For { init, condition, update, body })
+}
+
+fn return_stmt<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    let return_token = tokens.consume(TokenKind::Return)?;
+    let token = tokens.peek()?;
+    let expr = if matches!(token.kind, TokenKind::Semicolon) {
+        None
+    }
+    else {
+        Some(expression(bump, tokens)?)
+    };
+    tokens.consume(TokenKind::Semicolon)?;
+    Ok(Statement::Return(return_token, expr))
 }
 
 fn expression_statement<'a>(

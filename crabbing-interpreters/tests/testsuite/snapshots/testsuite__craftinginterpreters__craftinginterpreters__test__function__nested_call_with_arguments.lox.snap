@@ -5,9 +5,9 @@ info:
   args:
     - craftinginterpreters/test/function/nested_call_with_arguments.lox
 ---
-success: false
-exit_code: 65
+success: true
+exit_code: 0
 ----- stdout -----
+hello world
 
 ----- stderr -----
-[line 2] Error at 'return': Expect expression.

@@ -5,9 +5,9 @@ info:
   args:
     - craftinginterpreters/test/function/recursion.lox
 ---
-success: false
-exit_code: 65
+success: true
+exit_code: 0
 ----- stdout -----
+21
 
 ----- stderr -----
-[line 2] Error at 'return': Expect expression.

@@ -1,0 +1,32 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/unused_later_closure.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var closure @1 ∅)
+   (block
+      (var a @2 "a")
+      (block
+         (var b @3 "b")
+         (fun returnA @4 []
+            (block
+               (return (global a @2))))
+         (expr (= (local closure @1) (local returnA @4)))
+         (if
+            false
+            (block
+               (fun returnB @5 []
+                  (block
+                     (return (global b @3)))))
+            ∅))
+      (print (call +3 (local closure @1)))))
+
+----- stderr -----

@@ -6,8 +6,14 @@ info:
     - craftinginterpreters/test/while/return_closure.lox
 ---
 success: false
-exit_code: 65
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-[line 5] Error at 'return': Expect expression.
+Error: Undefined variable `i`.
+   ╭─[craftinginterpreters/test/while/return_closure.lox:4:21]
+   │
+ 4 │     fun g() { print i; }
+   │                     ─  
+   │                         
+───╯

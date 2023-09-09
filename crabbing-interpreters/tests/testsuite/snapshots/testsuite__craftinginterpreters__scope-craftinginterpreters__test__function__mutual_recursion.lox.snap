@@ -1,0 +1,31 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/mutual_recursion.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun isEven @1 [n]
+      (block
+         (if
+            (== (local n @0) 0.0)
+            (return true)
+            ∅)
+         (return (call +1 (global-by-name isOdd) (- (local n @0) 1.0)))))
+   (fun isOdd @2 [n]
+      (block
+         (if
+            (== (local n @0) 0.0)
+            (return false)
+            ∅)
+         (return (call +1 (global isEven @1) (- (local n @0) 1.0)))))
+   (print (call +3 (local isEven @1) 4.0))
+   (print (call +3 (local isOdd @2) 3.0)))
+
+----- stderr -----

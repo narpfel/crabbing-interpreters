@@ -6,8 +6,14 @@ info:
     - craftinginterpreters/test/function/local_mutual_recursion.lox
 ---
 success: false
-exit_code: 65
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-[line 3] Error at 'return': Expect expression.
+Error: Undefined variable `isOdd`.
+   ╭─[craftinginterpreters/test/function/local_mutual_recursion.lox:4:12]
+   │
+ 4 │     return isOdd(n - 1); // expect runtime error: Undefined variable 'isOdd'.
+   │            ─────  
+   │                    
+───╯

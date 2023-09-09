@@ -1,0 +1,51 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/parameters.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f0 @1 []
+      (block
+         (return 0.0)))
+   (print (call +2 (local f0 @1)))
+   (fun f1 @2 [a]
+      (block
+         (return (local a @0))))
+   (print (call +3 (local f1 @2) 1.0))
+   (fun f2 @3 [a b]
+      (block
+         (return (+ (local a @0) (local b @1)))))
+   (print (call +4 (local f2 @3) 1.0 2.0))
+   (fun f3 @4 [a b c]
+      (block
+         (return (+ (+ (local a @0) (local b @1)) (local c @2)))))
+   (print (call +5 (local f3 @4) 1.0 2.0 3.0))
+   (fun f4 @5 [a b c d]
+      (block
+         (return (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)))))
+   (print (call +6 (local f4 @5) 1.0 2.0 3.0 4.0))
+   (fun f5 @6 [a b c d e]
+      (block
+         (return (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)))))
+   (print (call +7 (local f5 @6) 1.0 2.0 3.0 4.0 5.0))
+   (fun f6 @7 [a b c d e f]
+      (block
+         (return (+ (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)) (local f @5)))))
+   (print (call +8 (local f6 @7) 1.0 2.0 3.0 4.0 5.0 6.0))
+   (fun f7 @8 [a b c d e f g]
+      (block
+         (return (+ (+ (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)) (local f @5)) (local g @6)))))
+   (print (call +9 (local f7 @8) 1.0 2.0 3.0 4.0 5.0 6.0 7.0))
+   (fun f8 @9 [a b c d e f g h]
+      (block
+         (return (+ (+ (+ (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)) (local f @5)) (local g @6)) (local h @7)))))
+   (print (call +10 (local f8 @9) 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0)))
+
+----- stderr -----

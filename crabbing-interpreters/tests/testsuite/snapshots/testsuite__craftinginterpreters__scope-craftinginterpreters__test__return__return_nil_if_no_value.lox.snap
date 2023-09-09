@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/return/return_nil_if_no_value.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f @1 []
+      (block
+         (return ∅)
+         (print "bad")))
+   (print (call +2 (local f @1))))
+
+----- stderr -----

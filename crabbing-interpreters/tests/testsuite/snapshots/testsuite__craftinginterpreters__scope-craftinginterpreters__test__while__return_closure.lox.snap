@@ -1,0 +1,27 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/while/return_closure.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f @1 []
+      (block
+         (while
+            true
+            (block
+               (var i @0 "i")
+               (fun g @1 []
+                  (block
+                     (print (global-by-name i))))
+               (return (local g @1))))))
+   (var h @2 (call +3 (local f @1)))
+   (expr (call +3 (local h @2))))
+
+----- stderr -----

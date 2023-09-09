@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/nested_call_with_arguments.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun returnArg @1 [arg]
+      (block
+         (return (local arg @0))))
+   (fun returnFunCallWithArg @2 [func arg]
+      (block
+         (return (call +2 (call +2 (global returnArg @1) (local func @0)) (local arg @1)))))
+   (fun printArg @3 [arg]
+      (block
+         (print (local arg @0))))
+   (expr (call +4 (local returnFunCallWithArg @2) (local printArg @3) "hello world")))
+
+----- stderr -----
