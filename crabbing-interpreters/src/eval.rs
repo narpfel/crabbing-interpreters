@@ -18,6 +18,7 @@ use crate::parse::LiteralKind;
 use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
+use crate::rc_str::RcStr;
 use crate::scope::AssignTarget;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
@@ -29,7 +30,7 @@ use crate::Sliced;
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value<'a> {
     Number(f64),
-    String(Rc<str>),
+    String(RcStr<'a>),
     Bool(bool),
     Nil,
     Function(Function<'a>),
@@ -251,7 +252,7 @@ pub fn eval<'a>(
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
             LiteralKind::Number(n) => Number(n),
-            LiteralKind::String(s) => String(Rc::from(s)),
+            LiteralKind::String(s) => String(RcStr::Borrowed(s)),
             LiteralKind::True => Bool(true),
             LiteralKind::False => Bool(false),
             LiteralKind::Nil => Nil,
@@ -313,7 +314,7 @@ pub fn eval<'a>(
                         (_, EqualEqual, _) => Bool(lhs == rhs),
                         (_, NotEqual, _) => Bool(lhs != rhs),
                         (String(lhs), Plus, String(rhs)) =>
-                            String(Rc::from(format!("{}{}", lhs, rhs))),
+                            String(RcStr::Owned(Rc::from(format!("{}{}", lhs, rhs)))),
                         (Number(lhs), _, Number(rhs)) => match op.kind {
                             Plus => Number(lhs + rhs),
                             Less => Bool(lhs < rhs),
@@ -510,7 +511,7 @@ mod tests {
     #[case::bool("true", Value::Bool(true))]
     #[case::bool("false", Value::Bool(false))]
     #[case::divide_numbers("4 / 2", Value::Number(2.0))]
-    #[case::concat_strings(r#""a" + "b""#, Value::String(Rc::from("ab")))]
+    #[case::concat_strings(r#""a" + "b""#, Value::String(RcStr::Borrowed("ab")))]
     #[case::exponentiation("2 ** 2", Value::Number(4.0))]
     #[case::exponentiation("2 ** 2 ** 3", Value::Number(2.0_f64.powi(8)))]
     #[case::associativity("2 + 2 * 3", Value::Number(8.0))]

@@ -32,6 +32,7 @@ mod eval;
 mod lex;
 mod nonempty;
 mod parse;
+mod rc_str;
 mod scope;
 
 pub trait AllocPath {
