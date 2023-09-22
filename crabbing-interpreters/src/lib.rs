@@ -168,16 +168,16 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             }
             first = false;
-            let tokens = match lex(bump, "<input>", &line) {
+            let (tokens, eof_loc) = match lex(bump, "<input>", &line) {
                 Ok(tokens) => tokens,
                 Err(err) => {
                     err.print();
                     continue 'repl;
                 }
             };
-            match parse(program, bump, tokens) {
+            match parse(program, bump, tokens, eof_loc) {
                 Ok(stmts) => break stmts,
-                Err(parse::Error::Eof(_)) => (),
+                Err(parse::Error::Eof { at: _ }) => (),
                 Err(err) => {
                     err.print();
                     continue 'repl;
@@ -217,7 +217,7 @@ pub fn run<'a>(
 ) -> Result<(), Box<dyn Report + 'a>> {
     let args = Args::parse_from(args);
     if let Some(filename) = args.filename {
-        let tokens = time("lex", args.times, || -> Result<_, Box<dyn Report>> {
+        let (tokens, eof_loc) = time("lex", args.times, || -> Result<_, Box<dyn Report>> {
             Ok(lex(
                 bump,
                 bump.alloc_path(&filename),
@@ -227,7 +227,7 @@ pub fn run<'a>(
                 ),
             )?)
         })?;
-        let ast = time("ast", args.times, || parse(program, bump, tokens))?;
+        let ast = time("ast", args.times, || parse(program, bump, tokens, eof_loc))?;
         let (scoped_ast, global_name_offsets) = time("scp", args.times, || {
             scope::resolve_names(bump, &["clock"], ast)
         })?;

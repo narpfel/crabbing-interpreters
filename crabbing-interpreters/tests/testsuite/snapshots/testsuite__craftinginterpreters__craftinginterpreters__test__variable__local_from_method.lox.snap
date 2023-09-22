@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 3] Error at 'class': Expect expression.
+Error: Expect expression.
+   ╭─[craftinginterpreters/test/variable/local_from_method.lox:3:1]
+   │
+ 3 │ class Foo {
+   │ ─────  
+   │         
+───╯

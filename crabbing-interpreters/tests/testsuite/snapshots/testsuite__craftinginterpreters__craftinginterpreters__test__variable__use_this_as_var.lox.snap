@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 2] Error at 'this': Expect variable name.
+Error: at `this`: expected Identifier
+   ╭─[craftinginterpreters/test/variable/use_this_as_var.lox:2:5]
+   │
+ 2 │ var this = "value";
+   │     ────  
+   │            
+───╯

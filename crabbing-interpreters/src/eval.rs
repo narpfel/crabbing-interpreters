@@ -497,8 +497,13 @@ mod tests {
     }
 
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
+        let Ok((&[semi], _)) = crate::lex(bump, "<src>", ";")
+        else {
+            unreachable!()
+        };
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
-        let program = std::slice::from_ref(bump.alloc(parse::Statement::Expression(ast)));
+        let program =
+            std::slice::from_ref(bump.alloc(parse::Statement::Expression { expr: ast, semi }));
         let Ok(([scope::Statement::Expression(scoped_ast)], global_name_offsets)) =
             scope::resolve_names(bump, &[], program)
         else {

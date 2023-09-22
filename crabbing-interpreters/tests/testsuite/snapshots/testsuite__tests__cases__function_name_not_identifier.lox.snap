@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 1] Error at '42': Expect variable name.
+Error: at `42`: expected Identifier
+   ╭─[tests/cases/function_name_not_identifier.lox:1:5]
+   │
+ 1 │ fun 42() {}
+   │     ──  
+   │          
+───╯

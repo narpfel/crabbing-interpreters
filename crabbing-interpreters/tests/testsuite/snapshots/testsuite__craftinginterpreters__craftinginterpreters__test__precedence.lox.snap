@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -10,4 +10,12 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 14] Error at '==': ambiguous precedences for operators `==` and `<`
+Error: ambiguous precedences between operators `==` and `<`
+    ╭─[craftinginterpreters/test/precedence.lox:14:13]
+    │
+ 14 │ print false == 2 < 1; // expect: true
+    │             ──   ─  
+    │                      
+    │                     
+    │                      
+────╯

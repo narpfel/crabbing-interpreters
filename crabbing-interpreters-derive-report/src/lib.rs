@@ -304,7 +304,10 @@ fn find_lifetimes(field_types: &[Type]) -> impl Iterator<Item = Lifetime> {
     for ty in field_types {
         visitor.visit_type(ty);
     }
-    visitor.0.into_iter()
+    visitor
+        .0
+        .into_iter()
+        .filter(|lifetime| lifetime.ident != "static")
 }
 
 fn gen_format(colours: &IndexMap<String, Cow<Expr>>, format_string: LitStr) -> impl ToTokens {

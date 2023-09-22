@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/main.rs
+source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args:
@@ -10,4 +10,12 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line ??] Error at '??': Invalid for loop initialiser
+Error: invalid `for` loop initialiser: print statement
+   ╭─[tests/cases/invalid_for_loop_initialiser.lox:1:1]
+   │
+ 1 │ for (print 42; false;) {}
+   │ ───  ────┬────  
+   │          ╰────── only expression statements and variable declarations are allowed here
+   │                 
+   │                  
+───╯

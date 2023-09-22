@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 2] Error at '.': Expect a binary operator.
+Error: Expect a binary operator.
+   ╭─[craftinginterpreters/test/number/trailing_dot.lox:2:4]
+   │
+ 2 │ 123.;
+   │    ─  
+   │        
+───╯

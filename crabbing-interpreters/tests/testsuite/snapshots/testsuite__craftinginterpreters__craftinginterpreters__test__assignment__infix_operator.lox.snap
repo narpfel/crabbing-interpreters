@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -10,4 +10,12 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 3] Error at '+': ambiguous precedences for operators `+` and `=`
+Error: ambiguous precedences between operators `+` and `=`
+   ╭─[craftinginterpreters/test/assignment/infix_operator.lox:3:3]
+   │
+ 3 │ a + b = "value"; // Error at '=': Invalid assignment target.
+   │   ─   ─  
+   │           
+   │          
+   │           
+───╯

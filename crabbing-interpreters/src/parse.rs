@@ -1,134 +1,136 @@
 use std::iter::Copied;
 use std::iter::Peekable;
 
+use ariadne::Color::Blue;
+use ariadne::Color::Red;
 use bumpalo::Bump;
+use crabbing_interpreters_derive_report::Report;
 
 use crate::lex::Loc;
 use crate::lex::Token;
 use crate::lex::TokenKind;
-use crate::Report;
+use crate::scope::ErrorAtToken;
+use crate::Sliced;
 
-#[derive(Debug)]
+#[derive(Debug, Report)]
+#[exit_code(65)]
 pub enum Error<'a> {
-    Eof(Eof),
-    ExpectedEof {
-        actual: Token<'a>,
+    #[error("Unexpected end of file")]
+    Eof {
+        #[diagnostics(0(colour = Red, label = "end of file here"))]
+        at: Eof<'a>,
     },
+
+    #[error("Expected end of file")]
+    ExpectedEof { at: ErrorAtToken<'a> },
+
+    #[error("Expected of of the following tokens: {expected:?}")]
     UnexpectedToken {
         expected: &'static [TokenKind],
-        actual: Token<'a>,
+        at: ErrorAtToken<'a>,
     },
+
+    #[error("at `{token}`: expected {expected:?}")]
+    #[with(token = at.0)]
     UnexpectedTokenWithKind {
         expected: TokenKind,
-        actual: Token<'a>,
+        #[diagnostics(
+            0(colour = Red),
+        )]
+        at: ErrorAtToken<'a>,
     },
+
+    #[error("Expect {expected}.")]
     UnexpectedTokenMsg {
         expected: &'static str,
-        actual: Token<'a>,
+        #[diagnostics(0(colour = Red))]
+        at: ErrorAtToken<'a>,
     },
+
+    #[error("ambiguous precedences between operators `{at}` and `{right_op}`")]
+    #[with(right_op = at.1)]
     AmbiguousPrecedences {
-        left_op_token: Token<'a>,
-        right_op: BinOp<'a>,
+        #[diagnostics(
+            0(colour = Red),
+            1(colour = Blue),
+        )]
+        at: ErrorAtToken<'a, BinOp<'a>>,
     },
+
+    #[error("invalid assignment target: `{lhs}`")]
+    #[with(
+        lhs = at.1,
+        expr_type = at.1.kind_name(),
+    )]
     InvalidAssignmentTarget {
-        lhs: Expression<'a>,
-        equal: Token<'a>,
-        rhs: Expression<'a>,
+        #[diagnostics(
+            0(colour = Red),
+            1(colour = Blue, label = "only names can be assigned to, not {expr_type}s"),
+        )]
+        at: ErrorAtToken<'a, Expression<'a>>,
     },
-    InvalidForLoopInitialiser(Statement<'a>),
+
+    #[error("invalid `{at}` loop initialiser: {stmt_kind} statement")]
+    #[with(stmt_kind = at.1.kind_name())]
+    InvalidForLoopInitialiser {
+        #[diagnostics(
+            0(colour = Blue),
+            1(colour = Red, label = "only expression statements and variable declarations are allowed here"),
+        )]
+        at: ErrorAtToken<'a, Statement<'a>>,
+    },
 }
 
-impl From<Eof> for Error<'_> {
-    fn from(value: Eof) -> Self {
-        Self::Eof(value)
-    }
-}
-
-impl Report for Error<'_> {
-    fn print(&self) {
-        match self {
-            Error::Eof(_) => eprintln!("Unexpected end of file"),
-            Error::ExpectedEof { actual } => {
-                eprintln!(
-                    "[line {}] Error at '{}': Expected EOF",
-                    actual.loc().line(),
-                    actual.slice(),
-                );
-            }
-            Error::UnexpectedToken { expected, actual } => {
-                eprintln!(
-                    "[line {}] Error at '{}': Expect one of the following tokens: {:?}",
-                    actual.loc().line(),
-                    actual.slice(),
-                    expected,
-                );
-            }
-            Error::UnexpectedTokenWithKind { expected, actual } => {
-                let message = format!(
-                    "[line {}] Error at '{}': Expect {}.",
-                    actual.loc().line(),
-                    actual.slice(),
-                    match expected {
-                        TokenKind::Identifier => "variable name".to_owned(),
-                        _ => format!("{expected:?}"),
-                    },
-                );
-                eprintln!("{message}");
-            }
-            Error::UnexpectedTokenMsg { expected, actual } => {
-                eprintln!(
-                    "[line {}] Error at '{}': Expect {}.",
-                    actual.loc().line(),
-                    actual.slice(),
-                    expected,
-                );
-            }
-            Error::AmbiguousPrecedences { left_op_token, right_op } => {
-                eprintln!(
-                    "[line {}] Error at '{}': ambiguous precedences for operators `{}` and `{}`",
-                    left_op_token.loc().line(),
-                    left_op_token.slice(),
-                    left_op_token.slice(),
-                    right_op.token.slice(),
-                );
-            }
-            Error::InvalidAssignmentTarget { equal, .. } => {
-                eprintln!(
-                    "[line {}] Error at '{}': Invalid assignment target.",
-                    equal.loc().line(),
-                    equal.slice(),
-                );
-            }
-            Error::InvalidForLoopInitialiser(_) => {
-                eprintln!("[line ??] Error at '??': Invalid for loop initialiser");
-            }
-        }
-    }
-
-    fn exit_code(&self) -> i32 {
-        65
+impl<'a> From<Eof<'a>> for Error<'a> {
+    fn from(value: Eof<'a>) -> Self {
+        Self::Eof { at: value }
     }
 }
 
 #[derive(Debug)]
-pub struct Eof;
+pub struct Eof<'a>(Loc<'a>);
+
+impl Eof<'_> {
+    fn loc(&self) -> Loc {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Statement<'a> {
-    Expression(Expression<'a>),
-    Print(Expression<'a>),
-    Var(Name<'a>, Option<Expression<'a>>),
-    Block(&'a [Statement<'a>]),
+    Expression {
+        expr: Expression<'a>,
+        semi: Token<'a>,
+    },
+    Print {
+        print: Token<'a>,
+        expr: Expression<'a>,
+        semi: Token<'a>,
+    },
+    Var {
+        var: Token<'a>,
+        name: Name<'a>,
+        init: Option<Expression<'a>>,
+        semi: Token<'a>,
+    },
+    Block {
+        open_brace: Token<'a>,
+        stmts: &'a [Statement<'a>],
+        close_brace: Token<'a>,
+    },
     If {
+        if_token: Token<'a>,
         condition: Expression<'a>,
         then: &'a Statement<'a>,
         or_else: Option<&'a Statement<'a>>,
     },
     While {
+        while_token: Token<'a>,
         condition: Expression<'a>,
         body: &'a Statement<'a>,
     },
     For {
+        for_token: Token<'a>,
         init: Option<&'a Statement<'a>>,
         condition: Option<Expression<'a>>,
         update: Option<Expression<'a>>,
@@ -137,12 +139,65 @@ pub enum Statement<'a> {
     // FIXME: functions should know their stack frame’s size to make it possible to reserve enough
     // space before calling them and to drop the frame after the call returns
     Function {
+        fun: Token<'a>,
         name: Name<'a>,
         parameters: &'a [Name<'a>],
         parameter_names: &'a [&'a str],
         body: &'a [Statement<'a>],
+        close_brace: Token<'a>,
     },
-    Return(Token<'a>, Option<Expression<'a>>),
+    Return {
+        return_token: Token<'a>,
+        expr: Option<Expression<'a>>,
+        semi: Token<'a>,
+    },
+}
+
+impl<'a> Statement<'a> {
+    fn loc(&self) -> Loc<'a> {
+        match self {
+            Statement::Expression { expr, semi } => expr.loc().until(semi.loc()),
+            Statement::Print { print, expr: _, semi } => print.loc().until(semi.loc()),
+            Statement::Var { var, name: _, init: _, semi } => var.loc().until(semi.loc()),
+            Statement::Block { open_brace, stmts: _, close_brace } =>
+                open_brace.loc().until(close_brace.loc()),
+            Statement::If { if_token, condition: _, then, or_else } =>
+                if_token.loc().until(or_else.unwrap_or(then).loc()),
+            Statement::While { while_token, condition: _, body } =>
+                while_token.loc().until(body.loc()),
+            Statement::For {
+                for_token,
+                init: _,
+                condition: _,
+                update: _,
+                body,
+            } => for_token.loc().until(body.loc()),
+            Statement::Function {
+                fun,
+                name: _,
+                parameters: _,
+                parameter_names: _,
+                body: _,
+                close_brace,
+            } => fun.loc().until(close_brace.loc()),
+            Statement::Return { return_token, expr: _, semi } =>
+                return_token.loc().until(semi.loc()),
+        }
+    }
+
+    fn kind_name(&self) -> &'static str {
+        match self {
+            Statement::Expression { .. } => "expression",
+            Statement::Print { .. } => "print",
+            Statement::Var { .. } => "variable declaration",
+            Statement::Block { .. } => "block",
+            Statement::If { .. } => "if",
+            Statement::While { .. } => "while",
+            Statement::For { .. } => "for",
+            Statement::Function { .. } => "function definition",
+            Statement::Return { .. } => "return",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -174,6 +229,34 @@ pub enum Expression<'a> {
 }
 
 impl<'a> Expression<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
+        match self {
+            Expression::Literal(lit) => lit.loc(),
+            Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
+            Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
+            Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
+            Expression::Ident(name) => name.loc(),
+            Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
+            Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
+        }
+    }
+
+    pub(crate) fn slice(&self) -> &'a str {
+        self.loc().slice()
+    }
+
+    fn kind_name(&self) -> &'static str {
+        match self {
+            Expression::Literal(_) => "literal",
+            Expression::Unary(_, _) => "unary operation",
+            Expression::Binary { .. } => "binary operation",
+            Expression::Grouping { .. } => "parenthesised expression",
+            Expression::Ident(_) => "name",
+            Expression::Assign { .. } => "assignment",
+            Expression::Call { .. } => "call expression",
+        }
+    }
+
     #[cfg(test)]
     pub fn as_sexpr(&self) -> String {
         match self {
@@ -331,15 +414,18 @@ impl<'a> Name<'a> {
     }
 }
 
-pub struct Tokens<'a>(Peekable<Copied<std::slice::Iter<'a, Token<'a>>>>);
+pub struct Tokens<'a> {
+    iter: Peekable<Copied<std::slice::Iter<'a, Token<'a>>>>,
+    eof_loc: Loc<'a>,
+}
 
 impl<'a> Tokens<'a> {
-    fn next(&mut self) -> Result<Token<'a>, Eof> {
-        self.0.next().not_eof()
+    fn next(&mut self) -> Result<Token<'a>, Eof<'a>> {
+        self.iter.next().not_eof(&self.eof_loc)
     }
 
-    fn peek(&mut self) -> Result<Token<'a>, Eof> {
-        self.0.peek().copied().not_eof()
+    fn peek(&mut self) -> Result<Token<'a>, Eof<'a>> {
+        self.iter.peek().copied().not_eof(&self.eof_loc)
     }
 
     fn consume(&mut self, kind: TokenKind) -> Result<Token<'a>, Error<'a>> {
@@ -348,7 +434,10 @@ impl<'a> Tokens<'a> {
             Ok(token)
         }
         else {
-            Err(Error::UnexpectedTokenWithKind { expected: kind, actual: token })
+            Err(Error::UnexpectedTokenWithKind {
+                expected: kind,
+                at: ErrorAtToken::at(token),
+            })
         }
     }
 
@@ -363,9 +452,9 @@ impl<'a> Tokens<'a> {
     }
 
     fn eof(&mut self) -> Result<(), Error<'a>> {
-        let token = self.0.peek();
+        let token = self.iter.peek();
         if let Some(&token) = token {
-            Err(Error::ExpectedEof { actual: token })
+            Err(Error::ExpectedEof { at: ErrorAtToken::at(token) })
         }
         else {
             Ok(())
@@ -377,8 +466,12 @@ pub fn parse<'a, T>(
     parser: impl FnOnce(&'a Bump, &mut Tokens<'a>) -> Result<T, Error<'a>>,
     bump: &'a Bump,
     tokens: &'a [Token<'a>],
+    eof_loc: Loc<'a>,
 ) -> Result<T, Error<'a>> {
-    let tokens = &mut Tokens(tokens.iter().copied().peekable());
+    let tokens = &mut Tokens {
+        iter: tokens.iter().copied().peekable(),
+        eof_loc,
+    };
     let result = parser(bump, tokens)?;
     tokens.eof()?;
     Ok(result)
@@ -408,7 +501,7 @@ fn declaration<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<
 }
 
 fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    tokens.consume(TokenKind::Var)?;
+    let var = tokens.consume(TokenKind::Var)?;
     let name = Name(tokens.consume(TokenKind::Identifier)?);
     let maybe_equal = tokens.peek()?;
     let initialiser = if matches!(maybe_equal.kind, TokenKind::Equal) {
@@ -419,12 +512,12 @@ fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>,
     else {
         None
     };
-    tokens.consume(TokenKind::Semicolon)?;
-    Ok(Statement::Var(name, initialiser))
+    let semi = tokens.consume(TokenKind::Semicolon)?;
+    Ok(Statement::Var { var, name, init: initialiser, semi })
 }
 
 fn function<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    tokens.consume(TokenKind::Fun)?;
+    let fun = tokens.consume(TokenKind::Fun)?;
     let name = Name(tokens.consume(TokenKind::Identifier)?);
     tokens.consume(TokenKind::LParen)?;
     let mut parameters = Vec::new();
@@ -446,12 +539,14 @@ fn function<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
         }
     }
     tokens.consume(TokenKind::RParen)?;
-    let body = block(bump, tokens)?;
+    let (_, body, close_brace) = block(bump, tokens)?;
     Ok(Statement::Function {
+        fun,
         name,
         parameters: bump.alloc_slice_copy(&parameters),
         parameter_names: bump.alloc_slice_fill_iter(parameters.iter().map(Name::slice)),
         body,
+        close_brace,
     })
 }
 
@@ -459,7 +554,10 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
     let token = tokens.peek()?;
     Ok(match token.kind {
         TokenKind::Print => print(bump, tokens)?,
-        TokenKind::LBrace => Statement::Block(block(bump, tokens)?),
+        TokenKind::LBrace => {
+            let (open_brace, stmts, close_brace) = block(bump, tokens)?;
+            Statement::Block { open_brace, stmts, close_brace }
+        }
         TokenKind::If => if_statement(bump, tokens)?,
         TokenKind::While => while_loop(bump, tokens)?,
         TokenKind::For => for_loop(bump, tokens)?,
@@ -469,28 +567,30 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
 }
 
 fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    tokens.consume(TokenKind::Print)?;
+    let print = tokens.consume(TokenKind::Print)?;
     let expr = expression(bump, tokens)?;
-    tokens.consume(TokenKind::Semicolon)?;
-    Ok(Statement::Print(expr))
+    let semi = tokens.consume(TokenKind::Semicolon)?;
+    Ok(Statement::Print { print, expr, semi })
 }
 
-fn block<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<&'a [Statement<'a>], Error<'a>> {
-    tokens.consume(TokenKind::LBrace)?;
+fn block<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a>,
+) -> Result<(Token<'a>, &'a [Statement<'a>], Token<'a>), Error<'a>> {
+    let open_brace = tokens.consume(TokenKind::LBrace)?;
     let mut statements = Vec::new();
-    loop {
+    let close_brace = loop {
         let token = tokens.peek()?;
         if matches!(token.kind, TokenKind::RBrace) {
-            tokens.consume(TokenKind::RBrace)?;
-            break;
+            break tokens.consume(TokenKind::RBrace)?;
         }
         statements.push(declaration(bump, tokens)?);
-    }
-    Ok(bump.alloc_slice_copy(&statements))
+    };
+    Ok((open_brace, bump.alloc_slice_copy(&statements), close_brace))
 }
 
 fn if_statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    tokens.consume(TokenKind::If)?;
+    let if_token = tokens.consume(TokenKind::If)?;
     tokens.consume(TokenKind::LParen)?;
     let condition = expression(bump, tokens)?;
     tokens.consume(TokenKind::RParen)?;
@@ -503,20 +603,24 @@ fn if_statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement
     else {
         None
     };
-    Ok(Statement::If { condition, then, or_else })
+    Ok(Statement::If { if_token, condition, then, or_else })
 }
 
 fn while_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    tokens.consume(TokenKind::While)?;
+    let while_token = tokens.consume(TokenKind::While)?;
     tokens.consume(TokenKind::LParen)?;
     let condition = expression(bump, tokens)?;
     tokens.consume(TokenKind::RParen)?;
     let body = statement(bump, tokens)?;
-    Ok(Statement::While { condition, body: bump.alloc(body) })
+    Ok(Statement::While {
+        while_token,
+        condition,
+        body: bump.alloc(body),
+    })
 }
 
 fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    tokens.consume(TokenKind::For)?;
+    let for_token = tokens.consume(TokenKind::For)?;
     tokens.consume(TokenKind::LParen)?;
     let token = tokens.peek()?;
     let init = if matches!(token.kind, TokenKind::Semicolon) {
@@ -526,9 +630,10 @@ fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
     else {
         let init = declaration(bump, tokens)?;
         match init {
-            Statement::Expression(_) => (),
-            Statement::Var(_, _) => (),
-            _ => return Err(Error::InvalidForLoopInitialiser(init)),
+            Statement::Expression { .. } => (),
+            Statement::Var { .. } => (),
+            _ =>
+                return Err(Error::InvalidForLoopInitialiser { at: ErrorAtToken(for_token, init) }),
         }
         Some(&*bump.alloc(init))
     };
@@ -549,7 +654,7 @@ fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
     };
     tokens.consume(TokenKind::RParen)?;
     let body = bump.alloc(statement(bump, tokens)?);
-    Ok(Statement::For { init, condition, update, body })
+    Ok(Statement::For { for_token, init, condition, update, body })
 }
 
 fn return_stmt<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
@@ -561,17 +666,18 @@ fn return_stmt<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<
     else {
         Some(expression(bump, tokens)?)
     };
-    tokens.consume(TokenKind::Semicolon)?;
-    Ok(Statement::Return(return_token, expr))
+    let semi = tokens.consume(TokenKind::Semicolon)?;
+    Ok(Statement::Return { return_token, expr, semi })
 }
 
 fn expression_statement<'a>(
     bump: &'a Bump,
     tokens: &mut Tokens<'a>,
 ) -> Result<Statement<'a>, Error<'a>> {
-    let result = Statement::Expression(expression(bump, tokens)?);
-    tokens.consume(TokenKind::Semicolon)?;
-    Ok(result)
+    Ok(Statement::Expression {
+        expr: expression(bump, tokens)?,
+        semi: tokens.consume(TokenKind::Semicolon)?,
+    })
 }
 
 pub fn expression<'a>(
@@ -600,32 +706,35 @@ fn expr_impl<'a>(
             Precedence::Left => break,
             Precedence::Right => (),
             Precedence::Ambiguous => Err(Error::AmbiguousPrecedences {
-                left_op_token: left_op
-                    .expect("ambiguous precedence is only possible when there is a left operand")
-                    .0,
-                right_op: op,
+                at: ErrorAtToken(
+                    left_op
+                        .expect(
+                            "ambiguous precedence is only possible when there is a left operand",
+                        )
+                        .0,
+                    op,
+                ),
             })?,
         }
         // eat the `op` token
         let _ = tokens.next();
         let rhs = expr_impl(bump, tokens, Some((op.token, Operator::Infix(op.kind))))?;
-        lhs =
-            if matches!(op.kind, BinOpKind::Assign) {
-                Expression::Assign {
-                    target: as_assignment_target(lhs).map_err(|()| {
-                        Error::InvalidAssignmentTarget { lhs, equal: op.token, rhs }
-                    })?,
-                    equal: op.token,
-                    value: bump.alloc(rhs),
-                }
+        lhs = if matches!(op.kind, BinOpKind::Assign) {
+            Expression::Assign {
+                target: as_assignment_target(lhs).map_err(|()| Error::InvalidAssignmentTarget {
+                    at: ErrorAtToken(op.token, lhs),
+                })?,
+                equal: op.token,
+                value: bump.alloc(rhs),
             }
-            else {
-                Expression::Binary {
-                    lhs: bump.alloc(lhs),
-                    op,
-                    rhs: bump.alloc(rhs),
-                }
-            };
+        }
+        else {
+            Expression::Binary {
+                lhs: bump.alloc(lhs),
+                op,
+                rhs: bump.alloc(rhs),
+            }
+        };
     }
 
     Ok(lhs)
@@ -729,14 +838,14 @@ fn ident<'a>(tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
 }
 
 fn unexpected_token<'a>(expected: &'static [TokenKind], actual: Token<'a>) -> Result<!, Error<'a>> {
-    Err(Error::UnexpectedToken { expected, actual })
+    Err(Error::UnexpectedToken { expected, at: ErrorAtToken::at(actual) })
 }
 
 fn unexpected_token_with_message<'a>(
     expected: &'static str,
     actual: Token<'a>,
 ) -> Result<!, Error<'a>> {
-    Err(Error::UnexpectedTokenMsg { expected, actual })
+    Err(Error::UnexpectedTokenMsg { expected, at: ErrorAtToken::at(actual) })
 }
 
 fn as_assignment_target(lhs: Expression) -> Result<Name, ()> {
@@ -752,12 +861,12 @@ trait NotEof<'a>
 where
     Self: 'a,
 {
-    fn not_eof(self) -> Result<Token<'a>, Eof>;
+    fn not_eof(self, eof_loc: &Loc<'a>) -> Result<Token<'a>, Eof<'a>>;
 }
 
 impl<'a> NotEof<'a> for Option<Token<'a>> {
-    fn not_eof(self) -> Result<Token<'a>, Eof> {
-        self.ok_or(Eof)
+    fn not_eof(self, eof_loc: &Loc<'a>) -> Result<Token<'a>, Eof<'a>> {
+        self.ok_or(Eof(*eof_loc))
     }
 }
 
@@ -834,8 +943,8 @@ pub(crate) mod tests {
     use super::*;
 
     pub(crate) fn parse_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Expression<'a>, Error<'a>> {
-        let tokens = crate::lex(bump, "<test>", src).unwrap();
-        parse(expression, bump, tokens)
+        let (tokens, eof_loc) = crate::lex(bump, "<test>", src).unwrap();
+        parse(expression, bump, tokens, eof_loc)
     }
 
     #[rstest]
@@ -903,20 +1012,20 @@ pub(crate) mod tests {
         "1 == 2 == 3",
         check_err!(Error::AmbiguousPrecedences { .. }),
     )]
-    #[case::eof_after_operator("1 -", check_err!(Error::Eof(_)))]
+    #[case::eof_after_operator("1 -", check_err!(Error::Eof { at: _ }))]
     #[case::three_adjecent_numbers(
         "1 2 3",
         check_err!(Error::UnexpectedTokenMsg {
             expected: "a binary operator",
-            actual: Token { kind: TokenKind::Number, .. },
+            at: ErrorAtToken(Token { kind: TokenKind::Number, .. }, ()),
         }),
     )]
     #[case::expect_expr_in_parens(
         "()",
         check_err!(Error::UnexpectedTokenMsg { expected: "expression", .. }),
     )]
-    #[case::unclosed_paren("(1 + 2", check_err!(Error::Eof(_)))]
-    #[case::one_plus("1+", check_err!(Error::Eof(_)))]
+    #[case::unclosed_paren("(1 + 2", check_err!(Error::Eof { at: _ }))]
+    #[case::one_plus("1+", check_err!(Error::Eof { at: _ }))]
     #[case::comparison_of_gt("1 > 2 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
     #[case::comparison_of_gt("1 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
     #[case::comparison_of_gt("1 > 2 == 3", check_err!(Error::AmbiguousPrecedences { .. }))]

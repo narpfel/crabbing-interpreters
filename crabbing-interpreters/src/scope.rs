@@ -57,10 +57,20 @@ pub enum Error<'a> {
 }
 
 #[derive(Debug)]
-pub struct ErrorAtToken<'a>(Token<'a>);
+pub struct ErrorAtToken<'a, T = ()>(pub(crate) Token<'a>, pub(crate) T);
 
 impl<'a> ErrorAtToken<'a> {
-    fn loc(&self) -> Loc<'a> {
+    pub fn at(token: Token<'a>) -> Self {
+        Self(token, ())
+    }
+}
+
+impl<'a, T> ErrorAtToken<'a, T> {
+    pub fn slice(&self) -> &'a str {
+        self.0.slice()
+    }
+
+    pub fn loc(&self) -> Loc<'a> {
         self.0.loc()
     }
 }
@@ -434,9 +444,9 @@ fn resolve_stmt<'a>(
 ) -> Result<Statement<'a>, Error<'a>> {
     use parse::Statement::*;
     Ok(match stmt {
-        Expression(expr) => Statement::Expression(resolve_expr(bump, scopes, expr)),
-        Print(expr) => Statement::Print(resolve_expr(bump, scopes, expr)),
-        Var(name, init) => {
+        Expression { expr, semi: _ } => Statement::Expression(resolve_expr(bump, scopes, expr)),
+        Print { print: _, expr, semi: _ } => Statement::Print(resolve_expr(bump, scopes, expr)),
+        Var { var: _, name, init, semi: _ } => {
             let slot = scopes.add(name)?;
             Statement::Var(
                 *name,
@@ -444,7 +454,7 @@ fn resolve_stmt<'a>(
                 init.as_ref().map(|init| resolve_expr(bump, scopes, init)),
             )
         }
-        Block(stmts) => scopes.with_block(|scopes| {
+        Block { open_brace: _, stmts, close_brace: _ } => scopes.with_block(|scopes| {
             Ok(Statement::Block(
                 bump.alloc_slice_copy(
                     &stmts
@@ -454,18 +464,24 @@ fn resolve_stmt<'a>(
                 ),
             ))
         })?,
-        If { condition, then, or_else } => Statement::If {
+        If { if_token: _, condition, then, or_else } => Statement::If {
             condition: resolve_expr(bump, scopes, condition),
             then: bump.alloc(resolve_stmt(bump, scopes, then)?),
             or_else: or_else
                 .map(|or_else| Ok(&*bump.alloc(resolve_stmt(bump, scopes, or_else)?)))
                 .transpose()?,
         },
-        While { condition, body } => Statement::While {
+        While { while_token: _, condition, body } => Statement::While {
             condition: resolve_expr(bump, scopes, condition),
             body: bump.alloc(resolve_stmt(bump, scopes, body)?),
         },
-        For { init, condition, update, body } => {
+        For {
+            for_token: _,
+            init,
+            condition,
+            update,
+            body,
+        } => {
             let (init, condition, update, body) = scopes.with_block(|scopes| {
                 let init = init
                     .map(|init| Ok(&*bump.alloc(resolve_stmt(bump, scopes, init)?)))
@@ -485,7 +501,14 @@ fn resolve_stmt<'a>(
             })?;
             Statement::For { init, condition, update, body }
         }
-        Function { name, parameters, parameter_names, body } => {
+        Function {
+            fun: _,
+            name,
+            parameters,
+            parameter_names,
+            body,
+            close_brace: _,
+        } => {
             let slot = scopes.add(name)?;
             Statement::Function {
                 name: *name,
@@ -505,9 +528,9 @@ fn resolve_stmt<'a>(
                 })?,
             }
         }
-        Return(return_token, expr) =>
+        Return { return_token, expr, semi: _ } =>
             if !scopes.is_in_function() {
-                Err(Error::TopLevelReturn { at: ErrorAtToken(*return_token) })?
+                Err(Error::TopLevelReturn { at: ErrorAtToken::at(*return_token) })?
             }
             else {
                 Statement::Return(expr.as_ref().map(|expr| resolve_expr(bump, scopes, expr)))

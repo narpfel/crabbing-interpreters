@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 1] Error at '42': Expect RParen.
+Error: at `42`: expected RParen
+   ╭─[tests/cases/function_parameter_not_identifier.lox:1:7]
+   │
+ 1 │ fun f(42) {}
+   │       ──  
+   │            
+───╯

@@ -65,6 +65,10 @@ impl std::fmt::Debug for Loc<'_> {
 }
 
 impl<'a> Loc<'a> {
+    pub(crate) fn loc(&self) -> Self {
+        *self
+    }
+
     pub(crate) fn line(&self) -> usize {
         self.src
             .split_inclusive('\n')
@@ -287,7 +291,7 @@ pub fn lex<'a>(
     bump: &'a Bump,
     filename: impl AsRef<Path>,
     src: &str,
-) -> Result<&'a [Token<'a>], Error<'a>> {
+) -> Result<(&'a [Token<'a>], Loc<'a>), Error<'a>> {
     let filename = bump.alloc_path(filename.as_ref());
     let src = bump.alloc_str(src);
 
@@ -306,7 +310,12 @@ pub fn lex<'a>(
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
-    Ok(bump.alloc_slice_copy(&tokens))
+    let eof_loc = Loc {
+        file: filename,
+        src,
+        span: Span { start: src.len(), end: src.len() },
+    };
+    Ok((bump.alloc_slice_copy(&tokens), eof_loc))
 }
 
 #[cfg(test)]
@@ -342,6 +351,6 @@ mod test {
         #[case] expected: impl for<'a> FnOnce(Result<&'a [Token<'a>], Error<'a>>),
     ) {
         let bump = &Bump::new();
-        expected(lex(bump, "<src>", src));
+        expected(lex(bump, "<src>", src).map(|(tokens, _)| tokens));
     }
 }
