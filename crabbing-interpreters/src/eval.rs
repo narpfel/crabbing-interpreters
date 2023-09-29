@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -20,12 +21,11 @@ use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 use crate::rc_str::RcStr;
-use crate::scope::AssignTarget;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
-use crate::scope::GlobalName;
 use crate::scope::Slot;
 use crate::scope::Statement;
+use crate::scope::Target;
 use crate::Sliced;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -45,6 +45,7 @@ struct FunctionInner<'a> {
     name: &'a str,
     parameters: &'a [&'a str],
     code: &'a [Statement<'a>],
+    cells: Vec<Rc<Cell<Value<'a>>>>,
 }
 
 impl Value<'_> {
@@ -222,10 +223,19 @@ impl<'a> Environment<'a> {
         Self { stack: globals, globals: global_names }
     }
 
-    fn get(&self, offset: usize, slot: Slot) -> Result<Value<'a>, Box<Error<'a>>> {
+    fn get(
+        &self,
+        cell_vars: &[Rc<Cell<Value<'a>>>],
+        offset: usize,
+        slot: Slot,
+    ) -> Result<Value<'a>, Box<Error<'a>>> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
+            Slot::Cell(slot) => {
+                let value_ptr = cell_vars[slot].deref().as_ptr();
+                return Ok(unsafe { &*value_ptr }.clone());
+            }
         };
         Ok(self.stack[index].clone())
     }
@@ -242,10 +252,21 @@ impl<'a> Environment<'a> {
         Ok((slot, self.stack[slot].clone()))
     }
 
-    fn set(&mut self, offset: usize, slot: Slot, value: Value<'a>) -> Result<(), Box<Error<'a>>> {
-        let index = match slot {
-            Slot::Local(slot) => offset + slot,
-            Slot::Global(slot) => slot,
+    fn set(
+        &mut self,
+        cell_vars: &[Rc<Cell<Value<'a>>>],
+        offset: usize,
+        target: Target,
+        value: Value<'a>,
+    ) -> Result<(), Box<Error<'a>>> {
+        let index = match target {
+            Target::Local(slot) => offset + slot,
+            Target::GlobalByName => unreachable!(),
+            Target::GlobalBySlot(slot) => slot,
+            Target::Cell(slot) => {
+                cell_vars[slot].set(value);
+                return Ok(());
+            }
         };
         self.stack[index] = value;
         Ok(())
@@ -254,6 +275,7 @@ impl<'a> Environment<'a> {
 
 pub fn eval<'a>(
     env: &mut Environment<'a>,
+    cell_vars: &[Rc<Cell<Value<'a>>>],
     offset: usize,
     expr: &Expression<'a>,
 ) -> Result<Value<'a>, Box<Error<'a>>> {
@@ -268,7 +290,7 @@ pub fn eval<'a>(
         },
         Expression::Unary(op, inner_expr) => {
             use UnaryOpKind::*;
-            let value = eval(env, offset, inner_expr)?;
+            let value = eval(env, cell_vars, offset, inner_expr)?;
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
@@ -277,47 +299,40 @@ pub fn eval<'a>(
                 Not => Bool(!value.is_truthy()),
             }
         }
-        Expression::Assign { target, value, .. } => {
-            let value = eval(env, offset, value)?;
-            match target {
-                AssignTarget::Local(_, slot) =>
-                    env.set(offset, Slot::Local(*slot), value.clone())?,
-                AssignTarget::Global(target) => match target.get() {
-                    GlobalName::ByName(name) => {
-                        let slot = env.get_global_slot_by_name(name)?;
-                        target.set(GlobalName::BySlot(name, slot));
-                        env.set(offset, Slot::Global(slot), value.clone())?
-                    }
-                    GlobalName::BySlot(_, slot) =>
-                        env.set(offset, Slot::Global(slot), value.clone())?,
-                },
+        Expression::Assign { target: variable, value, .. } => {
+            let value = eval(env, cell_vars, offset, value)?;
+            let target = variable.target();
+            if let Target::GlobalByName = target {
+                let slot = env.get_global_slot_by_name(variable.name)?;
+                variable.set_target(Target::GlobalBySlot(slot));
             }
+            env.set(cell_vars, offset, target, value.clone())?;
             return Ok(value);
         }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
             match op.kind {
                 And => {
-                    let lhs = eval(env, offset, lhs)?;
+                    let lhs = eval(env, cell_vars, offset, lhs)?;
                     if lhs.is_truthy() {
-                        eval(env, offset, rhs)?
+                        eval(env, cell_vars, offset, rhs)?
                     }
                     else {
                         lhs
                     }
                 }
                 Or => {
-                    let lhs = eval(env, offset, lhs)?;
+                    let lhs = eval(env, cell_vars, offset, lhs)?;
                     if lhs.is_truthy() {
                         lhs
                     }
                     else {
-                        eval(env, offset, rhs)?
+                        eval(env, cell_vars, offset, rhs)?
                     }
                 }
                 _ => {
-                    let lhs = eval(env, offset, lhs)?;
-                    let rhs = eval(env, offset, rhs)?;
+                    let lhs = eval(env, cell_vars, offset, lhs)?;
+                    let rhs = eval(env, cell_vars, offset, rhs)?;
                     match (&lhs, op.kind, &rhs) {
                         (_, And | Or, _) => unreachable!(),
                         (_, EqualEqual, _) => Bool(lhs == rhs),
@@ -352,7 +367,7 @@ pub fn eval<'a>(
             stack_size_at_callsite,
             ..
         } => {
-            let callee = eval(env, offset, callee)?;
+            let callee = eval(env, cell_vars, offset, callee)?;
             match callee {
                 Value::Function(ref func) => {
                     if arguments.len() != func.0.parameters.len() {
@@ -364,11 +379,21 @@ pub fn eval<'a>(
                     }
                     let arguments = *arguments;
                     arguments.iter().enumerate().try_for_each(|(i, arg)| {
-                        let arg = eval(env, offset, arg)?;
-                        env.set(offset + stack_size_at_callsite, Slot::Local(i), arg)?;
+                        let arg = eval(env, cell_vars, offset, arg)?;
+                        env.set(
+                            cell_vars,
+                            offset + stack_size_at_callsite,
+                            Target::Local(i),
+                            arg,
+                        )?;
                         Ok::<(), Box<Error<'a>>>(())
                     })?;
-                    match execute(env, offset + stack_size_at_callsite, func.0.code) {
+                    match execute(
+                        env,
+                        offset + stack_size_at_callsite,
+                        func.0.code,
+                        &func.0.cells,
+                    ) {
                         Ok(value) => Ok(value),
                         Err(ControlFlow::Return(value)) => Ok(value),
                         Err(ControlFlow::Error(err)) => Err(err),
@@ -378,7 +403,7 @@ pub fn eval<'a>(
                 Value::NativeFunction(func) => {
                     let arguments = arguments
                         .iter()
-                        .map(|arg| eval(env, offset, arg))
+                        .map(|arg| eval(env, cell_vars, offset, arg))
                         .collect::<Result<_, _>>()?;
                     func(arguments).map_err(|err| match err {
                         NativeError::Error(err) => err,
@@ -392,15 +417,16 @@ pub fn eval<'a>(
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
-        Expression::Grouping { expr, .. } => eval(env, offset, expr)?,
-        Expression::Local(_, slot) => env.get(offset, Slot::Local(*slot))?,
-        Expression::Global(global) => match global.get() {
-            GlobalName::ByName(name) => {
-                let (slot, value) = env.get_global_by_name(name)?;
-                global.set(GlobalName::BySlot(name, slot));
+        Expression::Grouping { expr, .. } => eval(env, cell_vars, offset, expr)?,
+        Expression::Name(variable) => match variable.target() {
+            Target::Local(slot) => env.get(cell_vars, offset, Slot::Local(slot))?,
+            Target::GlobalByName => {
+                let (slot, value) = env.get_global_by_name(variable.name)?;
+                variable.set_target(Target::GlobalBySlot(slot));
                 value
             }
-            GlobalName::BySlot(_, slot) => env.get(offset, Slot::Global(slot))?,
+            Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot))?,
+            Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot))?,
         },
     })
 }
@@ -409,72 +435,84 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
+    cell_vars: &[Rc<Cell<Value<'a>>>],
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
-            Statement::Expression(expr) => eval(env, offset, expr)?,
+            Statement::Expression(expr) => eval(env, cell_vars, offset, expr)?,
             Statement::Print(expr) => {
-                println!("{}", eval(env, offset, expr)?);
+                println!("{}", eval(env, cell_vars, offset, expr)?);
                 Value::Nil
             }
-            Statement::Var(_, slot, initialiser) => {
+            Statement::Var(variable, initialiser) => {
                 let value = if let Some(initialiser) = initialiser {
-                    eval(env, offset, initialiser)?
+                    eval(env, cell_vars, offset, initialiser)?
                 }
                 else {
                     Value::Nil
                 };
-                env.set(offset, Slot::Local(*slot), value)?;
+                env.set(cell_vars, offset, variable.target(), value)?;
                 Value::Nil
             }
-            Statement::Block(block) => execute(env, offset, block)?,
+            Statement::Block(block) => execute(env, offset, block, cell_vars)?,
             Statement::If { condition, then, or_else } =>
-                if eval(env, offset, condition)?.is_truthy() {
-                    execute(env, offset, std::slice::from_ref(then))?
+                if eval(env, cell_vars, offset, condition)?.is_truthy() {
+                    execute(env, offset, std::slice::from_ref(then), cell_vars)?
                 }
                 else {
                     match or_else {
-                        Some(stmt) => execute(env, offset, std::slice::from_ref(stmt))?,
+                        Some(stmt) => execute(env, offset, std::slice::from_ref(stmt), cell_vars)?,
                         None => Value::Nil,
                     }
                 },
             Statement::While { condition, body } => {
-                while eval(env, offset, condition)?.is_truthy() {
-                    execute(env, offset, std::slice::from_ref(body))?;
+                while eval(env, cell_vars, offset, condition)?.is_truthy() {
+                    execute(env, offset, std::slice::from_ref(body), cell_vars)?;
                 }
                 Value::Nil
             }
             Statement::For { init, condition, update, body } => {
                 if let Some(init) = init {
-                    execute(env, offset, std::slice::from_ref(init))?;
+                    execute(env, offset, std::slice::from_ref(init), cell_vars)?;
                 }
                 while condition
                     .as_ref()
-                    .map_or(Ok(Value::Bool(true)), |cond| eval(env, offset, cond))?
+                    .map_or(Ok(Value::Bool(true)), |cond| {
+                        eval(env, cell_vars, offset, cond)
+                    })?
                     .is_truthy()
                 {
-                    execute(env, offset, std::slice::from_ref(body))?;
+                    execute(env, offset, std::slice::from_ref(body), cell_vars)?;
                     if let Some(update) = update {
-                        eval(env, offset, update)?;
+                        eval(env, cell_vars, offset, update)?;
                     }
                 }
                 Ok::<_, Box<Error<'a>>>(Value::Nil)
             }?,
             Statement::Function {
-                name,
-                slot,
+                target,
                 parameters: _,
                 parameter_names,
                 body,
+                cells,
             } => {
+                let cells = cells
+                    .iter()
+                    .map(|cell| match cell {
+                        Some(idx) => Rc::clone(&cell_vars[*idx]),
+                        None => Rc::new(Cell::new(Value::Nil)),
+                    })
+                    .collect();
                 env.set(
+                    cell_vars,
                     offset,
-                    Slot::Local(*slot),
+                    target.target(),
                     Value::Function(Function(Rc::new(FunctionInner {
-                        name: name.slice(),
+                        name: target.name.slice(),
                         parameters: parameter_names,
                         code: body,
+                        cells,
                     }))),
                 )?;
                 Value::Nil
@@ -482,7 +520,7 @@ pub fn execute<'a>(
             Statement::Return(expr) => {
                 let return_value = expr
                     .as_ref()
-                    .map_or(Ok(Value::Nil), |expr| eval(env, offset, expr))?;
+                    .map_or(Ok(Value::Nil), |expr| eval(env, cell_vars, offset, expr))?;
                 Err(ControlFlow::Return(return_value))?
             }
         }
@@ -513,12 +551,29 @@ mod tests {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         let program =
             std::slice::from_ref(bump.alloc(parse::Statement::Expression { expr: ast, semi }));
-        let Ok(([scope::Statement::Expression(scoped_ast)], global_name_offsets)) =
-            scope::resolve_names(bump, &[], program)
+        let Ok((
+            [scope::Statement::Expression(scoped_ast)],
+            global_name_offsets,
+            _global_cell_count @ 0,
+        )) = scope::resolve_names(bump, &[], program)
         else {
             unreachable!()
         };
-        eval(&mut Environment::new(global_name_offsets), 0, scoped_ast).map_err(|e| *e)
+        let global_name_offsets = global_name_offsets
+            .iter()
+            .map(|(&name, v)| match v.target() {
+                scope::Target::GlobalBySlot(slot) => (name, slot),
+                _ => unreachable!(),
+            })
+            .collect();
+        let global_cells = &[];
+        eval(
+            &mut Environment::new(global_name_offsets),
+            global_cells,
+            0,
+            scoped_ast,
+        )
+        .map_err(|e| *e)
     }
 
     #[rstest]

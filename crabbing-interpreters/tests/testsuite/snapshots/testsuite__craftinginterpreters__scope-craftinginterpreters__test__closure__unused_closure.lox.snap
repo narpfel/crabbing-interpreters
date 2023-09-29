@@ -12,13 +12,13 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a @1 "a")
+      (var a (cell @0) "a")
       (if
          false
          (block
-            (fun foo @2 []
+            (fun foo (local @2) [] [Some(0)]
                (block
-                  (expr (global a @1)))))
+                  (expr (cell a @0)))))
          ∅))
    (print "ok"))
 

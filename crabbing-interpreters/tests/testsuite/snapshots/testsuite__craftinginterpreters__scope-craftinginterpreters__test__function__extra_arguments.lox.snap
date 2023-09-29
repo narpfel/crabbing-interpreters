@@ -11,10 +11,10 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f @1 [a b]
+   (fun f (global @1) [a b] []
       (block
          (print (local a @0))
          (print (local b @1))))
-   (expr (call +2 (local f @1) 1.0 2.0 3.0 4.0)))
+   (expr (call +2 (global f @1) 1.0 2.0 3.0 4.0)))
 
 ----- stderr -----

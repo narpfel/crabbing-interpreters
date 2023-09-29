@@ -11,14 +11,14 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var a @1 "global")
+   (var a (global @1) "global")
    (block
-      (fun assign @2 []
+      (fun assign (local @2) [] []
          (block
             (expr (= (global a @1) "assigned"))))
-      (var a @3 "inner")
+      (var a (local @3) "inner")
       (expr (call +4 (local assign @2)))
       (print (local a @3)))
-   (print (local a @1)))
+   (print (global a @1)))
 
 ----- stderr -----

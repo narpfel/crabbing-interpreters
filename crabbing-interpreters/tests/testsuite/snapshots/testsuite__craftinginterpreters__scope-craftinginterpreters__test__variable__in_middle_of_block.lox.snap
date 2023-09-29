@@ -12,13 +12,13 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a @1 "a")
+      (var a (local @1) "a")
       (print (local a @1))
-      (var b @2 (+ (local a @1) " b"))
+      (var b (local @2) (+ (local a @1) " b"))
       (print (local b @2))
-      (var c @3 (+ (local a @1) " c"))
+      (var c (local @3) (+ (local a @1) " c"))
       (print (local c @3))
-      (var d @4 (+ (local b @2) " d"))
+      (var d (local @4) (+ (local b @2) " d"))
       (print (local d @4))))
 
 ----- stderr -----

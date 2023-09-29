@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f @1 []
+   (fun f (global @1) [] []
       (block
          (while
             true
             (return "ok"))))
-   (print (call +2 (local f @1))))
+   (print (call +2 (global f @1))))
 
 ----- stderr -----

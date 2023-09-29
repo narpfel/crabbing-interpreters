@@ -12,14 +12,14 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var foo @1 "closure")
-      (fun f @2 []
+      (var foo (cell @0) "closure")
+      (fun f (local @2) [] [Some(0)]
          (block
             (block
-               (print (global foo @1))
-               (var foo @0 "shadow")
+               (print (cell foo @0))
+               (var foo (local @0) "shadow")
                (print (local foo @0)))
-            (print (global foo @1))))
+            (print (cell foo @0))))
       (expr (call +3 (local f @2)))))
 
 ----- stderr -----

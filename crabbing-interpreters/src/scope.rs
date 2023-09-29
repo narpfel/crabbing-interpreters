@@ -1,11 +1,14 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::hash::Hash;
 use std::primitive::usize;
+use std::ptr;
 
 use ariadne::Color::Red;
 use bumpalo::Bump;
 use crabbing_interpreters_derive_report::Report;
+use indexmap::IndexMap;
 use itertools::Itertools as _;
 use variant_types_derive::derive_variant_types;
 
@@ -20,24 +23,70 @@ use crate::parse::UnaryOp;
 
 const EMPTY: &str = "";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum CellRef<'a> {
+    Local(Variable<'a>),
+    NonLocal(Variable<'a>),
+}
+
+impl<'a> CellRef<'a> {
+    fn variable(&self) -> Variable<'a> {
+        match self {
+            Self::Local(var) => *var,
+            Self::NonLocal(var) => *var,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
-struct Locals<'a>(nonempty::Vec<HashMap<&'a str, usize>>);
+struct Locals<'a>(nonempty::Vec<HashMap<&'a str, Variable<'a>>>);
 
 #[derive(Debug, Default)]
 struct Scope<'a> {
     locals: Locals<'a>,
+    cells: IndexMap<Variable<'a>, CellRef<'a>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy)]
+struct PointerCompare<'a, T>(&'a T);
+
+impl<T> PartialEq for PointerCompare<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::from_ref(self.0) == ptr::from_ref(other.0)
+    }
+}
+
+impl<T> Eq for PointerCompare<'_, T> {}
+
+impl<T> Hash for PointerCompare<'_, T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        ptr::from_ref(self.0).hash(state)
+    }
+}
+
+#[derive(Debug)]
 struct Scopes<'a> {
+    bump: &'a Bump,
     scopes: nonempty::Vec<Scope<'a>>,
     offset: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Slot {
     Local(usize),
     Global(usize),
+    Cell(usize),
+}
+
+impl std::fmt::Display for Slot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (ty, slot) = match self {
+            Slot::Local(slot) => ("local", slot),
+            Slot::Global(slot) => ("global", slot),
+            Slot::Cell(slot) => ("cell", slot),
+        };
+        write!(f, "({ty} @{slot})")
+    }
 }
 
 #[derive(Debug, Report)]
@@ -75,7 +124,7 @@ impl<'a, T> ErrorAtToken<'a, T> {
     }
 }
 
-impl Locals<'_> {
+impl<'a> Locals<'a> {
     fn push(&mut self) {
         self.0.push(Default::default())
     }
@@ -84,12 +133,13 @@ impl Locals<'_> {
         self.0.pop();
     }
 
-    fn lookup(&self, name: &Name) -> Option<usize> {
+    fn lookup(&self, name: &'a Name<'a>) -> Option<Variable<'a>> {
         self.0
             .iter()
             .rev()
             .find_map(|scope| scope.get(name.slice()))
             .cloned()
+            .map(|variable| variable.at(name))
     }
 }
 
@@ -104,75 +154,129 @@ impl Scope<'_> {
 }
 
 impl<'a> Scopes<'a> {
-    fn new(global_names: &[&'a str]) -> Self {
-        let mut scopes = Scopes::default();
-        let duplicate_names = global_names.iter().duplicates().collect_vec();
+    fn new(bump: &'a Bump, global_names: &'a [Name<'a>]) -> Self {
+        let mut scopes = Scopes {
+            bump,
+            scopes: Default::default(),
+            offset: Default::default(),
+        };
+        let duplicate_names = global_names
+            .iter()
+            .map(|name| name.slice())
+            .duplicates()
+            .collect_vec();
         assert!(
             duplicate_names.is_empty(),
             "duplicates in builtin global names are not permitted: {duplicate_names:?}",
         );
         for name in global_names {
-            scopes.add_str(name);
+            scopes.add_unconditionally(name);
         }
         scopes
     }
 
-    fn add(&mut self, name: &Name<'a>) -> Result<usize, Error<'a>> {
+    fn add(&mut self, name: &'a Name<'a>) -> Result<Variable<'a>, Error<'a>> {
         if self.is_in_globals() {
             return Ok(self
-                .lookup_local_innermost(name)
-                .unwrap_or_else(|| self.add_str(name.slice())));
+                .lookup_local_innermost(name.slice())
+                .unwrap_or_else(|| self.add_unconditionally(name)));
         }
-        else if self.lookup_local_innermost(name).is_some() {
+        else if self.lookup_local_innermost(name.slice()).is_some() {
             return Err(Error::DuplicateDefinition { at: *name });
         }
         else {
-            Ok(self.add_str(name.slice()))
+            Ok(self.add_unconditionally(name))
         }
     }
 
-    fn add_str(&mut self, name: &'a str) -> usize {
-        let last = self.scopes.last_mut().locals.0.last_mut();
+    fn add_unconditionally(&mut self, name: &'a Name<'a>) -> Variable<'a> {
         let slot = self.offset;
-        last.insert(name, slot);
+        let variable = if self.is_in_globals() {
+            Variable::global(self.bump, name, slot)
+        }
+        else {
+            Variable::local(self.bump, name, slot)
+        };
+        let last = self.scopes.last_mut().locals.0.last_mut();
+        let was_present = last.insert(name.slice(), variable);
+        debug_assert!(was_present.is_none());
         self.offset += 1;
-        slot
+        variable
     }
 
-    fn lookup(&self, name: &Name) -> Option<Slot> {
+    fn lookup(&mut self, name: &'a Name<'a>) -> Option<Variable<'a>> {
         let last = self.scopes.last();
+        let cell_count = last.cells.len();
         match last.locals.lookup(name) {
-            Some(slot) => Some(Slot::Local(slot)),
-            None => self.lookup_global(name),
+            Some(slot) => Some(slot),
+            None => {
+                let mut nonlocal_scopes = self.scopes.iter().rev().skip(1);
+                nonlocal_scopes
+                    .find_map(|scope| scope.locals.lookup(name))
+                    .map(|variable| {
+                        if let Target::GlobalBySlot(_) | Target::GlobalByName = variable.target() {
+                            variable
+                        }
+                        else {
+                            self.scopes
+                                .last_mut()
+                                .cells
+                                .entry(variable)
+                                .or_insert_with(|| {
+                                    CellRef::NonLocal(Variable::cell(self.bump, name, cell_count))
+                                })
+                                .variable()
+                        }
+                    })
+            }
         }
     }
 
-    fn lookup_local_innermost(&self, name: &Name) -> Option<usize> {
+    fn local_to_cell(&mut self, variable: Variable<'a>) -> usize {
+        if let Some(v) = self.lookup(variable.name) {
+            match v.target() {
+                Target::Local(_) => (),
+                Target::GlobalByName => unreachable!(),
+                Target::GlobalBySlot(_) => unreachable!(),
+                Target::Cell(slot) => return slot,
+            }
+        }
+        let last = self.scopes.last_mut();
+        let cell_count = last.cells.len();
+        last.cells.entry(variable).or_insert_with(|| {
+            variable.make_cell(cell_count);
+            CellRef::Local(variable)
+        });
+        cell_count
+    }
+
+    fn lookup_local_innermost(&self, name: &str) -> Option<Variable<'a>> {
         let last = self.scopes.last().locals.0.last();
-        last.get(name.slice()).cloned()
+        last.get(name).cloned()
     }
 
-    fn lookup_global(&self, name: &Name) -> Option<Slot> {
-        let globals = self.scopes.first();
-        globals.locals.lookup(name).map(Slot::Global)
-    }
-
-    fn with_block<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+    fn with_block<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, Error<'a>>,
+    ) -> Result<T, Error<'a>> {
         self.scopes.last_mut().push();
         let old_offset = self.offset;
-        let result = f(self);
+        let result = f(self)?;
         self.offset = old_offset;
         self.scopes.last_mut().pop();
-        result
+        Ok(result)
     }
 
-    fn with_function<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+    fn with_function(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<&'a [Statement<'a>], Error<'a>>,
+    ) -> Result<(&'a [Statement<'a>], IndexMap<Variable<'a>, CellRef<'a>>), Error<'a>> {
         self.push();
         let old_offset = std::mem::take(&mut self.offset);
-        let result = f(self);
-        self.pop();
+        let body = f(self)?;
+        let scope = self.pop();
         self.offset = old_offset;
-        result
+        Ok((body, scope.cells))
     }
 
     fn current_stack_size(&self) -> usize {
@@ -182,7 +286,12 @@ impl<'a> Scopes<'a> {
             .0
             .iter()
             .rev()
-            .find_map(|map| map.values().max().map(|n| n + 1))
+            .find_map(|map| {
+                map.values()
+                    .filter_map(|var| var.as_local())
+                    .max()
+                    .map(|n| n + 1)
+            })
             .unwrap_or(0)
     }
 
@@ -190,8 +299,8 @@ impl<'a> Scopes<'a> {
         self.scopes.push(Scope::default())
     }
 
-    fn pop(&mut self) {
-        self.scopes.pop();
+    fn pop(&mut self) -> Scope<'a> {
+        self.scopes.pop().unwrap()
     }
 
     fn is_in_globals(&self) -> bool {
@@ -207,7 +316,7 @@ impl<'a> Scopes<'a> {
 pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
-    Var(Name<'a>, usize, Option<Expression<'a>>),
+    Var(Variable<'a>, Option<Expression<'a>>),
     Block(&'a [Statement<'a>]),
     If {
         condition: Expression<'a>,
@@ -225,11 +334,11 @@ pub enum Statement<'a> {
         body: &'a Statement<'a>,
     },
     Function {
-        name: Name<'a>,
-        slot: usize,
+        target: Variable<'a>,
         parameters: &'a [Name<'a>],
         parameter_names: &'a [&'a str],
         body: &'a [Statement<'a>],
+        cells: &'a [Option<usize>],
     },
     Return(Option<Expression<'a>>),
 }
@@ -239,10 +348,10 @@ impl Statement<'_> {
         let result = match self {
             Statement::Expression(expr) => format!("(expr {})", expr.as_sexpr()),
             Statement::Print(expr) => format!("(print {})", expr.as_sexpr()),
-            Statement::Var(name, slot, init) => format!(
-                "(var {} @{} {})",
-                name.slice(),
-                slot,
+            Statement::Var(target, init) => format!(
+                "(var {} {} {})",
+                target.name.slice(),
+                target.target(),
                 init.map(|init| init.as_sexpr())
                     .unwrap_or_else(|| "∅".to_string()),
             ),
@@ -281,10 +390,17 @@ impl Statement<'_> {
                     .unwrap_or_else(|| "∅".to_string()),
                 body.as_sexpr(indent).trim_end(),
             ),
-            Statement::Function { name, slot, parameter_names, body, .. } => format!(
-                "(fun {name} @{slot} [{params}]\n{})",
+            Statement::Function {
+                target,
+                parameter_names,
+                body,
+                parameters: _,
+                cells,
+            } => format!(
+                "(fun {name} {} [{params}] {cells:?}\n{})",
+                target.target(),
                 Statement::Block(body).as_sexpr(indent).trim_end(),
-                name = name.slice(),
+                name = target.name.slice(),
                 params = parameter_names.join(" "),
             ),
             Statement::Return(expr) => format!(
@@ -300,35 +416,123 @@ impl Statement<'_> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum GlobalName<'a> {
-    ByName(&'a Name<'a>),
-    BySlot(&'a Name<'a>, usize),
+pub struct Variable<'a> {
+    pub(crate) name: &'a Name<'a>,
+    target: TargetRef<'a>,
 }
+
+impl<'a> Variable<'a> {
+    fn as_local(&self) -> Option<usize> {
+        match self.target() {
+            Target::Local(slot) => Some(slot),
+            Target::GlobalBySlot(slot) => Some(slot),
+            Target::GlobalByName => unreachable!(),
+            Target::Cell(_) => None,
+        }
+    }
+
+    pub fn target(&self) -> Target {
+        self.target.get()
+    }
+
+    pub fn set_target(&self, target: Target) {
+        self.target.set(target)
+    }
+
+    pub fn at(&self, name: &'a Name<'a>) -> Self {
+        Self { name, target: self.target }
+    }
+
+    fn make_cell(&self, slot: usize) {
+        self.set_target(Target::Cell(slot))
+    }
+}
+
+impl PartialEq for Variable<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        if PointerCompare(self.target) == PointerCompare(other.target) {
+            debug_assert_eq!(self.name.slice(), other.name.slice());
+            true
+        }
+        else {
+            false
+        }
+    }
+}
+
+impl Eq for Variable<'_> {}
+
+impl Hash for Variable<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        PointerCompare(self.target).hash(state)
+    }
+}
+
+impl<'a> Variable<'a> {
+    fn local(bump: &'a Bump, name: &'a Name<'a>, slot: usize) -> Self {
+        Self {
+            name,
+            target: bump.alloc(Cell::new(Target::Local(slot))),
+        }
+    }
+
+    fn cell(bump: &'a Bump, name: &'a Name<'a>, slot: usize) -> Self {
+        Self {
+            name,
+            target: bump.alloc(Cell::new(Target::Cell(slot))),
+        }
+    }
+
+    fn global(bump: &'a Bump, name: &'a Name<'a>, slot: usize) -> Self {
+        Self {
+            name,
+            target: bump.alloc(Cell::new(Target::GlobalBySlot(slot))),
+        }
+    }
+
+    fn global_by_name(bump: &'a Bump, name: &'a Name<'a>) -> Self {
+        Self {
+            name,
+            target: bump.alloc(Cell::new(Target::GlobalByName)),
+        }
+    }
+}
+
+type TargetRef<'a> = &'a Cell<Target>;
 
 #[derive(Debug, Clone, Copy)]
-pub enum AssignTarget<'a> {
-    Local(&'a Name<'a>, usize),
-    Global(&'a Cell<crate::scope::GlobalName<'a>>),
+pub enum Target {
+    Local(usize),
+    GlobalByName,
+    GlobalBySlot(usize),
+    Cell(usize),
 }
 
-impl<'a> AssignTarget<'a> {
+impl std::fmt::Display for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (ty, slot) = match self {
+            Target::Local(slot) => ("local", slot),
+            Target::GlobalBySlot(slot) => ("global", slot),
+            Target::GlobalByName => unreachable!(),
+            Target::Cell(slot) => ("cell", slot),
+        };
+        write!(f, "({ty} @{slot})")
+    }
+}
+
+impl<'a> Variable<'a> {
     fn as_sexpr(&self) -> String {
-        match self {
-            AssignTarget::Local(name, slot) => format!("(local {} @{slot})", name.slice()),
-            AssignTarget::Global(target) => match target.get() {
-                GlobalName::ByName(name) => format!("(global-by-name {})", name.slice()),
-                GlobalName::BySlot(name, slot) => format!("(global {} @{slot})", name.slice()),
-            },
+        let name = self.name.slice();
+        match self.target() {
+            Target::Local(slot) => format!("(local {} @{slot})", name),
+            Target::GlobalByName => format!("(global-by-name {})", name),
+            Target::GlobalBySlot(slot) => format!("(global {} @{slot})", name),
+            Target::Cell(slot) => format!("(cell {} @{slot})", name),
         }
     }
 
     fn loc(&self) -> Loc<'a> {
-        match self {
-            AssignTarget::Local(name, _) => name.loc(),
-            AssignTarget::Global(target) => match target.get() {
-                GlobalName::ByName(name) | GlobalName::BySlot(name, _) => name.loc(),
-            },
-        }
+        self.name.loc()
     }
 }
 
@@ -347,10 +551,9 @@ pub enum Expression<'a> {
         expr: &'a Expression<'a>,
         r_paren: Token<'a>,
     },
-    Local(&'a Name<'a>, usize),
-    Global(&'a Cell<crate::scope::GlobalName<'a>>),
+    Name(Variable<'a>),
     Assign {
-        target: AssignTarget<'a>,
+        target: Variable<'a>,
         equal: Token<'a>,
         value: &'a Expression<'a>,
     },
@@ -370,11 +573,7 @@ impl<'a> Expression<'a> {
             Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
             Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
             Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
-            Expression::Local(name, _) => name.loc(),
-            Expression::Global(global) => {
-                let (GlobalName::ByName(name) | GlobalName::BySlot(name, _)) = global.get();
-                name.loc()
-            }
+            Expression::Name(variable) => variable.name.loc(),
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
         }
@@ -413,28 +612,36 @@ impl<'a> Expression<'a> {
                     .collect::<Vec<_>>()
                     .join(" "),
             ),
-            Expression::Local(name, slot) => format!("(local {} @{slot})", name.slice()),
-            Expression::Global(global) => match global.get() {
-                GlobalName::ByName(name) => format!("(global-by-name {})", name.slice()),
-                GlobalName::BySlot(name, slot) => format!("(global {} @{slot})", name.slice()),
-            },
+            Expression::Name(variable) => variable.as_sexpr(),
         }
     }
 }
 
+// FIXME: Use a struct as return type
+#[allow(clippy::type_complexity)]
 pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
-    global_names: &[&'a str],
+    global_names: &'a [Name<'a>],
     program: &'a [crate::parse::Statement<'a>],
-) -> Result<(&'a [Statement<'a>], HashMap<&'a str, usize>), Error<'a>> {
-    let mut scopes = Scopes::new(global_names);
+) -> Result<(&'a [Statement<'a>], HashMap<&'a str, Variable<'a>>, usize), Error<'a>> {
+    let mut scopes = Scopes::new(bump, global_names);
     let stmts = &*bump.alloc_slice_copy(
         &program
             .iter()
             .map(|stmt| resolve_stmt(bump, &mut scopes, stmt))
             .collect::<Result<Vec<_>, _>>()?,
     );
-    Ok((stmts, scopes.scopes.first().locals.0.first().clone()))
+    assert!(scopes
+        .scopes
+        .first()
+        .cells
+        .values()
+        .all(|cell_ref| matches!(cell_ref, CellRef::Local(_))));
+    Ok((
+        stmts,
+        scopes.scopes.first().locals.0.first().clone(),
+        scopes.scopes.first().cells.len(),
+    ))
 }
 
 fn resolve_stmt<'a>(
@@ -447,10 +654,9 @@ fn resolve_stmt<'a>(
         Expression { expr, semi: _ } => Statement::Expression(resolve_expr(bump, scopes, expr)),
         Print { print: _, expr, semi: _ } => Statement::Print(resolve_expr(bump, scopes, expr)),
         Var { var: _, name, init, semi: _ } => {
-            let slot = scopes.add(name)?;
+            let variable = scopes.add(name)?;
             Statement::Var(
-                *name,
-                slot,
+                variable,
                 init.as_ref().map(|init| resolve_expr(bump, scopes, init)),
             )
         }
@@ -509,23 +715,25 @@ fn resolve_stmt<'a>(
             body,
             close_brace: _,
         } => {
-            let slot = scopes.add(name)?;
+            let target = scopes.add(name)?;
+            let (body, nonlocal_names) = scopes.with_function(|scopes| {
+                for name in *parameters {
+                    scopes.add(name)?;
+                }
+                Ok(&*bump.alloc_slice_copy(
+                    &body
+                        .iter()
+                        .map(|stmt| resolve_stmt(bump, scopes, stmt))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            })?;
+            let cells = cell_slots(bump, scopes, &nonlocal_names);
             Statement::Function {
-                name: *name,
-                slot,
+                target,
                 parameters,
                 parameter_names,
-                body: scopes.with_function(|scopes| {
-                    for name in *parameters {
-                        scopes.add(name)?;
-                    }
-                    Ok(bump.alloc_slice_copy(
-                        &body
-                            .iter()
-                            .map(|stmt| resolve_stmt(bump, scopes, stmt))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    ))
-                })?,
+                body,
+                cells,
             }
         }
         Return { return_token, expr, semi: _ } =>
@@ -557,25 +765,18 @@ fn resolve_expr<'a>(
             expr: bump.alloc(resolve_expr(bump, scopes, expr)),
             r_paren: *r_paren,
         },
-        Ident(name) => match scopes.lookup(name) {
-            Some(Slot::Local(slot)) => Expression::Local(name, slot),
-            Some(Slot::Global(slot)) =>
-                Expression::Global(bump.alloc(Cell::new(GlobalName::BySlot(name, slot)))),
-            None => Expression::Global(bump.alloc(Cell::new(GlobalName::ByName(name)))),
+        Ident(name) => Expression::Name(
+            scopes
+                .lookup(name)
+                .unwrap_or_else(|| Variable::global_by_name(bump, name)),
+        ),
+        Assign { target, equal, value } => Expression::Assign {
+            target: scopes
+                .lookup(target)
+                .unwrap_or_else(|| Variable::global_by_name(bump, target)),
+            equal: *equal,
+            value: bump.alloc(resolve_expr(bump, scopes, value)),
         },
-        Assign { target, equal, value } => {
-            let target = match scopes.lookup(target) {
-                Some(Slot::Global(slot)) =>
-                    AssignTarget::Global(bump.alloc(Cell::new(GlobalName::BySlot(target, slot)))),
-                Some(Slot::Local(slot)) => AssignTarget::Local(target, slot),
-                None => AssignTarget::Global(bump.alloc(Cell::new(GlobalName::ByName(target)))),
-            };
-            Expression::Assign {
-                target,
-                equal: *equal,
-                value: bump.alloc(resolve_expr(bump, scopes, value)),
-            }
-        }
         Call { callee, l_paren, arguments, r_paren } => Expression::Call {
             callee: bump.alloc(resolve_expr(bump, scopes, callee)),
             l_paren: *l_paren,
@@ -585,4 +786,33 @@ fn resolve_expr<'a>(
             stack_size_at_callsite: scopes.current_stack_size(),
         },
     }
+}
+
+fn cell_slots<'a>(
+    bump: &'a Bump,
+    scopes: &mut Scopes<'a>,
+    nonlocal_names: &IndexMap<Variable<'a>, CellRef>,
+) -> &'a [Option<usize>] {
+    let cells = bump.alloc_slice_fill_copy(nonlocal_names.len(), None);
+    for (variable, cell_ref) in nonlocal_names {
+        match cell_ref {
+            CellRef::Local(_) => (),
+            CellRef::NonLocal(my_target) => {
+                let (Target::Local(i) | Target::Cell(i)) = my_target.target()
+                else {
+                    unreachable!()
+                };
+                match variable.target() {
+                    Target::Local(_) => {
+                        let slot = scopes.local_to_cell(*variable);
+                        cells[i] = Some(slot);
+                    }
+                    Target::GlobalByName => unreachable!(),
+                    Target::GlobalBySlot(_) => unreachable!(),
+                    Target::Cell(slot) => cells[i] = Some(slot),
+                }
+            }
+        }
+    }
+    cells
 }

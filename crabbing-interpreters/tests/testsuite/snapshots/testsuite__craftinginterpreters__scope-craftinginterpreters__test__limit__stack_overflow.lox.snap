@@ -11,25 +11,25 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun foo @1 []
+   (fun foo (global @1) [] []
       (block
-         (var a1 @0 ∅)
-         (var a2 @1 ∅)
-         (var a3 @2 ∅)
-         (var a4 @3 ∅)
-         (var a5 @4 ∅)
-         (var a6 @5 ∅)
-         (var a7 @6 ∅)
-         (var a8 @7 ∅)
-         (var a9 @8 ∅)
-         (var a10 @9 ∅)
-         (var a11 @10 ∅)
-         (var a12 @11 ∅)
-         (var a13 @12 ∅)
-         (var a14 @13 ∅)
-         (var a15 @14 ∅)
-         (var a16 @15 ∅)
+         (var a1 (local @0) ∅)
+         (var a2 (local @1) ∅)
+         (var a3 (local @2) ∅)
+         (var a4 (local @3) ∅)
+         (var a5 (local @4) ∅)
+         (var a6 (local @5) ∅)
+         (var a7 (local @6) ∅)
+         (var a8 (local @7) ∅)
+         (var a9 (local @8) ∅)
+         (var a10 (local @9) ∅)
+         (var a11 (local @10) ∅)
+         (var a12 (local @11) ∅)
+         (var a13 (local @12) ∅)
+         (var a14 (local @13) ∅)
+         (var a15 (local @14) ∅)
+         (var a16 (local @15) ∅)
          (expr (call +16 (global foo @1)))))
-   (expr (call +2 (local foo @1))))
+   (expr (call +2 (global foo @1))))
 
 ----- stderr -----

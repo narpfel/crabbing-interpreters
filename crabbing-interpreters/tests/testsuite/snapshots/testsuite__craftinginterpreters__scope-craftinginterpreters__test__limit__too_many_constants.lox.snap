@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f @1 []
+   (fun f (global @1) [] []
       (block
          (expr 0.0)
          (expr 1.0)

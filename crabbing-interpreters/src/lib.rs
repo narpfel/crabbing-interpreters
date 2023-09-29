@@ -3,6 +3,7 @@
 #![feature(lint_reasons)]
 #![feature(never_type)]
 
+use std::cell::Cell;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
@@ -13,6 +14,7 @@ use std::io::stdout;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Instant;
 
 use bumpalo::Bump;
@@ -24,8 +26,11 @@ use crate::eval::ControlFlow;
 use crate::eval::Environment;
 use crate::eval::Value;
 pub use crate::lex::lex;
+use crate::lex::Token;
+use crate::lex::TokenKind;
 use crate::parse::parse;
 use crate::parse::program;
+use crate::parse::Name;
 use crate::scope::resolve_names;
 
 mod eval;
@@ -149,6 +154,8 @@ enum StopAt {
 
 fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
+    let globals_names =
+        bump.alloc_slice_copy(&[Name(Token::debug_token(TokenKind::Identifier, "clock"))]);
     let mut globals = Environment::new([("clock", 0)].into_iter().collect());
     let mut line = String::new();
     'repl: loop {
@@ -190,14 +197,17 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             };
         };
-        let (stmts, _) = match resolve_names(bump, &["clock"], stmts) {
+        let (stmts, _, global_cell_count) = match resolve_names(bump, globals_names, stmts) {
             Ok(stmts) => stmts,
             Err(err) => {
                 err.print();
                 continue 'repl;
             }
         };
-        let result = execute(&mut globals, 0, stmts);
+        let global_cells: Vec<_> = (0..global_cell_count)
+            .map(|_| Rc::new(Cell::new(Value::Nil)))
+            .collect();
+        let result = execute(&mut globals, 0, stmts, &global_cells);
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
@@ -234,9 +244,12 @@ pub fn run<'a>(
             )?)
         })?;
         let ast = time("ast", args.times, || parse(program, bump, tokens, eof_loc))?;
-        let (scoped_ast, global_name_offsets) = time("scp", args.times, || {
-            scope::resolve_names(bump, &["clock"], ast)
-        })?;
+        let globals =
+            bump.alloc_slice_copy(&[Name(Token::debug_token(TokenKind::Identifier, "clock"))]);
+        let (scoped_ast, global_name_offsets, global_cell_count) =
+            time("scp", args.times, move || {
+                scope::resolve_names(bump, globals, ast)
+            })?;
         if args.scopes {
             println!("(program");
             let mut sexpr = String::new();
@@ -248,8 +261,20 @@ pub fn run<'a>(
                 return Ok(());
             }
         }
+        let global_name_offsets = global_name_offsets
+            .iter()
+            .map(|(&name, v)| match v.target() {
+                scope::Target::GlobalBySlot(slot) => (name, slot),
+                _ => unreachable!(),
+            })
+            .collect();
         let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
-        match time("exe", args.times, || execute(&mut stack, 0, scoped_ast)) {
+        let global_cells: Vec<_> = (0..global_cell_count)
+            .map(|_| Rc::new(Cell::new(Value::Nil)))
+            .collect();
+        match time("exe", args.times, || {
+            execute(&mut stack, 0, scoped_ast, &global_cells)
+        }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,
         };

@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var a @1 "before")
-   (print (local a @1))
-   (expr (= (local a @1) "after"))
-   (print (local a @1))
-   (print (= (local a @1) "arg"))
-   (print (local a @1)))
+   (var a (global @1) "before")
+   (print (global a @1))
+   (expr (= (global a @1) "after"))
+   (print (global a @1))
+   (print (= (global a @1) "arg"))
+   (print (global a @1)))
 
 ----- stderr -----

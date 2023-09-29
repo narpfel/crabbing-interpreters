@@ -34,6 +34,12 @@ impl<'a> Token<'a> {
     }
 }
 
+impl Token<'static> {
+    pub(crate) fn debug_token(kind: TokenKind, src: &'static str) -> Self {
+        Token { kind, loc: Loc::debug_loc(src) }
+    }
+}
+
 impl std::fmt::Debug for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}({:?})@{:?}", self.kind, self.slice(), self.loc)
@@ -62,6 +68,16 @@ pub struct Loc<'a> {
     file: &'a Path,
     src: &'a str,
     span: Span,
+}
+
+impl Loc<'static> {
+    fn debug_loc(src: &'static str) -> Self {
+        Loc {
+            file: Path::new(""),
+            src,
+            span: Span { start: 0, end: src.len() },
+        }
+    }
 }
 
 impl std::fmt::Debug for Loc<'_> {

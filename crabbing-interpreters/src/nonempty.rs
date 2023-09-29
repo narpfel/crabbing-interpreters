@@ -1,3 +1,7 @@
+use std::ops::Index;
+use std::slice::SliceIndex;
+
+#[derive(Clone)]
 pub(crate) struct Vec<T>(std::vec::Vec<T>);
 
 impl<T> std::fmt::Debug for Vec<T>
@@ -54,5 +58,16 @@ where
 {
     fn default() -> Self {
         Self::new(T::default())
+    }
+}
+
+impl<T, Idx> Index<Idx> for Vec<T>
+where
+    Idx: SliceIndex<[T]>,
+{
+    type Output = <Idx as SliceIndex<[T]>>::Output;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        self.0.index(index)
     }
 }

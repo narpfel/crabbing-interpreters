@@ -12,9 +12,9 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var i @1 42.0)
+      (var i (local @1) 42.0)
       (for
-         (var i @2 0.0)
+         (var i (local @2) 0.0)
          (< (local i @2) 2.0)
          (= (local i @2) (+ (local i @2) 1.0))
          (block

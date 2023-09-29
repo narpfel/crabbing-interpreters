@@ -11,10 +11,10 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var nan @1 (/ 0.0 0.0))
-   (print (== (local nan @1) 0.0))
-   (print (!= (local nan @1) 1.0))
-   (print (== (local nan @1) (local nan @1)))
-   (print (!= (local nan @1) (local nan @1))))
+   (var nan (global @1) (/ 0.0 0.0))
+   (print (== (global nan @1) 0.0))
+   (print (!= (global nan @1) 1.0))
+   (print (== (global nan @1) (global nan @1)))
+   (print (!= (global nan @1) (global nan @1))))
 
 ----- stderr -----

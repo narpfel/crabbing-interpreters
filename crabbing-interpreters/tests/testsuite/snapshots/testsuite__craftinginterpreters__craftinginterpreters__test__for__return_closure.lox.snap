@@ -5,15 +5,9 @@ info:
   args:
     - craftinginterpreters/test/for/return_closure.lox
 ---
-success: false
-exit_code: 70
+success: true
+exit_code: 0
 ----- stdout -----
+i
 
 ----- stderr -----
-Error: Undefined variable `i`.
-   ╭─[craftinginterpreters/test/for/return_closure.lox:4:21]
-   │
- 4 │     fun g() { print i; }
-   │                     ─  
-   │                         
-───╯

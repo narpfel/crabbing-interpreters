@@ -11,17 +11,17 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f @1 []
+   (fun f (global @1) [] [None]
       (block
          (while
             true
             (block
-               (var i @0 "i")
-               (fun g @1 []
+               (var i (cell @0) "i")
+               (fun g (local @1) [] [Some(0)]
                   (block
-                     (print (global-by-name i))))
+                     (print (cell i @0))))
                (return (local g @1))))))
-   (var h @2 (call +3 (local f @1)))
-   (expr (call +3 (local h @2))))
+   (var h (global @2) (call +3 (global f @1)))
+   (expr (call +3 (global h @2))))
 
 ----- stderr -----

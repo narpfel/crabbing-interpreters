@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a @1 "before")
+      (var a (local @1) "before")
       (print (local a @1))
       (expr (= (local a @1) "after"))
       (print (local a @1))

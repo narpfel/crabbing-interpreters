@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a @1 "outer")
+      (var a (local @1) "outer")
       (block
          (print (local a @1)))))
 

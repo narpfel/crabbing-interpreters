@@ -11,15 +11,15 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f @1 []
+   (fun f (global @1) [] []
       (block
          (for
             ∅
             ∅
             ∅
             (block
-               (var i @0 "i")
+               (var i (local @0) "i")
                (return (local i @0))))))
-   (print (call +2 (local f @1))))
+   (print (call +2 (global f @1))))
 
 ----- stderr -----

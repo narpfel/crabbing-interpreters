@@ -11,22 +11,22 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var closure @1 ∅)
+   (var closure (global @1) ∅)
    (block
-      (var a @2 "a")
+      (var a (cell @0) "a")
       (block
-         (var b @3 "b")
-         (fun returnA @4 []
+         (var b (cell @1) "b")
+         (fun returnA (local @4) [] [Some(0)]
             (block
-               (return (global a @2))))
-         (expr (= (local closure @1) (local returnA @4)))
+               (return (cell a @0))))
+         (expr (= (global closure @1) (local returnA @4)))
          (if
             false
             (block
-               (fun returnB @5 []
+               (fun returnB (local @5) [] [Some(1)]
                   (block
-                     (return (global b @3)))))
+                     (return (cell b @0)))))
             ∅))
-      (print (call +3 (local closure @1)))))
+      (print (call +2 (global closure @1)))))
 
 ----- stderr -----
