@@ -6,7 +6,7 @@ use logos::Logos;
 
 use crate::AllocPath;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     loc: Loc<'a>,
@@ -31,6 +31,12 @@ impl<'a> Token<'a> {
             TokenKind::Number => TokenValue::Number(self.slice().parse().unwrap()),
             _ => TokenValue::None,
         }
+    }
+}
+
+impl std::fmt::Debug for Token<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}({:?})@{:?}", self.kind, self.slice(), self.loc)
     }
 }
 
