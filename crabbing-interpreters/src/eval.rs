@@ -14,6 +14,8 @@ use ariadne::Color::Red;
 use crabbing_interpreters_derive_report::Report;
 use variant_types::IntoVariant;
 
+use crate::clone_from_cell::CloneInCellSafe;
+use crate::clone_from_cell::GetClone;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::LiteralKind;
@@ -37,6 +39,8 @@ pub enum Value<'a> {
     Function(Function<'a>),
     NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
 }
+
+unsafe impl CloneInCellSafe for Value<'_> {}
 
 #[derive(Clone)]
 pub struct Function<'a>(Rc<FunctionInner<'a>>);
@@ -232,10 +236,7 @@ impl<'a> Environment<'a> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
-            Slot::Cell(slot) => {
-                let value_ptr = cell_vars[slot].deref().as_ptr();
-                return Ok(unsafe { &*value_ptr }.clone());
-            }
+            Slot::Cell(slot) => return Ok(cell_vars[slot].get_clone()),
         };
         Ok(self.stack[index].clone())
     }

@@ -33,6 +33,7 @@ use crate::parse::program;
 use crate::parse::Name;
 use crate::scope::resolve_names;
 
+mod clone_from_cell;
 mod eval;
 mod lex;
 mod nonempty;
