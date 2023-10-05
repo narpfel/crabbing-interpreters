@@ -8,8 +8,8 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-3
-3
+1
+2
 3
 
 ----- stderr -----

@@ -206,7 +206,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
             }
         };
         let global_cells: Vec<_> = (0..global_cell_count)
-            .map(|_| Rc::new(Cell::new(Value::Nil)))
+            .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
             .collect();
         let result = execute(&mut globals, 0, stmts, &global_cells);
         match result {
@@ -271,7 +271,7 @@ pub fn run<'a>(
             .collect();
         let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
         let global_cells: Vec<_> = (0..global_cell_count)
-            .map(|_| Rc::new(Cell::new(Value::Nil)))
+            .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
             .collect();
         match time("exe", args.times, || {
             execute(&mut stack, 0, scoped_ast, &global_cells)

@@ -49,7 +49,7 @@ struct FunctionInner<'a> {
     name: &'a str,
     parameters: &'a [&'a str],
     code: &'a [Statement<'a>],
-    cells: Vec<Rc<Cell<Value<'a>>>>,
+    cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
 }
 
 impl Value<'_> {
@@ -229,14 +229,14 @@ impl<'a> Environment<'a> {
 
     fn get(
         &self,
-        cell_vars: &[Rc<Cell<Value<'a>>>],
+        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
         offset: usize,
         slot: Slot,
     ) -> Result<Value<'a>, Box<Error<'a>>> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
-            Slot::Cell(slot) => return Ok(cell_vars[slot].get_clone()),
+            Slot::Cell(slot) => return Ok(cell_vars[slot].get_clone().get_clone()),
         };
         Ok(self.stack[index].clone())
     }
@@ -253,30 +253,55 @@ impl<'a> Environment<'a> {
         Ok((slot, self.stack[slot].clone()))
     }
 
-    fn set(
+    fn define_impl(
         &mut self,
-        cell_vars: &[Rc<Cell<Value<'a>>>],
+        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
         offset: usize,
         target: Target,
         value: Value<'a>,
+        set_cell: impl FnOnce(&Cell<Rc<Cell<Value<'a>>>>, Value<'a>),
     ) -> Result<(), Box<Error<'a>>> {
         let index = match target {
             Target::Local(slot) => offset + slot,
             Target::GlobalByName => unreachable!(),
             Target::GlobalBySlot(slot) => slot,
             Target::Cell(slot) => {
-                cell_vars[slot].set(value);
+                set_cell(&cell_vars[slot], value);
                 return Ok(());
             }
         };
         self.stack[index] = value;
         Ok(())
     }
+
+    fn define(
+        &mut self,
+        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        offset: usize,
+        target: Target,
+        value: Value<'a>,
+    ) -> Result<(), Box<Error<'a>>> {
+        self.define_impl(cell_vars, offset, target, value, |cell, value| {
+            cell.set(Rc::new(Cell::new(value)))
+        })
+    }
+
+    fn set(
+        &mut self,
+        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        offset: usize,
+        target: Target,
+        value: Value<'a>,
+    ) -> Result<(), Box<Error<'a>>> {
+        self.define_impl(cell_vars, offset, target, value, |cell, value| {
+            cell.get_clone().set(value)
+        })
+    }
 }
 
 pub fn eval<'a>(
     env: &mut Environment<'a>,
-    cell_vars: &[Rc<Cell<Value<'a>>>],
+    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
     offset: usize,
     expr: &Expression<'a>,
 ) -> Result<Value<'a>, Box<Error<'a>>> {
@@ -381,7 +406,7 @@ pub fn eval<'a>(
                     let arguments = *arguments;
                     arguments.iter().enumerate().try_for_each(|(i, arg)| {
                         let arg = eval(env, cell_vars, offset, arg)?;
-                        env.set(
+                        env.define(
                             cell_vars,
                             offset + stack_size_at_callsite,
                             Target::Local(i),
@@ -436,7 +461,7 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
-    cell_vars: &[Rc<Cell<Value<'a>>>],
+    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut last_value = Value::Nil;
     for statement in program {
@@ -453,7 +478,7 @@ pub fn execute<'a>(
                 else {
                     Value::Nil
                 };
-                env.set(cell_vars, offset, variable.target(), value)?;
+                env.define(cell_vars, offset, variable.target(), value)?;
                 Value::Nil
             }
             Statement::Block(block) => execute(env, offset, block, cell_vars)?,
@@ -498,11 +523,14 @@ pub fn execute<'a>(
                 body,
                 cells,
             } => {
+                // we need to define the function variable before evaluating the cells as the
+                // function itself could be captured
+                env.define(cell_vars, offset, target.target(), Value::Nil)?;
                 let cells = cells
                     .iter()
                     .map(|cell| match cell {
-                        Some(idx) => Rc::clone(&cell_vars[*idx]),
-                        None => Rc::new(Cell::new(Value::Nil)),
+                        Some(idx) => Cell::new(cell_vars[*idx].get_clone()),
+                        None => Cell::new(Rc::new(Cell::new(Value::Nil))),
                     })
                     .collect();
                 env.set(
