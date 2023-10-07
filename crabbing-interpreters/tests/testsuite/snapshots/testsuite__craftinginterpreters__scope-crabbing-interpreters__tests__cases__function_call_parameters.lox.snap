@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f (global @1) [a b] []
+   (fun f (global @1) [(local a @0) (local b @1)] []
       (block
          (print (local b @1))
          (print (local a @0))))

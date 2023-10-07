@@ -11,14 +11,14 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun isEven (global @1) [n] []
+   (fun isEven (global @1) [(local n @0)] []
       (block
          (if
             (== (local n @0) 0.0)
             (return true)
             ∅)
          (return (call +1 (global-by-name isOdd) (- (local n @0) 1.0)))))
-   (fun isOdd (global @2) [n] []
+   (fun isOdd (global @2) [(local n @0)] []
       (block
          (if
             (== (local n @0) 0.0)

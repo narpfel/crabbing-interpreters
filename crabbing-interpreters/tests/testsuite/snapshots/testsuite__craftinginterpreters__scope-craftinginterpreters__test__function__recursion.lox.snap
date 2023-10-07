@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun fib (global @1) [n] []
+   (fun fib (global @1) [(local n @0)] []
       (block
          (if
             (< (local n @0) 2.0)

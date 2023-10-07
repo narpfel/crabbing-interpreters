@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (fun fib (cell @0) [n] [Some(0)]
+      (fun fib (cell @0) [(local n @0)] [Some(0)]
          (block
             (if
                (< (local n @0) 2.0)

@@ -267,16 +267,24 @@ impl<'a> Scopes<'a> {
         Ok(result)
     }
 
+    #[allow(clippy::type_complexity)]
     fn with_function(
         &mut self,
-        f: impl FnOnce(&mut Self) -> Result<&'a [Statement<'a>], Error<'a>>,
-    ) -> Result<(&'a [Statement<'a>], IndexMap<Variable<'a>, CellRef<'a>>), Error<'a>> {
+        f: impl FnOnce(&mut Self) -> Result<(&'a [Variable<'a>], &'a [Statement<'a>]), Error<'a>>,
+    ) -> Result<
+        (
+            &'a [Variable<'a>],
+            &'a [Statement<'a>],
+            IndexMap<Variable<'a>, CellRef<'a>>,
+        ),
+        Error<'a>,
+    > {
         self.push();
         let old_offset = std::mem::take(&mut self.offset);
-        let body = f(self)?;
+        let (parameters, body) = f(self)?;
         let scope = self.pop();
         self.offset = old_offset;
-        Ok((body, scope.cells))
+        Ok((parameters, body, scope.cells))
     }
 
     fn current_stack_size(&self) -> usize {
@@ -335,8 +343,7 @@ pub enum Statement<'a> {
     },
     Function {
         target: Variable<'a>,
-        parameters: &'a [Name<'a>],
-        parameter_names: &'a [&'a str],
+        parameters: &'a [Variable<'a>],
         body: &'a [Statement<'a>],
         cells: &'a [Option<usize>],
     },
@@ -390,18 +397,15 @@ impl Statement<'_> {
                     .unwrap_or_else(|| "∅".to_string()),
                 body.as_sexpr(indent).trim_end(),
             ),
-            Statement::Function {
-                target,
-                parameter_names,
-                body,
-                parameters: _,
-                cells,
-            } => format!(
+            Statement::Function { target, body, parameters, cells } => format!(
                 "(fun {name} {} [{params}] {cells:?}\n{})",
                 target.target(),
                 Statement::Block(body).as_sexpr(indent).trim_end(),
                 name = target.name.slice(),
-                params = parameter_names.join(" "),
+                params = parameters
+                    .iter()
+                    .map(|variable| variable.as_sexpr())
+                    .join(" "),
             ),
             Statement::Return(expr) => format!(
                 "(return {})",
@@ -711,30 +715,27 @@ fn resolve_stmt<'a>(
             fun: _,
             name,
             parameters,
-            parameter_names,
             body,
             close_brace: _,
         } => {
             let target = scopes.add(name)?;
-            let (body, nonlocal_names) = scopes.with_function(|scopes| {
-                for name in *parameters {
-                    scopes.add(name)?;
-                }
-                Ok(&*bump.alloc_slice_copy(
-                    &body
-                        .iter()
-                        .map(|stmt| resolve_stmt(bump, scopes, stmt))
-                        .collect::<Result<Vec<_>, _>>()?,
+            let (parameters, body, nonlocal_names) = scopes.with_function(|scopes| {
+                let variables: Vec<_> = parameters
+                    .iter()
+                    .map(|name| scopes.add(name))
+                    .try_collect()?;
+                Ok((
+                    bump.alloc_slice_copy(&variables),
+                    &*bump.alloc_slice_copy(
+                        &body
+                            .iter()
+                            .map(|stmt| resolve_stmt(bump, scopes, stmt))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ),
                 ))
             })?;
             let cells = cell_slots(bump, scopes, &nonlocal_names);
-            Statement::Function {
-                target,
-                parameters,
-                parameter_names,
-                body,
-                cells,
-            }
+            Statement::Function { target, parameters, body, cells }
         }
         Return { return_token, expr, semi: _ } =>
             if !scopes.is_in_function() {

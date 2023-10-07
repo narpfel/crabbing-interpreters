@@ -28,6 +28,7 @@ use crate::scope::ExpressionTypes;
 use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
+use crate::scope::Variable;
 use crate::Sliced;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -47,7 +48,7 @@ pub struct Function<'a>(Rc<FunctionInner<'a>>);
 
 struct FunctionInner<'a> {
     name: &'a str,
-    parameters: &'a [&'a str],
+    parameters: &'a [Variable<'a>],
     code: &'a [Statement<'a>],
     cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
 }
@@ -403,17 +404,18 @@ pub fn eval<'a>(
                             at: expr.into_variant(),
                         })?;
                     }
-                    let arguments = *arguments;
-                    arguments.iter().enumerate().try_for_each(|(i, arg)| {
-                        let arg = eval(env, cell_vars, offset, arg)?;
-                        env.define(
-                            cell_vars,
-                            offset + stack_size_at_callsite,
-                            Target::Local(i),
-                            arg,
-                        )?;
-                        Ok::<(), Box<Error<'a>>>(())
-                    })?;
+                    arguments
+                        .iter()
+                        .zip(func.0.parameters)
+                        .try_for_each(|(arg, param)| {
+                            let arg = eval(env, cell_vars, offset, arg)?;
+                            env.define(
+                                &func.0.cells,
+                                offset + stack_size_at_callsite,
+                                param.target(),
+                                arg,
+                            )
+                        })?;
                     match execute(
                         env,
                         offset + stack_size_at_callsite,
@@ -516,13 +518,7 @@ pub fn execute<'a>(
                 }
                 Ok::<_, Box<Error<'a>>>(Value::Nil)
             }?,
-            Statement::Function {
-                target,
-                parameters: _,
-                parameter_names,
-                body,
-                cells,
-            } => {
+            Statement::Function { target, parameters, body, cells } => {
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
                 env.define(cell_vars, offset, target.target(), Value::Nil)?;
@@ -539,7 +535,7 @@ pub fn execute<'a>(
                     target.target(),
                     Value::Function(Function(Rc::new(FunctionInner {
                         name: target.name.slice(),
-                        parameters: parameter_names,
+                        parameters,
                         code: body,
                         cells,
                     }))),

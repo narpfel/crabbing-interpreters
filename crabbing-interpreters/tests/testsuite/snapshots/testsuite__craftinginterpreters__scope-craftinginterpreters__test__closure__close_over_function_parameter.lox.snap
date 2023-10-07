@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (var f (global @1) ∅)
-   (fun foo (global @2) [param] [None]
+   (fun foo (global @2) [(cell param @0)] [None]
       (block
          (fun f_ (local @1) [] [Some(0)]
             (block

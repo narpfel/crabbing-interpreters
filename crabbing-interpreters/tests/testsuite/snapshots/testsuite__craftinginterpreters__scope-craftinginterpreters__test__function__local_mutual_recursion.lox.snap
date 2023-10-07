@@ -12,14 +12,14 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (fun isEven (cell @0) [n] []
+      (fun isEven (cell @0) [(local n @0)] []
          (block
             (if
                (== (local n @0) 0.0)
                (return true)
                ∅)
             (return (call +1 (global-by-name isOdd) (- (local n @0) 1.0)))))
-      (fun isOdd (local @2) [n] [Some(0)]
+      (fun isOdd (local @2) [(local n @0)] [Some(0)]
          (block
             (if
                (== (local n @0) 0.0)

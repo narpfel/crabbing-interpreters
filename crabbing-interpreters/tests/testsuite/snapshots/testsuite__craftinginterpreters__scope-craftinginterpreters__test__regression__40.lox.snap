@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun caller (global @1) [g] []
+   (fun caller (global @1) [(local g @0)] []
       (block
          (expr (call +1 (local g @0)))
          (print (== (local g @0) nil))))

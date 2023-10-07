@@ -142,7 +142,6 @@ pub enum Statement<'a> {
         fun: Token<'a>,
         name: Name<'a>,
         parameters: &'a [Name<'a>],
-        parameter_names: &'a [&'a str],
         body: &'a [Statement<'a>],
         close_brace: Token<'a>,
     },
@@ -176,7 +175,6 @@ impl<'a> Statement<'a> {
                 fun,
                 name: _,
                 parameters: _,
-                parameter_names: _,
                 body: _,
                 close_brace,
             } => fun.loc().until(close_brace.loc()),
@@ -544,7 +542,6 @@ fn function<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
         fun,
         name,
         parameters: bump.alloc_slice_copy(&parameters),
-        parameter_names: bump.alloc_slice_fill_iter(parameters.iter().map(Name::slice)),
         body,
         close_brace,
     })
