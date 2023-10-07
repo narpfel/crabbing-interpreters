@@ -205,14 +205,16 @@ pub enum NativeError<'a> {
     ArityMismatch { expected: usize },
 }
 
+const ENV_SIZE: usize = 100_000;
+
 pub struct Environment<'a> {
-    stack: Box<[Value<'a>; 100_000]>,
+    stack: Box<[Value<'a>; ENV_SIZE]>,
     globals: HashMap<&'a str, usize>,
 }
 
 impl<'a> Environment<'a> {
     pub fn new(global_names: HashMap<&'a str, usize>) -> Self {
-        let mut globals: Box<[Value<'a>; 100_000]> = vec![Value::Nil; 100_000]
+        let mut globals: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
             .into_boxed_slice()
             .try_into()
             .unwrap();
