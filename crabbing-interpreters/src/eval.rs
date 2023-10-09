@@ -424,7 +424,7 @@ pub fn eval<'a>(
                         func.0.code,
                         &func.0.cells,
                     ) {
-                        Ok(value) => Ok(value),
+                        Ok(_) => Ok(Value::Nil),
                         Err(ControlFlow::Return(value)) => Ok(value),
                         Err(ControlFlow::Error(err)) => Err(err),
                     }?

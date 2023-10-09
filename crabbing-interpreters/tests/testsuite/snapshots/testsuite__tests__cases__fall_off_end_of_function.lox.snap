@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/fall_off_end_of_function.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+nil
+
+----- stderr -----
