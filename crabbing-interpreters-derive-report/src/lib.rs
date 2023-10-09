@@ -1,3 +1,5 @@
+#![feature(iterator_try_collect)]
+
 use std::borrow::Cow;
 use std::collections::HashSet;
 
@@ -71,7 +73,7 @@ impl Parse for Diagnostics {
                             Pat::Ident(ident) => Ok((ident.ident.to_string(), expr)),
                             _ => Err(Error::new_spanned(pat, "only ident patterns are allowed")),
                         })
-                        .collect::<Result<_>>()?,
+                        .try_collect()?,
                 ))
             })?
             .into_iter()

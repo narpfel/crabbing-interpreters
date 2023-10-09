@@ -257,6 +257,8 @@ impl<'a> Expression<'a> {
 
     #[cfg(test)]
     pub fn as_sexpr(&self) -> String {
+        use itertools::Itertools;
+
         match self {
             Expression::Literal(lit) => lit.kind.value_string(),
             Expression::Unary(operator, operand) =>
@@ -279,7 +281,7 @@ impl<'a> Expression<'a> {
                 arguments
                     .iter()
                     .map(Expression::as_sexpr)
-                    .collect::<Vec<_>>()
+                    .collect_vec()
                     .join(" ")
             ),
         }

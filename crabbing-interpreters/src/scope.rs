@@ -613,7 +613,7 @@ impl<'a> Expression<'a> {
                 arguments
                     .iter()
                     .map(Expression::as_sexpr)
-                    .collect::<Vec<_>>()
+                    .collect_vec()
                     .join(" "),
             ),
             Expression::Name(variable) => variable.as_sexpr(),
