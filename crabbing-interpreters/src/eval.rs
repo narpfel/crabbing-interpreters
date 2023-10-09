@@ -213,12 +213,12 @@ pub struct Environment<'a> {
 }
 
 impl<'a> Environment<'a> {
-    pub fn new(global_names: HashMap<&'a str, usize>) -> Self {
-        let mut globals: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
+    pub fn new(globals: HashMap<&'a str, usize>) -> Self {
+        let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
             .into_boxed_slice()
             .try_into()
             .unwrap();
-        globals[0] = Value::NativeFunction(|arguments| {
+        stack[0] = Value::NativeFunction(|arguments| {
             if !arguments.is_empty() {
                 return Err(NativeError::ArityMismatch { expected: 0 });
             }
@@ -227,7 +227,7 @@ impl<'a> Environment<'a> {
                 START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
             ))
         });
-        Self { stack: globals, globals: global_names }
+        Self { stack, globals }
     }
 
     fn get(
