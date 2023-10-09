@@ -658,11 +658,16 @@ fn resolve_stmt<'a>(
         Expression { expr, semi: _ } => Statement::Expression(resolve_expr(bump, scopes, expr)),
         Print { print: _, expr, semi: _ } => Statement::Print(resolve_expr(bump, scopes, expr)),
         Var { var: _, name, init, semi: _ } => {
+            // FIXME
+            // > { var q = q; print q; }
+            // [line 1] Error at 'q': Can't read local variable in its own initializer.
+            //
+            // > var q = q; print q;
+            // Undefined variable 'q'.
+            // [line 1] in script
+            let init = init.as_ref().map(|init| resolve_expr(bump, scopes, init));
             let variable = scopes.add(name)?;
-            Statement::Var(
-                variable,
-                init.as_ref().map(|init| resolve_expr(bump, scopes, init)),
-            )
+            Statement::Var(variable, init)
         }
         Block { open_brace: _, stmts, close_brace: _ } => scopes.with_block(|scopes| {
             Ok(Statement::Block(
