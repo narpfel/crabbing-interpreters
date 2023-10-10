@@ -635,6 +635,7 @@ pub(crate) fn resolve_names<'a>(
             .map(|stmt| resolve_stmt(bump, &mut scopes, stmt))
             .collect::<Result<Vec<_>, _>>()?,
     );
+    assert!(scopes.is_in_globals());
     assert!(scopes
         .scopes
         .first()
