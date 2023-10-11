@@ -247,7 +247,10 @@ pub fn run<'a>(
                 scope::resolve_names(bump, globals, ast)
             })?;
         if args.scopes {
-            println!("(program");
+            print!("(program");
+            if !scoped_ast.is_empty() {
+                println!();
+            }
             let mut sexpr = String::new();
             for stmt in scoped_ast {
                 write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
