@@ -556,6 +556,8 @@ pub fn execute<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use bumpalo::Bump;
     use rstest::fixture;
     use rstest::rstest;
@@ -570,7 +572,8 @@ mod tests {
     }
 
     fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
-        let Ok((&[semi], _)) = crate::lex(bump, "<src>", ";")
+        let (tokens, _) = crate::lex(bump, Path::new("<src>"), ";");
+        let Ok(&[semi]) = tokens.collect::<Result<Vec<_>, _>>().as_deref()
         else {
             unreachable!()
         };

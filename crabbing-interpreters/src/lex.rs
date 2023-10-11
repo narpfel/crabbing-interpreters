@@ -91,18 +91,6 @@ impl<'a> Loc<'a> {
         *self
     }
 
-    pub(crate) fn line(&self) -> usize {
-        self.src
-            .split_inclusive('\n')
-            .scan(0, |offset, line| {
-                *offset += line.len();
-                Some(*offset)
-            })
-            .position(|offset| self.span.start < offset)
-            .unwrap()
-            + 1
-    }
-
     pub(crate) fn file(&self) -> &'a Path {
         self.file
     }
@@ -294,63 +282,58 @@ impl TokenKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Error<'a> {
-    at: crate::lex::Loc<'a>,
+    pub(crate) at: crate::lex::Loc<'a>,
 }
 
-impl crate::Report for Error<'_> {
-    fn print(&self) {
-        eprintln!("[line {}] Error: Unterminated string.", self.at.line())
-    }
-
-    fn exit_code(&self) -> i32 {
-        65
+impl<'a> Error<'a> {
+    pub fn loc(&self) -> Loc<'a> {
+        self.at
     }
 }
 
-pub fn lex<'a>(
-    bump: &'a Bump,
-    filename: impl AsRef<Path>,
-    src: &str,
-) -> Result<(&'a [Token<'a>], Loc<'a>), Error<'a>> {
-    let filename = bump.alloc_path(filename.as_ref());
+pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, crate::lex::Error<'a>>>;
+
+pub fn lex<'a>(bump: &'a Bump, filename: &Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
+    let filename = bump.alloc_path(filename);
     let src = bump.alloc_str(src);
-
-    let tokens = TokenKind::lexer(src)
-        .spanned()
-        .map(|(kind, span)| {
-            let loc = Loc {
-                file: filename,
-                src,
-                span: Span { start: span.start, end: span.end },
-            };
-            Ok(Token {
-                kind: kind.map_err(|()| Error { at: loc })?,
-                loc,
-            })
+    let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
+        let loc = Loc {
+            file: filename,
+            src,
+            span: Span { start: span.start, end: span.end },
+        };
+        Ok(Token {
+            kind: kind.map_err(|()| Error { at: loc })?,
+            loc,
         })
-        .collect::<Result<Vec<_>, Error>>()?;
-
+    });
     let eof_loc = Loc {
         file: filename,
         src,
         span: Span { start: src.len(), end: src.len() },
     };
-    Ok((bump.alloc_slice_copy(&tokens), eof_loc))
+    (tokens, eof_loc)
 }
 
 #[cfg(test)]
 mod test {
+    use rstest::fixture;
     use rstest::rstest;
 
     use super::*;
 
+    #[fixture]
+    fn bump() -> Bump {
+        Bump::new()
+    }
+
     macro_rules! check {
         ($body:expr) => {
-            for<'a> |result: Result<&'a [Token<'a>], Error<'a>>| -> () {
+            for<'a> |result: TokenIter<'a>| -> () {
                 #[allow(clippy::redundant_closure_call)]
-                let () = $body(result);
+                let () = $body(result.collect::<Result<Vec<_>, _>>());
             }
         };
     }
@@ -369,10 +352,10 @@ mod test {
         check_err!(Error { at: Loc { span: Span { start: 0, end: FULLWIDTH_NUMBER_4_LEN }, .. } }),
     )]
     fn test_lex_error(
+        bump: Bump,
         #[case] src: &str,
-        #[case] expected: impl for<'a> FnOnce(Result<&'a [Token<'a>], Error<'a>>),
+        #[case] expected: impl for<'a> FnOnce(TokenIter<'a>),
     ) {
-        let bump = &Bump::new();
-        expected(lex(bump, "<src>", src).map(|(tokens, _)| tokens));
+        expected(lex(&bump, Path::new("<src>"), src).0)
     }
 }

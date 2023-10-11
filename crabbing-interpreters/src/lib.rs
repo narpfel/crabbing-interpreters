@@ -1,3 +1,4 @@
+#![feature(type_alias_impl_trait)]
 #![feature(closure_lifetime_binder)]
 #![feature(error_generic_member_access)]
 #![feature(lint_reasons)]
@@ -182,13 +183,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             }
             first = false;
-            let (tokens, eof_loc) = match lex(bump, "<input>", &line) {
-                Ok(tokens) => tokens,
-                Err(err) => {
-                    err.print();
-                    continue 'repl;
-                }
-            };
+            let (tokens, eof_loc) = lex(bump, Path::new("<input>"), &line);
             match parse(program, bump, tokens, eof_loc) {
                 Ok(stmts) => break stmts,
                 Err(parse::Error::Eof { at: _ }) => (),
@@ -242,7 +237,7 @@ pub fn run<'a>(
                     &std::fs::read_to_string(&filename)
                         .map_err(|err| IoError { path: filename, io_error: err })?,
                 ),
-            )?)
+            ))
         })?;
         let ast = time("ast", args.times, || parse(program, bump, tokens, eof_loc))?;
         let globals =

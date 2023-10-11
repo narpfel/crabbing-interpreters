@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/main.rs
+source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args: []
@@ -10,4 +10,10 @@ exit_code: 0
 ----- stdout -----
 [0mλ» [1m[0m[0mλ» [1m[0m
 ----- stderr -----
-[line 1] Error: Unterminated string.
+Error: unterminated string literal
+   ╭─[<input>:1:1]
+   │
+ 1 │ "unterminated string literal
+   │ ────────────────────────────  
+   │                                
+───╯

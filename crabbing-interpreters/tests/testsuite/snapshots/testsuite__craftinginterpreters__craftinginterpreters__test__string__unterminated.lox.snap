@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 2] Error: Unterminated string.
+Error: unterminated string literal
+   ╭─[craftinginterpreters/test/string/unterminated.lox:2:1]
+   │
+ 2 │ "this string has no close quote
+   │ ───────────────────────────────  
+   │                                   
+───╯

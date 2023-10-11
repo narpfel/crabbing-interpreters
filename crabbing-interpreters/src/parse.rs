@@ -1,4 +1,3 @@
-use std::iter::Copied;
 use std::iter::Peekable;
 
 use ariadne::Color::Blue;
@@ -8,6 +7,7 @@ use crabbing_interpreters_derive_report::Report;
 
 use crate::lex::Loc;
 use crate::lex::Token;
+use crate::lex::TokenIter;
 use crate::lex::TokenKind;
 use crate::scope::ErrorAtToken;
 use crate::Sliced;
@@ -79,11 +79,23 @@ pub enum Error<'a> {
         )]
         at: ErrorAtToken<'a, Statement<'a>>,
     },
+
+    #[error("unterminated string literal")]
+    UnterminatedStringLiteral {
+        #[diagnostics(at(colour = Red))]
+        at: crate::lex::Error<'a>,
+    },
 }
 
 impl<'a> From<Eof<'a>> for Error<'a> {
     fn from(value: Eof<'a>) -> Self {
         Self::Eof { at: value }
+    }
+}
+
+impl<'a> From<crate::lex::Error<'a>> for Error<'a> {
+    fn from(value: crate::lex::Error<'a>) -> Self {
+        Self::UnterminatedStringLiteral { at: value }
     }
 }
 
@@ -415,17 +427,22 @@ impl<'a> Name<'a> {
 }
 
 pub struct Tokens<'a> {
-    iter: Peekable<Copied<std::slice::Iter<'a, Token<'a>>>>,
+    iter: Peekable<TokenIter<'a>>,
     eof_loc: Loc<'a>,
 }
 
 impl<'a> Tokens<'a> {
-    fn next(&mut self) -> Result<Token<'a>, Eof<'a>> {
-        self.iter.next().not_eof(&self.eof_loc)
+    fn next(&mut self) -> Result<Token<'a>, Error<'a>> {
+        Ok(self.iter.next().transpose()?.not_eof(&self.eof_loc)?)
     }
 
-    fn peek(&mut self) -> Result<Token<'a>, Eof<'a>> {
-        self.iter.peek().copied().not_eof(&self.eof_loc)
+    fn peek(&mut self) -> Result<Token<'a>, Error<'a>> {
+        Ok(self
+            .iter
+            .peek()
+            .copied()
+            .transpose()?
+            .not_eof(&self.eof_loc)?)
     }
 
     fn consume(&mut self, kind: TokenKind) -> Result<Token<'a>, Error<'a>> {
@@ -454,7 +471,7 @@ impl<'a> Tokens<'a> {
     fn eof(&mut self) -> Result<(), Error<'a>> {
         let token = self.iter.peek();
         if let Some(&token) = token {
-            Err(Error::ExpectedEof { at: ErrorAtToken::at(token) })
+            Err(Error::ExpectedEof { at: ErrorAtToken::at(token?) })
         }
         else {
             Ok(())
@@ -465,13 +482,10 @@ impl<'a> Tokens<'a> {
 pub fn parse<'a, T>(
     parser: impl FnOnce(&'a Bump, &mut Tokens<'a>) -> Result<T, Error<'a>>,
     bump: &'a Bump,
-    tokens: &'a [Token<'a>],
+    tokens: TokenIter<'a>,
     eof_loc: Loc<'a>,
 ) -> Result<T, Error<'a>> {
-    let tokens = &mut Tokens {
-        iter: tokens.iter().copied().peekable(),
-        eof_loc,
-    };
+    let tokens = &mut Tokens { iter: tokens.peekable(), eof_loc };
     let result = parser(bump, tokens)?;
     tokens.eof()?;
     Ok(result)
@@ -937,12 +951,14 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::path::Path;
+
     use rstest::rstest;
 
     use super::*;
 
     pub(crate) fn parse_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Expression<'a>, Error<'a>> {
-        let (tokens, eof_loc) = crate::lex(bump, "<test>", src).unwrap();
+        let (tokens, eof_loc) = crate::lex(bump, Path::new("<test>"), src);
         parse(expression, bump, tokens, eof_loc)
     }
 

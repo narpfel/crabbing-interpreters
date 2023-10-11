@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -10,4 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-[line 3] Error: Unterminated string.
+Error: unterminated string literal
+   ╭─[craftinginterpreters/test/unexpected_character.lox:3:7]
+   │
+ 3 │ foo(a | b);
+   │       ─  
+   │           
+───╯
