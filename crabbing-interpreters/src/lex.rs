@@ -18,7 +18,7 @@ impl<'a> Token<'a> {
     }
 
     pub fn slice(&self) -> &'a str {
-        &self.loc.src[self.loc.span()]
+        self.loc.slice()
     }
 
     pub fn as_debug_string(&self) -> String {
@@ -32,11 +32,9 @@ impl<'a> Token<'a> {
             _ => TokenValue::None,
         }
     }
-}
 
-impl Token<'static> {
-    pub(crate) fn debug_token(kind: TokenKind, src: &'static str) -> Self {
-        Token { kind, loc: Loc::debug_loc(src) }
+    pub(crate) fn debug_token(bump: &'a Bump, kind: TokenKind, src: &'a str) -> Self {
+        Token { kind, loc: Loc::debug_loc(bump, src) }
     }
 }
 
@@ -64,25 +62,36 @@ impl std::fmt::Display for TokenValue<'_> {
 }
 
 #[derive(Clone, Copy)]
-pub struct Loc<'a> {
+struct SourceFile<'a> {
     file: &'a Path,
     src: &'a str,
-    span: Span,
 }
 
-impl Loc<'static> {
-    fn debug_loc(src: &'static str) -> Self {
+impl<'a> SourceFile<'a> {
+    fn debug_source_file(bump: &'a Bump, src: &'a str) -> &'a Self {
+        let file: &'static Path = Path::new("");
+        bump.alloc(Self { file, src })
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Loc<'a> {
+    span: Span,
+    source_file: &'a SourceFile<'a>,
+}
+
+impl<'a> Loc<'a> {
+    fn debug_loc(bump: &'a Bump, src: &'a str) -> Self {
         Loc {
-            file: Path::new(""),
-            src,
             span: Span { start: 0, end: src.len() },
+            source_file: SourceFile::debug_source_file(bump, src),
         }
     }
 }
 
 impl std::fmt::Debug for Loc<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{:?}", self.file.display(), self.span())
+        write!(f, "{}:{:?}", self.file().display(), self.span())
     }
 }
 
@@ -92,7 +101,11 @@ impl<'a> Loc<'a> {
     }
 
     pub(crate) fn file(&self) -> &'a Path {
-        self.file
+        self.source_file.file
+    }
+
+    fn src(&self) -> &'a str {
+        self.source_file.src
     }
 
     pub(crate) fn start(&self) -> usize {
@@ -104,12 +117,12 @@ impl<'a> Loc<'a> {
     }
 
     pub(crate) fn slice(&self) -> &'a str {
-        &self.src[self.span()]
+        &self.src()[self.span()]
     }
 
     pub(crate) fn until(self, other: Self) -> Self {
-        assert_eq!(self.file, other.file);
-        assert_eq!(self.src, other.src);
+        assert_eq!(self.file(), other.file());
+        assert_eq!(self.src(), other.src());
         assert!(self.span.end <= other.span.start);
         Self {
             span: Span {
@@ -146,7 +159,7 @@ impl<'a> Loc<'a> {
                 Some(Box::new(id.display()))
             }
         }
-        Cache(self.file(), ariadne::Source::from(self.src))
+        Cache(self.file(), ariadne::Source::from(self.src()))
     }
 }
 
@@ -154,7 +167,7 @@ impl ariadne::Span for Loc<'_> {
     type SourceId = Path;
 
     fn source(&self) -> &Self::SourceId {
-        self.file
+        self.file()
     }
 
     fn start(&self) -> usize {
@@ -298,11 +311,11 @@ pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, crate::lex::Erro
 pub fn lex<'a>(bump: &'a Bump, filename: &Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
     let filename = bump.alloc_path(filename);
     let src = bump.alloc_str(src);
+    let source_file = &*bump.alloc(SourceFile { file: filename, src });
     let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
         let loc = Loc {
-            file: filename,
-            src,
             span: Span { start: span.start, end: span.end },
+            source_file,
         };
         Ok(Token {
             kind: kind.map_err(|()| Error { at: loc })?,
@@ -310,9 +323,8 @@ pub fn lex<'a>(bump: &'a Bump, filename: &Path, src: &str) -> (TokenIter<'a>, Lo
         })
     });
     let eof_loc = Loc {
-        file: filename,
-        src,
         span: Span { start: src.len(), end: src.len() },
+        source_file,
     };
     (tokens, eof_loc)
 }

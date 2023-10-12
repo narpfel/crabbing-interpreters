@@ -156,8 +156,11 @@ enum StopAt {
 
 fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
-    let globals_names =
-        bump.alloc_slice_copy(&[Name(Token::debug_token(TokenKind::Identifier, "clock"))]);
+    let globals_names = bump.alloc_slice_copy(&[Name(Token::debug_token(
+        bump,
+        TokenKind::Identifier,
+        "clock",
+    ))]);
     let mut globals = Environment::new([("clock", 0)].into_iter().collect());
     let mut line = String::new();
     'repl: loop {
@@ -240,8 +243,11 @@ pub fn run<'a>(
             ))
         })?;
         let ast = time("ast", args.times, || parse(program, bump, tokens, eof_loc))?;
-        let globals =
-            bump.alloc_slice_copy(&[Name(Token::debug_token(TokenKind::Identifier, "clock"))]);
+        let globals = bump.alloc_slice_copy(&[Name(Token::debug_token(
+            bump,
+            TokenKind::Identifier,
+            "clock",
+        ))]);
         let (scoped_ast, global_name_offsets, global_cell_count) =
             time("scp", args.times, move || {
                 scope::resolve_names(bump, globals, ast)
