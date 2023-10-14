@@ -7,6 +7,9 @@ members = [
     "variant-types-derive",
 ]
 
+[profile.dev.package."*"]
+opt-level = "z"
+
 [profile.perf]
 inherits = "release"
 debug = 2
