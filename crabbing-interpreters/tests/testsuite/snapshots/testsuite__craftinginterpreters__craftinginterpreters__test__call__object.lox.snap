@@ -6,14 +6,14 @@ info:
     - craftinginterpreters/test/call/object.lox
 ---
 success: false
-exit_code: 65
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/call/object.lox:1:1]
+Error: not callable: `<class Foo at [POINTER]>` is of type `Class`
+   ╭─[craftinginterpreters/test/call/object.lox:3:11]
    │
- 1 │ class Foo {}
-   │ ─────  
-   │         
+ 3 │ var foo = Foo();
+   │           ─┬─  
+   │            ╰─── this expression is of type `Class`
 ───╯

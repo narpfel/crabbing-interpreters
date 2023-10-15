@@ -39,6 +39,7 @@ pub enum Value<'a> {
     Nil,
     Function(Function<'a>),
     NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
+    Class(Class<'a>),
 }
 
 unsafe impl CloneInCellSafe for Value<'_> {}
@@ -62,6 +63,7 @@ impl Value<'_> {
             Value::Nil => "Nil",
             Value::Function(_) => "Function",
             Value::NativeFunction(_) => "NativeFunction",
+            Value::Class(_) => "Class",
         }
     }
 
@@ -91,6 +93,7 @@ impl Display for Value<'_> {
             Value::Nil => write!(f, "nil"),
             Value::Function(func) => write!(f, "{func:?}"),
             Value::NativeFunction(_) => write!(f, "<native fn>"),
+            Value::Class(class) => write!(f, "{class:?}"),
         }
     }
 }
@@ -108,6 +111,33 @@ impl PartialEq for Function<'_> {
 }
 
 impl PartialOrd for Function<'_> {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        None
+    }
+}
+
+#[derive(Clone)]
+pub struct Class<'a>(Rc<ClassInner<'a>>);
+
+struct ClassInner<'a> {
+    name: &'a str,
+    #[expect(unused)]
+    methods: HashMap<&'a str, Value<'a>>,
+}
+
+impl Debug for Class<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<class {} at {:p}>", self.0.name, Rc::as_ptr(&self.0))
+    }
+}
+
+impl PartialEq for Class<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialOrd for Class<'_> {
     fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
         None
     }
@@ -519,28 +549,12 @@ pub fn execute<'a>(
                 }
                 Ok::<_, Box<Error<'a>>>(Value::Nil)
             }?,
-            Statement::Function { target, parameters, body, cells } => {
+            Statement::Function { target, function } => {
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
                 env.define(cell_vars, offset, target.target(), Value::Nil)?;
-                let cells = cells
-                    .iter()
-                    .map(|cell| match cell {
-                        Some(idx) => Cell::new(cell_vars[*idx].get_clone()),
-                        None => Cell::new(Rc::new(Cell::new(Value::Nil))),
-                    })
-                    .collect();
-                env.set(
-                    cell_vars,
-                    offset,
-                    target.target(),
-                    Value::Function(Function(Rc::new(FunctionInner {
-                        name: target.name.slice(),
-                        parameters,
-                        code: body,
-                        cells,
-                    }))),
-                )?;
+                let function = eval_function(cell_vars, function);
+                env.set(cell_vars, offset, target.target(), function)?;
                 Value::Nil
             }
             Statement::Return(expr) => {
@@ -549,9 +563,46 @@ pub fn execute<'a>(
                     .map_or(Ok(Value::Nil), |expr| eval(env, cell_vars, offset, expr))?;
                 Err(ControlFlow::Return(return_value))?
             }
+            Statement::Class { target, methods } => {
+                env.define(cell_vars, offset, target.target(), Value::Nil)?;
+                let methods: HashMap<_, _> = methods
+                    .iter()
+                    .map(|method| (method.name, eval_function(cell_vars, method)))
+                    .collect();
+                env.set(
+                    cell_vars,
+                    offset,
+                    target.target(),
+                    Value::Class(Class(Rc::new(ClassInner {
+                        name: target.name.slice(),
+                        methods,
+                    }))),
+                )?;
+                Value::Nil
+            }
         }
     }
     Ok(last_value)
+}
+
+fn eval_function<'a>(
+    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    function: &crate::scope::Function<'a>,
+) -> Value<'a> {
+    let crate::scope::Function { name, parameters, body, cells } = function;
+    let cells = cells
+        .iter()
+        .map(|cell| match cell {
+            Some(idx) => Cell::new(cell_vars[*idx].get_clone()),
+            None => Cell::new(Rc::new(Cell::new(Value::Nil))),
+        })
+        .collect();
+    Value::Function(Function(Rc::new(FunctionInner {
+        name,
+        parameters,
+        code: body,
+        cells,
+    })))
 }
 
 #[cfg(test)]

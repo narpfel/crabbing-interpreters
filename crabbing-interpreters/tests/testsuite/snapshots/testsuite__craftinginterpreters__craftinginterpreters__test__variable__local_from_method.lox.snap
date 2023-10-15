@@ -10,10 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/variable/local_from_method.lox:3:1]
+Error: Expect a binary operator.
+   ╭─[craftinginterpreters/test/variable/local_from_method.lox:9:6]
    │
- 3 │ class Foo {
-   │ ─────  
-   │         
+ 9 │ Foo().method(); // expect: variable
+   │      ─  
+   │          
 ───╯

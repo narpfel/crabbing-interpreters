@@ -12,6 +12,12 @@ use crate::lex::TokenKind;
 use crate::scope::ErrorAtToken;
 use crate::Sliced;
 
+#[derive(Debug)]
+enum FunctionKind {
+    Function,
+    Method,
+}
+
 #[derive(Debug, Report)]
 #[exit_code(65)]
 pub enum Error<'a> {
@@ -151,7 +157,7 @@ pub enum Statement<'a> {
     // FIXME: functions should know their stack frame’s size to make it possible to reserve enough
     // space before calling them and to drop the frame after the call returns
     Function {
-        fun: Token<'a>,
+        fun: Option<Token<'a>>,
         name: Name<'a>,
         parameters: &'a [Name<'a>],
         body: &'a [Statement<'a>],
@@ -161,6 +167,12 @@ pub enum Statement<'a> {
         return_token: Token<'a>,
         expr: Option<Expression<'a>>,
         semi: Token<'a>,
+    },
+    Class {
+        class: Token<'a>,
+        name: Name<'a>,
+        methods: &'a [Statement<'a>],
+        close_brace: Token<'a>,
     },
 }
 
@@ -185,13 +197,15 @@ impl<'a> Statement<'a> {
             } => for_token.loc().until(body.loc()),
             Statement::Function {
                 fun,
-                name: _,
+                name,
                 parameters: _,
                 body: _,
                 close_brace,
-            } => fun.loc().until(close_brace.loc()),
+            } => fun.unwrap_or(name.0).loc().until(close_brace.loc()),
             Statement::Return { return_token, expr: _, semi } =>
                 return_token.loc().until(semi.loc()),
+            Statement::Class { class, name: _, methods: _, close_brace } =>
+                class.loc().until(close_brace.loc()),
         }
     }
 
@@ -206,6 +220,7 @@ impl<'a> Statement<'a> {
             Statement::For { .. } => "for",
             Statement::Function { .. } => "function definition",
             Statement::Return { .. } => "return",
+            Statement::Class { .. } => "class",
         }
     }
 }
@@ -508,9 +523,31 @@ pub fn program<'a>(
 fn declaration<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
     let token = tokens.peek()?;
     Ok(match token.kind {
+        TokenKind::Class => class(bump, tokens)?,
         TokenKind::Var => vardecl(bump, tokens)?,
-        TokenKind::Fun => function(bump, tokens)?,
+        TokenKind::Fun => function(bump, tokens, FunctionKind::Function)?,
         _ => statement(bump, tokens)?,
+    })
+}
+
+fn class<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+    let class = tokens.consume(TokenKind::Class)?;
+    let name = Name(tokens.consume(TokenKind::Identifier)?);
+    tokens.consume(TokenKind::LBrace)?;
+    let mut methods = Vec::new();
+    loop {
+        let token = tokens.peek()?;
+        if matches!(token.kind, TokenKind::RBrace) {
+            break;
+        }
+        methods.push(function(bump, tokens, FunctionKind::Method)?);
+    }
+    let close_brace = tokens.consume(TokenKind::RBrace)?;
+    Ok(Statement::Class {
+        class,
+        name,
+        methods: bump.alloc_slice_copy(&methods),
+        close_brace,
     })
 }
 
@@ -530,8 +567,15 @@ fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>,
     Ok(Statement::Var { var, name, init: initialiser, semi })
 }
 
-fn function<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
-    let fun = tokens.consume(TokenKind::Fun)?;
+fn function<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a>,
+    kind: FunctionKind,
+) -> Result<Statement<'a>, Error<'a>> {
+    let fun = match kind {
+        FunctionKind::Function => Some(tokens.consume(TokenKind::Fun)?),
+        FunctionKind::Method => None,
+    };
     let name = Name(tokens.consume(TokenKind::Identifier)?);
     tokens.consume(TokenKind::LParen)?;
     let mut parameters = Vec::new();

@@ -10,10 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/closure/close_over_method_parameter.lox:3:1]
-   │
- 3 │ class Foo {
-   │ ─────  
-   │         
-───╯
+Error: Expect a binary operator.
+    ╭─[craftinginterpreters/test/closure/close_over_method_parameter.lox:12:6]
+    │
+ 12 │ Foo().method("param");
+    │      ─  
+    │          
+────╯

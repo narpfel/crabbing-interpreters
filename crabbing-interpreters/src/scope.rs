@@ -321,6 +321,14 @@ impl<'a> Scopes<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct Function<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) parameters: &'a [Variable<'a>],
+    pub(crate) body: &'a [Statement<'a>],
+    pub(crate) cells: &'a [Option<usize>],
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
@@ -343,11 +351,13 @@ pub enum Statement<'a> {
     },
     Function {
         target: Variable<'a>,
-        parameters: &'a [Variable<'a>],
-        body: &'a [Statement<'a>],
-        cells: &'a [Option<usize>],
+        function: Function<'a>,
     },
     Return(Option<Expression<'a>>),
+    Class {
+        target: Variable<'a>,
+        methods: &'a [Function<'a>],
+    },
 }
 
 impl Statement<'_> {
@@ -397,7 +407,10 @@ impl Statement<'_> {
                     .unwrap_or_else(|| "∅".to_string()),
                 body.as_sexpr(indent).trim_end(),
             ),
-            Statement::Function { target, body, parameters, cells } => format!(
+            Statement::Function {
+                target,
+                function: Function { name: _, body, parameters, cells },
+            } => format!(
                 "(fun {name} {} [{params}] {cells:?}\n{})",
                 target.target(),
                 Statement::Block(body).as_sexpr(indent).trim_end(),
@@ -410,6 +423,29 @@ impl Statement<'_> {
             Statement::Return(expr) => format!(
                 "(return {})",
                 expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr()),
+            ),
+            Statement::Class { target, methods } => format!(
+                "(class {} {}{}{})",
+                target.name.slice(),
+                target.target(),
+                if methods.is_empty() { "" } else { "\n" },
+                methods
+                    .iter()
+                    .map(|Function { name, parameters, body, cells }| format!(
+                        "(method {name} [{params}] {cells:?}\n{})",
+                        Statement::Block(body).as_sexpr(indent).trim_end(),
+                        params = parameters
+                            .iter()
+                            .map(|variable| variable.as_sexpr())
+                            .join(" "),
+                    ))
+                    .join("\n")
+                    .lines()
+                    .fold(String::new(), |mut s, line| {
+                        writeln!(s, "{EMPTY:indent$}{line}").unwrap();
+                        s
+                    })
+                    .trim_end(),
             ),
         };
         result.lines().fold(String::new(), |mut s, line| {
@@ -717,31 +753,10 @@ fn resolve_stmt<'a>(
             })?;
             Statement::For { init, condition, update, body }
         }
-        Function {
-            fun: _,
-            name,
-            parameters,
-            body,
-            close_brace: _,
-        } => {
+        function @ Function { name, .. } => {
             let target = scopes.add(name)?;
-            let (parameters, body, nonlocal_names) = scopes.with_function(|scopes| {
-                let variables: Vec<_> = parameters
-                    .iter()
-                    .map(|name| scopes.add(name))
-                    .try_collect()?;
-                Ok((
-                    bump.alloc_slice_copy(&variables),
-                    &*bump.alloc_slice_copy(
-                        &body
-                            .iter()
-                            .map(|stmt| resolve_stmt(bump, scopes, stmt))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    ),
-                ))
-            })?;
-            let cells = cell_slots(bump, scopes, &nonlocal_names);
-            Statement::Function { target, parameters, body, cells }
+            let function = resolve_function(bump, scopes, function)?;
+            Statement::Function { target, function }
         }
         Return { return_token, expr, semi: _ } =>
             if !scopes.is_in_function() {
@@ -750,6 +765,16 @@ fn resolve_stmt<'a>(
             else {
                 Statement::Return(expr.as_ref().map(|expr| resolve_expr(bump, scopes, expr)))
             },
+        Class { class: _, name, methods, close_brace: _ } => {
+            let target = scopes.add(name)?;
+            let methods = bump.alloc_slice_copy(
+                &methods
+                    .iter()
+                    .map(|method| resolve_function(bump, scopes, method))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
+            Statement::Class { target, methods }
+        }
     })
 }
 
@@ -793,6 +818,45 @@ fn resolve_expr<'a>(
             stack_size_at_callsite: scopes.current_stack_size(),
         },
     }
+}
+
+fn resolve_function<'a>(
+    bump: &'a Bump,
+    scopes: &mut Scopes<'a>,
+    function: &'a parse::Statement<'a>,
+) -> Result<Function<'a>, Error<'a>> {
+    let parse::Statement::Function {
+        fun: _,
+        name,
+        parameters,
+        body,
+        close_brace: _,
+    } = function
+    else {
+        unreachable!()
+    };
+    let (parameters, body, nonlocal_names) = scopes.with_function(|scopes| {
+        let variables: Vec<_> = parameters
+            .iter()
+            .map(|name| scopes.add(name))
+            .try_collect()?;
+        Ok((
+            bump.alloc_slice_copy(&variables),
+            &*bump.alloc_slice_copy(
+                &body
+                    .iter()
+                    .map(|stmt| resolve_stmt(bump, scopes, stmt))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        ))
+    })?;
+    let cells = cell_slots(bump, scopes, &nonlocal_names);
+    Ok(Function {
+        name: name.slice(),
+        parameters,
+        body,
+        cells,
+    })
 }
 
 fn cell_slots<'a>(

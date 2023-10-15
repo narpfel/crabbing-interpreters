@@ -11,9 +11,9 @@ exit_code: 65
 
 ----- stderr -----
 Error: Expect expression.
-   ╭─[craftinginterpreters/test/assignment/to_this.lox:1:1]
+   ╭─[craftinginterpreters/test/assignment/to_this.lox:3:5]
    │
- 1 │ class Foo {
-   │ ─────  
-   │         
+ 3 │     this = "value"; // Error at '=': Invalid assignment target.
+   │     ────  
+   │            
 ───╯

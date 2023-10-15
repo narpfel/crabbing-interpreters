@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/equals_class.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1))
+   (class Bar (global @2))
+   (print (== (global Foo @1) (global Foo @1)))
+   (print (== (global Foo @1) (global Bar @2)))
+   (print (== (global Bar @2) (global Foo @1)))
+   (print (== (global Bar @2) (global Bar @2)))
+   (print (== (global Foo @1) "Foo"))
+   (print (== (global Foo @1) nil))
+   (print (== (global Foo @1) 123.0))
+   (print (== (global Foo @1) true)))
+
+----- stderr -----

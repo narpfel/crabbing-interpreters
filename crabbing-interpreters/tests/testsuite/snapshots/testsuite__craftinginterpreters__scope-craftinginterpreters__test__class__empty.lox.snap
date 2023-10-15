@@ -3,18 +3,15 @@ source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/operator/equals_class.lox
+    - craftinginterpreters/test/class/empty.lox
+    - "--scopes"
+    - "--stop-at=scopes"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-true
-false
-false
-true
-false
-false
-false
-false
+(program
+   (class Foo (global @1))
+   (print (global Foo @1)))
 
 ----- stderr -----

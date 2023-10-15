@@ -6,14 +6,15 @@ info:
     - craftinginterpreters/test/operator/not_class.lox
 ---
 success: false
-exit_code: 65
+exit_code: 70
 ----- stdout -----
+false
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/operator/not_class.lox:1:1]
+Error: not callable: `<class Bar at [POINTER]>` is of type `Class`
+   ╭─[craftinginterpreters/test/operator/not_class.lox:3:8]
    │
- 1 │ class Bar {}
-   │ ─────  
-   │         
+ 3 │ print !Bar();    // expect: false
+   │        ─┬─  
+   │         ╰─── this expression is of type `Class`
 ───╯

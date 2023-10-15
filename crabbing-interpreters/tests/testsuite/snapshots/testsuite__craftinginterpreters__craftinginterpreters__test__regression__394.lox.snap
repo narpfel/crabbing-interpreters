@@ -10,10 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/regression/394.lox:2:3]
+Error: at `<`: expected LBrace
+   ╭─[craftinginterpreters/test/regression/394.lox:3:11]
    │
- 2 │   class A {}
-   │   ─────  
-   │           
+ 3 │   class B < A {}
+   │           ─  
+   │               
 ───╯
