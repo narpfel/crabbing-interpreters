@@ -5,15 +5,9 @@ info:
   args:
     - craftinginterpreters/test/variable/local_from_method.lox
 ---
-success: false
-exit_code: 65
+success: true
+exit_code: 0
 ----- stdout -----
+variable
 
 ----- stderr -----
-Error: Expect a binary operator.
-   ╭─[craftinginterpreters/test/variable/local_from_method.lox:9:6]
-   │
- 9 │ Foo().method(); // expect: variable
-   │      ─  
-   │          
-───╯

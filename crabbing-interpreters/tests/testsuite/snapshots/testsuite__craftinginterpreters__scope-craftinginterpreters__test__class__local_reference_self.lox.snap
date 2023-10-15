@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/class/local_reference_self.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (block
+      (class Foo (cell @0)
+         (method returnSelf [] [Some(0)]
+            (block
+               (return (cell Foo @0)))))
+      (print (call +1 (attr (call +1 (cell Foo @0)) returnSelf)))))
+
+----- stderr -----

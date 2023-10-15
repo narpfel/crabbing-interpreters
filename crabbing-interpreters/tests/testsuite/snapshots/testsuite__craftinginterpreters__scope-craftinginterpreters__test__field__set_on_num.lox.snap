@@ -3,11 +3,14 @@ source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/return/in_method.lox
+    - craftinginterpreters/test/field/set_on_num.lox
+    - "--scopes"
+    - "--stop-at=scopes"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-ok
+(program
+   (expr (= (setattr 123.0 foo) "value")))
 
 ----- stderr -----

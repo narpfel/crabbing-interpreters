@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/method/missing_arguments.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1)
+      (method method [(local a @0) (local b @1)] []
+         (block)))
+   (expr (call +2 (attr (call +2 (global Foo @1)) method) 1.0)))
+
+----- stderr -----

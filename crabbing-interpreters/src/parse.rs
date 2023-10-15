@@ -241,7 +241,7 @@ pub enum Expression<'a> {
     },
     Ident(Name<'a>),
     Assign {
-        target: Name<'a>,
+        target: AssignmentTarget<'a>,
         equal: Token<'a>,
         value: &'a Expression<'a>,
     },
@@ -250,6 +250,10 @@ pub enum Expression<'a> {
         l_paren: Token<'a>,
         arguments: &'a [Expression<'a>],
         r_paren: Token<'a>,
+    },
+    Attribute {
+        lhs: &'a Expression<'a>,
+        attribute: Name<'a>,
     },
 }
 
@@ -263,6 +267,7 @@ impl<'a> Expression<'a> {
             Expression::Ident(name) => name.loc(),
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
+            Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
         }
     }
 
@@ -279,6 +284,7 @@ impl<'a> Expression<'a> {
             Expression::Ident(_) => "name",
             Expression::Assign { .. } => "assignment",
             Expression::Call { .. } => "call expression",
+            Expression::Attribute { .. } => "attribute access",
         }
     }
 
@@ -311,6 +317,8 @@ impl<'a> Expression<'a> {
                     .collect_vec()
                     .join(" ")
             ),
+            Expression::Attribute { lhs, attribute } =>
+                format!("(attr {} {})", lhs.as_sexpr(), attribute.slice(),),
         }
     }
 }
@@ -438,6 +446,29 @@ impl<'a> Name<'a> {
 
     pub(crate) fn slice(&self) -> &'a str {
         self.0.slice()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AssignmentTarget<'a> {
+    Name(Name<'a>),
+    Attribute {
+        lhs: &'a Expression<'a>,
+        attribute: Name<'a>,
+    },
+}
+
+impl<'a> AssignmentTarget<'a> {
+    fn loc(&self) -> Loc<'a> {
+        match self {
+            AssignmentTarget::Name(name) => name.loc(),
+            AssignmentTarget::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+        }
+    }
+
+    #[cfg(test)]
+    fn slice(&self) -> &'a str {
+        self.loc().slice()
     }
 }
 
@@ -809,16 +840,26 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
         _ => unexpected_token_with_message("expression", token)?,
     };
 
-    while let Ok(Token { kind: TokenKind::LParen, .. }) = tokens.peek() {
-        let l_paren = tokens.consume(TokenKind::LParen)?;
-        let arguments = call_arguments(bump, tokens)?;
-        let r_paren = tokens.consume(TokenKind::RParen)?;
-        expr = Expression::Call {
-            callee: bump.alloc(expr),
-            l_paren,
-            arguments,
-            r_paren,
-        };
+    loop {
+        expr = match tokens.peek() {
+            Ok(Token { kind: TokenKind::LParen, .. }) => {
+                let l_paren = tokens.consume(TokenKind::LParen)?;
+                let arguments = call_arguments(bump, tokens)?;
+                let r_paren = tokens.consume(TokenKind::RParen)?;
+                Expression::Call {
+                    callee: bump.alloc(expr),
+                    l_paren,
+                    arguments,
+                    r_paren,
+                }
+            }
+            Ok(Token { kind: TokenKind::Dot, .. }) => {
+                tokens.consume(TokenKind::Dot)?;
+                let attribute = Name(tokens.consume(TokenKind::Identifier)?);
+                Expression::Attribute { lhs: bump.alloc(expr), attribute }
+            }
+            _ => break,
+        }
     }
 
     Ok(expr)
@@ -905,12 +946,12 @@ fn unexpected_token_with_message<'a>(
     Err(Error::UnexpectedTokenMsg { expected, at: ErrorAtToken::at(actual) })
 }
 
-fn as_assignment_target(lhs: Expression) -> Result<Name, ()> {
-    if let Expression::Ident(name) = lhs {
-        Ok(name)
-    }
-    else {
-        Err(())
+fn as_assignment_target(lhs: Expression) -> Result<AssignmentTarget, ()> {
+    match lhs {
+        Expression::Ident(name) => Ok(AssignmentTarget::Name(name)),
+        Expression::Attribute { lhs, attribute } =>
+            Ok(AssignmentTarget::Attribute { lhs, attribute }),
+        _ => Err(()),
     }
 }
 

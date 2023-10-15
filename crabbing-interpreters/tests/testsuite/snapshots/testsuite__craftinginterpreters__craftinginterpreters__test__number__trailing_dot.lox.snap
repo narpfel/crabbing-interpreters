@@ -10,10 +10,10 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-Error: Expect a binary operator.
-   ╭─[craftinginterpreters/test/number/trailing_dot.lox:2:4]
+Error: at `;`: expected Identifier
+   ╭─[craftinginterpreters/test/number/trailing_dot.lox:2:5]
    │
  2 │ 123.;
-   │    ─  
-   │        
+   │     ─  
+   │         
 ───╯

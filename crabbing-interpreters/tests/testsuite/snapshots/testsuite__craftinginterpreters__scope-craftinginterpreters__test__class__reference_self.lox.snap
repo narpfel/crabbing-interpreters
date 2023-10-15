@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/class/reference_self.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1)
+      (method returnSelf [] []
+         (block
+            (return (global Foo @1)))))
+   (print (call +2 (attr (call +2 (global Foo @1)) returnSelf))))
+
+----- stderr -----

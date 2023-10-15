@@ -5,15 +5,10 @@ info:
   args:
     - craftinginterpreters/test/operator/equals_method.lox
 ---
-success: false
-exit_code: 65
+success: true
+exit_code: 0
 ----- stdout -----
+true
+true
 
 ----- stderr -----
-Error: Expect a binary operator.
-   ╭─[craftinginterpreters/test/operator/equals_method.lox:7:20]
-   │
- 7 │ var fooMethod = foo.method;
-   │                    ─  
-   │                        
-───╯

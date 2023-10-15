@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/call_function_field.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1))
+   (fun bar (global @2) [(local a @0) (local b @1)] []
+      (block
+         (print "bar")
+         (print (local a @0))
+         (print (local b @1))))
+   (var foo (global @3) (call +3 (global Foo @1)))
+   (expr (= (setattr (global foo @3) bar) (global bar @2)))
+   (expr (call +4 (attr (global foo @3) bar) 1.0 2.0)))
+
+----- stderr -----

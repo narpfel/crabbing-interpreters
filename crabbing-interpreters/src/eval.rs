@@ -24,6 +24,7 @@ use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 use crate::rc_str::RcStr;
+use crate::scope::AssignmentTarget;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
 use crate::scope::Slot;
@@ -125,7 +126,6 @@ pub struct Class<'a>(Rc<ClassInner<'a>>);
 
 struct ClassInner<'a> {
     name: &'a str,
-    #[expect(unused)]
     methods: HashMap<&'a str, Value<'a>>,
 }
 
@@ -152,7 +152,6 @@ pub struct Instance<'a>(Rc<InstanceInner<'a>>);
 
 struct InstanceInner<'a> {
     class: Class<'a>,
-    #[expect(unused)]
     attributes: RefCell<HashMap<&'a str, Value<'a>>>,
 }
 
@@ -263,6 +262,23 @@ pub enum Error<'a> {
             callee(label = "expects {expected} arguments", colour = Red),
         )]
         at: ExpressionTypes::Call<'a>,
+    },
+
+    #[error("only instances have properties, but `{lhs}` is of type `{lhs_typ}`")]
+    #[with(lhs_typ = lhs.typ())]
+    NoProperty {
+        lhs: Value<'a>,
+        #[diagnostics(lhs(colour = Red))]
+        at: ExpressionTypes::Attribute<'a>,
+    },
+
+    #[error("undefined property `{name}` of value `{lhs}`")]
+    #[with(name = attribute.slice())]
+    UndefinedProperty {
+        lhs: Value<'a>,
+        attribute: Name<'a>,
+        #[diagnostics(lhs(colour = Red), attribute(colour = Magenta))]
+        at: ExpressionTypes::Attribute<'a>,
     },
 }
 
@@ -394,14 +410,31 @@ pub fn eval<'a>(
                 Not => Bool(!value.is_truthy()),
             }
         }
-        Expression::Assign { target: variable, value, .. } => {
+        Expression::Assign { target, value, .. } => {
             let value = eval(env, cell_vars, offset, value)?;
-            if let Target::GlobalByName = variable.target() {
-                let slot = env.get_global_slot_by_name(variable.name)?;
-                variable.set_target(Target::GlobalBySlot(slot));
+            match target {
+                AssignmentTarget::Variable(variable) => {
+                    if let Target::GlobalByName = variable.target() {
+                        let slot = env.get_global_slot_by_name(variable.name)?;
+                        variable.set_target(Target::GlobalBySlot(slot));
+                    }
+                    env.set(cell_vars, offset, variable.target(), value.clone())?;
+                }
+                AssignmentTarget::Attribute { lhs, attribute } => {
+                    let target_value = eval(env, cell_vars, offset, lhs)?;
+                    match target_value {
+                        Value::Instance(instance) => {
+                            instance
+                                .0
+                                .attributes
+                                .borrow_mut()
+                                .insert(attribute.slice(), value.clone());
+                        }
+                        _ => panic!(),
+                    }
+                }
             }
-            env.set(cell_vars, offset, variable.target(), value.clone())?;
-            return Ok(value);
+            value
         }
         Expression::Binary { lhs, op, rhs } => {
             use BinOpKind::*;
@@ -528,6 +561,24 @@ pub fn eval<'a>(
             Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot))?,
             Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot))?,
         },
+        Expression::Attribute { lhs, attribute } => {
+            let lhs = eval(env, cell_vars, offset, lhs)?;
+            match lhs {
+                Value::Instance(ref instance) => instance
+                    .0
+                    .attributes
+                    .borrow()
+                    .get(attribute.slice())
+                    .or_else(|| instance.0.class.0.methods.get(attribute.slice()))
+                    .ok_or(Error::UndefinedProperty {
+                        lhs: lhs.clone(),
+                        attribute: *attribute,
+                        at: expr.into_variant(),
+                    })?
+                    .clone(),
+                _ => Err(Error::NoProperty { lhs, at: expr.into_variant() })?,
+            }
+        }
     })
 }
 

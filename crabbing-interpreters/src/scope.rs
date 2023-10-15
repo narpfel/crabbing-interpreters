@@ -593,7 +593,7 @@ pub enum Expression<'a> {
     },
     Name(Variable<'a>),
     Assign {
-        target: Variable<'a>,
+        target: AssignmentTarget<'a>,
         equal: Token<'a>,
         value: &'a Expression<'a>,
     },
@@ -603,6 +603,10 @@ pub enum Expression<'a> {
         arguments: &'a [Expression<'a>],
         r_paren: Token<'a>,
         stack_size_at_callsite: usize,
+    },
+    Attribute {
+        lhs: &'a Expression<'a>,
+        attribute: Name<'a>,
     },
 }
 
@@ -616,6 +620,7 @@ impl<'a> Expression<'a> {
             Expression::Name(variable) => variable.name.loc(),
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
+            Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
         }
     }
 
@@ -653,6 +658,34 @@ impl<'a> Expression<'a> {
                     .join(" "),
             ),
             Expression::Name(variable) => variable.as_sexpr(),
+            Expression::Attribute { lhs, attribute } =>
+                format!("(attr {} {})", lhs.as_sexpr(), attribute.slice()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AssignmentTarget<'a> {
+    Variable(Variable<'a>),
+    Attribute {
+        lhs: &'a Expression<'a>,
+        attribute: Name<'a>,
+    },
+}
+
+impl<'a> AssignmentTarget<'a> {
+    fn as_sexpr(&self) -> String {
+        match self {
+            AssignmentTarget::Variable(variable) => variable.as_sexpr(),
+            AssignmentTarget::Attribute { lhs, attribute } =>
+                format!("(setattr {} {})", lhs.as_sexpr(), attribute.slice()),
+        }
+    }
+
+    fn loc(&self) -> Loc<'a> {
+        match self {
+            AssignmentTarget::Variable(variable) => variable.loc(),
+            AssignmentTarget::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
         }
     }
 }
@@ -802,13 +835,25 @@ fn resolve_expr<'a>(
                 .lookup(name)
                 .unwrap_or_else(|| Variable::global_by_name(bump, name)),
         ),
-        Assign { target, equal, value } => Expression::Assign {
-            target: scopes
-                .lookup(target)
-                .unwrap_or_else(|| Variable::global_by_name(bump, target)),
-            equal: *equal,
-            value: bump.alloc(resolve_expr(bump, scopes, value)),
-        },
+        Assign { target, equal, value } => {
+            let target = match target {
+                parse::AssignmentTarget::Name(name) => AssignmentTarget::Variable(
+                    scopes
+                        .lookup(name)
+                        .unwrap_or_else(|| Variable::global_by_name(bump, name)),
+                ),
+                parse::AssignmentTarget::Attribute { lhs, attribute } =>
+                    AssignmentTarget::Attribute {
+                        lhs: bump.alloc(resolve_expr(bump, scopes, lhs)),
+                        attribute: *attribute,
+                    },
+            };
+            Expression::Assign {
+                target,
+                equal: *equal,
+                value: bump.alloc(resolve_expr(bump, scopes, value)),
+            }
+        }
         Call { callee, l_paren, arguments, r_paren } => Expression::Call {
             callee: bump.alloc(resolve_expr(bump, scopes, callee)),
             l_paren: *l_paren,
@@ -816,6 +861,10 @@ fn resolve_expr<'a>(
                 .alloc_slice_fill_iter(arguments.iter().map(|arg| resolve_expr(bump, scopes, arg))),
             r_paren: *r_paren,
             stack_size_at_callsite: scopes.current_stack_size(),
+        },
+        Attribute { lhs, attribute } => Expression::Attribute {
+            lhs: bump.alloc(resolve_expr(bump, scopes, lhs)),
+            attribute: *attribute,
         },
     }
 }

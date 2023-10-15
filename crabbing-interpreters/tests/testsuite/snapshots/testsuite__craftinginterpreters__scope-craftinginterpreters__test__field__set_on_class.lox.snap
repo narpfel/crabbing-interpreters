@@ -3,11 +3,15 @@ source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/return/in_method.lox
+    - craftinginterpreters/test/field/set_on_class.lox
+    - "--scopes"
+    - "--stop-at=scopes"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-ok
+(program
+   (class Foo (global @1))
+   (expr (= (setattr (global Foo @1) bar) "value")))
 
 ----- stderr -----

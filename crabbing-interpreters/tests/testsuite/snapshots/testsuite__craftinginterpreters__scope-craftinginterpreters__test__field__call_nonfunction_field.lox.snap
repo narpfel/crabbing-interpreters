@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/call_nonfunction_field.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1))
+   (var foo (global @2) (call +2 (global Foo @1)))
+   (expr (= (setattr (global foo @2) bar) "not fn"))
+   (expr (call +3 (attr (global foo @2) bar))))
+
+----- stderr -----

@@ -4,10 +4,18 @@ info:
   program: crabbing-interpreters
   args:
     - craftinginterpreters/test/return/in_method.lox
+    - "--scopes"
+    - "--stop-at=scopes"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-ok
+(program
+   (class Foo (global @1)
+      (method method [] []
+         (block
+            (return "ok")
+            (print "bad"))))
+   (print (call +2 (attr (call +2 (global Foo @1)) method))))
 
 ----- stderr -----

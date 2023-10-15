@@ -5,15 +5,9 @@ info:
   args:
     - craftinginterpreters/test/closure/close_over_method_parameter.lox
 ---
-success: false
-exit_code: 65
+success: true
+exit_code: 0
 ----- stdout -----
+param
 
 ----- stderr -----
-Error: Expect a binary operator.
-    ╭─[craftinginterpreters/test/closure/close_over_method_parameter.lox:12:6]
-    │
- 12 │ Foo().method("param");
-    │      ─  
-    │          
-────╯

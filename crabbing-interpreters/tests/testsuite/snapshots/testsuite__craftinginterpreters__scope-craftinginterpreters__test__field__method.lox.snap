@@ -1,0 +1,22 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/method.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1)
+      (method bar [(local arg @0)] []
+         (block
+            (print (local arg @0)))))
+   (var bar (global @2) (attr (call +2 (global Foo @1)) bar))
+   (print "got method")
+   (expr (call +3 (global bar @2) "arg")))
+
+----- stderr -----

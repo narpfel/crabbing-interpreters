@@ -3,11 +3,14 @@ source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/return/in_method.lox
+    - craftinginterpreters/test/field/get_on_nil.lox
+    - "--scopes"
+    - "--stop-at=scopes"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-ok
+(program
+   (expr (attr nil foo)))
 
 ----- stderr -----
