@@ -6,10 +6,16 @@ info:
     - craftinginterpreters/test/field/set_on_class.lox
 ---
 success: false
-exit_code: 101
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-thread 'main' panicked at crabbing-interpreters/src/eval.rs:433:30:
-explicit panic
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: only instances have fields, but `<class Foo at [POINTER]>` is of type `Class`
+   ╭─[craftinginterpreters/test/field/set_on_class.lox:2:1]
+   │
+ 2 │ Foo.bar = "value"; // expect runtime error: Only instances have fields.
+   │ ─── ───  
+   │           
+   │          
+   │           
+───╯

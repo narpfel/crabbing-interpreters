@@ -6,10 +6,16 @@ info:
     - craftinginterpreters/test/field/set_on_string.lox
 ---
 success: false
-exit_code: 101
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-thread 'main' panicked at crabbing-interpreters/src/eval.rs:433:30:
-explicit panic
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: only instances have fields, but `str` is of type `String`
+   ╭─[craftinginterpreters/test/field/set_on_string.lox:1:1]
+   │
+ 1 │ "str".foo = "value"; // expect runtime error: Only instances have fields.
+   │ ───── ───  
+   │             
+   │            
+   │             
+───╯

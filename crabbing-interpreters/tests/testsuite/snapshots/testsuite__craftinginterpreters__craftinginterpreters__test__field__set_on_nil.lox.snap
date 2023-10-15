@@ -6,10 +6,16 @@ info:
     - craftinginterpreters/test/field/set_on_nil.lox
 ---
 success: false
-exit_code: 101
+exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-thread 'main' panicked at crabbing-interpreters/src/eval.rs:433:30:
-explicit panic
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: only instances have fields, but `nil` is of type `Nil`
+   ╭─[craftinginterpreters/test/field/set_on_nil.lox:1:1]
+   │
+ 1 │ nil.foo = "value"; // expect runtime error: Only instances have fields.
+   │ ─── ───  
+   │           
+   │          
+   │           
+───╯

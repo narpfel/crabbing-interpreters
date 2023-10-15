@@ -25,6 +25,7 @@ use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 use crate::rc_str::RcStr;
 use crate::scope::AssignmentTarget;
+use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
 use crate::scope::Slot;
@@ -280,6 +281,14 @@ pub enum Error<'a> {
         #[diagnostics(lhs(colour = Red), attribute(colour = Magenta))]
         at: ExpressionTypes::Attribute<'a>,
     },
+
+    #[error("only instances have fields, but `{lhs}` is of type `{lhs_typ}`")]
+    #[with(lhs_typ = lhs.typ())]
+    NoFields {
+        lhs: Value<'a>,
+        #[diagnostics(lhs(colour = Red), attribute(colour = Magenta))]
+        at: AssignmentTargetTypes::Attribute<'a>,
+    },
 }
 
 pub enum NativeError<'a> {
@@ -430,7 +439,10 @@ pub fn eval<'a>(
                                 .borrow_mut()
                                 .insert(attribute.slice(), value.clone());
                         }
-                        _ => panic!(),
+                        _ => Err(Error::NoFields {
+                            lhs: target_value,
+                            at: target.into_variant(),
+                        })?,
                     }
                 }
             }

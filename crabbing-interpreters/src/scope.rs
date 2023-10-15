@@ -664,6 +664,7 @@ impl<'a> Expression<'a> {
     }
 }
 
+#[derive_variant_types]
 #[derive(Debug, Clone, Copy)]
 pub enum AssignmentTarget<'a> {
     Variable(Variable<'a>),
@@ -687,6 +688,10 @@ impl<'a> AssignmentTarget<'a> {
             AssignmentTarget::Variable(variable) => variable.loc(),
             AssignmentTarget::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
         }
+    }
+
+    fn slice(&self) -> &'a str {
+        self.loc().slice()
     }
 }
 
