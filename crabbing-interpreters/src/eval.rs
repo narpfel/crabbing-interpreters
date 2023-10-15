@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -40,6 +41,7 @@ pub enum Value<'a> {
     Function(Function<'a>),
     NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
     Class(Class<'a>),
+    Instance(Instance<'a>),
 }
 
 unsafe impl CloneInCellSafe for Value<'_> {}
@@ -64,6 +66,7 @@ impl Value<'_> {
             Value::Function(_) => "Function",
             Value::NativeFunction(_) => "NativeFunction",
             Value::Class(_) => "Class",
+            Value::Instance(_) => "Instance",
         }
     }
 
@@ -94,6 +97,7 @@ impl Display for Value<'_> {
             Value::Function(func) => write!(f, "{func:?}"),
             Value::NativeFunction(_) => write!(f, "<native fn>"),
             Value::Class(class) => write!(f, "{class:?}"),
+            Value::Instance(instance) => write!(f, "{instance:?}"),
         }
     }
 }
@@ -138,6 +142,38 @@ impl PartialEq for Class<'_> {
 }
 
 impl PartialOrd for Class<'_> {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        None
+    }
+}
+
+#[derive(Clone)]
+pub struct Instance<'a>(Rc<InstanceInner<'a>>);
+
+struct InstanceInner<'a> {
+    class: Class<'a>,
+    #[expect(unused)]
+    attributes: RefCell<HashMap<&'a str, Value<'a>>>,
+}
+
+impl Debug for Instance<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "<{} instance at {:p}>",
+            self.0.class.0.name,
+            Rc::as_ptr(&self.0)
+        )
+    }
+}
+
+impl PartialEq for Instance<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialOrd for Instance<'_> {
     fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
         None
     }
@@ -473,6 +509,11 @@ pub fn eval<'a>(
                         },
                     })?
                 }
+                Value::Class(ref class) =>
+                    Value::Instance(self::Instance(Rc::new(InstanceInner {
+                        class: class.clone(),
+                        attributes: RefCell::new(HashMap::default()),
+                    }))),
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }

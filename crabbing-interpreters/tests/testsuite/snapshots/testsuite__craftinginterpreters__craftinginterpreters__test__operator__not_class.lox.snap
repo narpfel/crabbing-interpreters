@@ -5,16 +5,10 @@ info:
   args:
     - craftinginterpreters/test/operator/not_class.lox
 ---
-success: false
-exit_code: 70
+success: true
+exit_code: 0
 ----- stdout -----
+false
 false
 
 ----- stderr -----
-Error: not callable: `<class Bar at [POINTER]>` is of type `Class`
-   ╭─[craftinginterpreters/test/operator/not_class.lox:3:8]
-   │
- 3 │ print !Bar();    // expect: false
-   │        ─┬─  
-   │         ╰─── this expression is of type `Class`
-───╯

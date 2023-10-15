@@ -10,10 +10,10 @@ exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-Error: not callable: `<class Foo at [POINTER]>` is of type `Class`
-   ╭─[craftinginterpreters/test/call/object.lox:3:11]
+Error: not callable: `<Foo instance at [POINTER]>` is of type `Instance`
+   ╭─[craftinginterpreters/test/call/object.lox:4:1]
    │
- 3 │ var foo = Foo();
-   │           ─┬─  
-   │            ╰─── this expression is of type `Class`
+ 4 │ foo(); // expect runtime error: Can only call functions and classes.
+   │ ─┬─  
+   │  ╰─── this expression is of type `Instance`
 ───╯
