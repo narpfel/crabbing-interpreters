@@ -582,7 +582,7 @@ pub fn eval<'a>(
                     .borrow()
                     .get(attribute.slice())
                     .or_else(|| instance.0.class.0.methods.get(attribute.slice()))
-                    .ok_or(Error::UndefinedProperty {
+                    .ok_or_else(|| Error::UndefinedProperty {
                         lhs: lhs.clone(),
                         attribute: *attribute,
                         at: expr.into_variant(),
