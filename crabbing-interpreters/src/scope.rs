@@ -1,6 +1,5 @@
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::fmt::Write;
 use std::hash::Hash;
 use std::primitive::usize;
 use std::ptr;
@@ -17,9 +16,11 @@ use crate::lex::Token;
 use crate::nonempty;
 use crate::parse;
 use crate::parse::BinOp;
+use crate::parse::FunctionKind;
 use crate::parse::Literal;
 use crate::parse::Name;
 use crate::parse::UnaryOp;
+use crate::IndentLines;
 
 const EMPTY: &str = "";
 
@@ -328,6 +329,26 @@ pub struct Function<'a> {
     pub(crate) cells: &'a [Option<usize>],
 }
 
+impl Function<'_> {
+    fn as_sexpr(&self, indent: usize, kind: FunctionKind, target: Option<Variable>) -> String {
+        let Self { name, parameters, body, cells } = self;
+        let kind = match kind {
+            FunctionKind::Function => "fun",
+            FunctionKind::Method => "method",
+        };
+        format!(
+            "({kind} {name} {}{}[{params}] {cells:?}\n{})",
+            target.map_or(String::new(), |target| target.target().to_string()),
+            if target.is_some() { " " } else { "" },
+            Statement::Block(body).as_sexpr(indent).trim_end(),
+            params = parameters
+                .iter()
+                .map(|variable| variable.as_sexpr())
+                .join(" "),
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Statement<'a> {
     Expression(Expression<'a>),
@@ -407,19 +428,8 @@ impl Statement<'_> {
                     .unwrap_or_else(|| "∅".to_string()),
                 body.as_sexpr(indent).trim_end(),
             ),
-            Statement::Function {
-                target,
-                function: Function { name: _, body, parameters, cells },
-            } => format!(
-                "(fun {name} {} [{params}] {cells:?}\n{})",
-                target.target(),
-                Statement::Block(body).as_sexpr(indent).trim_end(),
-                name = target.name.slice(),
-                params = parameters
-                    .iter()
-                    .map(|variable| variable.as_sexpr())
-                    .join(" "),
-            ),
+            Statement::Function { target, function } =>
+                function.as_sexpr(indent, FunctionKind::Function, Some(*target)),
             Statement::Return(expr) => format!(
                 "(return {})",
                 expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr()),
@@ -431,27 +441,13 @@ impl Statement<'_> {
                 if methods.is_empty() { "" } else { "\n" },
                 methods
                     .iter()
-                    .map(|Function { name, parameters, body, cells }| format!(
-                        "(method {name} [{params}] {cells:?}\n{})",
-                        Statement::Block(body).as_sexpr(indent).trim_end(),
-                        params = parameters
-                            .iter()
-                            .map(|variable| variable.as_sexpr())
-                            .join(" "),
-                    ))
+                    .map(|function| function.as_sexpr(indent, FunctionKind::Method, None))
                     .join("\n")
-                    .lines()
-                    .fold(String::new(), |mut s, line| {
-                        writeln!(s, "{EMPTY:indent$}{line}").unwrap();
-                        s
-                    })
+                    .indent_lines(indent)
                     .trim_end(),
             ),
         };
-        result.lines().fold(String::new(), |mut s, line| {
-            writeln!(s, "{0:indent$}{line}", "").unwrap();
-            s
-        })
+        result.indent_lines(indent)
     }
 }
 

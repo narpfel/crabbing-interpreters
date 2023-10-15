@@ -135,6 +135,19 @@ impl Sliced for &Value<'_> {
     }
 }
 
+trait IndentLines {
+    fn indent_lines(&self, indent: usize) -> String;
+}
+
+impl IndentLines for str {
+    fn indent_lines(&self, indent: usize) -> String {
+        self.lines().fold(String::new(), |mut s, line| {
+            writeln!(s, "{:indent$}{line}", "").unwrap();
+            s
+        })
+    }
+}
+
 /// Crabbing Interpreters
 #[derive(Debug, Parser)]
 struct Args {

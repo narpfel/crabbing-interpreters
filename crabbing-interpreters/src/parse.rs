@@ -13,7 +13,7 @@ use crate::scope::ErrorAtToken;
 use crate::Sliced;
 
 #[derive(Debug)]
-enum FunctionKind {
+pub(crate) enum FunctionKind {
     Function,
     Method,
 }
