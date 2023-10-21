@@ -5,6 +5,8 @@ use ariadne::Color::Red;
 use bumpalo::Bump;
 use crabbing_interpreters_derive_report::Report;
 
+use crate::interner::InternedString;
+use crate::interner::Interner;
 use crate::lex::Loc;
 use crate::lex::Token;
 use crate::lex::TokenIter;
@@ -201,7 +203,10 @@ impl<'a> Statement<'a> {
                 parameters: _,
                 body: _,
                 close_brace,
-            } => fun.unwrap_or(name.0).loc().until(close_brace.loc()),
+            } => fun
+                .map(|fun| fun.loc())
+                .unwrap_or(name.loc())
+                .until(close_brace.loc()),
             Statement::Return { return_token, expr: _, semi } =>
                 return_token.loc().until(semi.loc()),
             Statement::Class { class, name: _, methods: _, close_brace } =>
@@ -437,15 +442,26 @@ impl<'a> BinOp<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Name<'a>(pub(crate) Token<'a>);
+pub struct Name<'a> {
+    id: InternedString,
+    pub(crate) loc: Loc<'a>,
+}
 
 impl<'a> Name<'a> {
+    pub(crate) fn new(id: InternedString, loc: &'a Loc<'a>) -> Self {
+        Self { id, loc: *loc }
+    }
+
+    pub(crate) fn id(&self) -> InternedString {
+        self.id
+    }
+
     pub(crate) fn loc(&self) -> Loc<'a> {
-        self.0.loc()
+        self.loc
     }
 
     pub(crate) fn slice(&self) -> &'a str {
-        self.0.slice()
+        self.loc.slice()
     }
 }
 
@@ -472,12 +488,13 @@ impl<'a> AssignmentTarget<'a> {
     }
 }
 
-pub struct Tokens<'a> {
+pub struct Tokens<'a, 'b> {
     iter: Peekable<TokenIter<'a>>,
     eof_loc: Loc<'a>,
+    interner: &'b mut Interner<'a>,
 }
 
-impl<'a> Tokens<'a> {
+impl<'a> Tokens<'a, '_> {
     fn next(&mut self) -> Result<Token<'a>, Error<'a>> {
         Ok(self.iter.next().transpose()?.not_eof(&self.eof_loc)?)
     }
@@ -525,21 +542,26 @@ impl<'a> Tokens<'a> {
     }
 }
 
-pub fn parse<'a, T>(
-    parser: impl FnOnce(&'a Bump, &mut Tokens<'a>) -> Result<T, Error<'a>>,
+pub fn parse<'a, 'b, T>(
+    parser: impl FnOnce(&'a Bump, &mut Tokens<'a, 'b>) -> Result<T, Error<'a>>,
     bump: &'a Bump,
     tokens: TokenIter<'a>,
     eof_loc: Loc<'a>,
+    interner: &'b mut Interner<'a>,
 ) -> Result<T, Error<'a>> {
-    let tokens = &mut Tokens { iter: tokens.peekable(), eof_loc };
-    let result = parser(bump, tokens)?;
+    let mut tokens = Tokens {
+        iter: tokens.peekable(),
+        eof_loc,
+        interner,
+    };
+    let result = parser(bump, &mut tokens)?;
     tokens.eof()?;
     Ok(result)
 }
 
 pub fn program<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
 ) -> Result<&'a [Statement<'a>], Error<'a>> {
     let mut statements = Vec::new();
 
@@ -551,7 +573,10 @@ pub fn program<'a>(
     Ok(bump.alloc_slice_copy(&statements))
 }
 
-fn declaration<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn declaration<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a, '_>,
+) -> Result<Statement<'a>, Error<'a>> {
     let token = tokens.peek()?;
     Ok(match token.kind {
         TokenKind::Class => class(bump, tokens)?,
@@ -561,9 +586,9 @@ fn declaration<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<
     })
 }
 
-fn class<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn class<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let class = tokens.consume(TokenKind::Class)?;
-    let name = Name(tokens.consume(TokenKind::Identifier)?);
+    let name = name(tokens)?;
     tokens.consume(TokenKind::LBrace)?;
     let mut methods = Vec::new();
     loop {
@@ -582,9 +607,9 @@ fn class<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, E
     })
 }
 
-fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let var = tokens.consume(TokenKind::Var)?;
-    let name = Name(tokens.consume(TokenKind::Identifier)?);
+    let name = name(tokens)?;
     let maybe_equal = tokens.peek()?;
     let initialiser = if matches!(maybe_equal.kind, TokenKind::Equal) {
         tokens.consume(TokenKind::Equal)?;
@@ -600,14 +625,14 @@ fn vardecl<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>,
 
 fn function<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
     kind: FunctionKind,
 ) -> Result<Statement<'a>, Error<'a>> {
     let fun = match kind {
         FunctionKind::Function => Some(tokens.consume(TokenKind::Fun)?),
         FunctionKind::Method => None,
     };
-    let name = Name(tokens.consume(TokenKind::Identifier)?);
+    let function_name = name(tokens)?;
     tokens.consume(TokenKind::LParen)?;
     let mut parameters = Vec::new();
     loop {
@@ -616,8 +641,7 @@ fn function<'a>(
             break;
         }
         if matches!(token.kind, TokenKind::Identifier) {
-            let token = tokens.consume(TokenKind::Identifier)?;
-            parameters.push(Name(token));
+            parameters.push(name(tokens)?);
         }
         let token = tokens.peek()?;
         if matches!(token.kind, TokenKind::Comma) {
@@ -631,14 +655,14 @@ fn function<'a>(
     let (_, body, close_brace) = block(bump, tokens)?;
     Ok(Statement::Function {
         fun,
-        name,
+        name: function_name,
         parameters: bump.alloc_slice_copy(&parameters),
         body,
         close_brace,
     })
 }
 
-fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let token = tokens.peek()?;
     Ok(match token.kind {
         TokenKind::Print => print(bump, tokens)?,
@@ -654,7 +678,7 @@ fn statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a
     })
 }
 
-fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let print = tokens.consume(TokenKind::Print)?;
     let expr = expression(bump, tokens)?;
     let semi = tokens.consume(TokenKind::Semicolon)?;
@@ -663,7 +687,7 @@ fn print<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, E
 
 fn block<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
 ) -> Result<(Token<'a>, &'a [Statement<'a>], Token<'a>), Error<'a>> {
     let open_brace = tokens.consume(TokenKind::LBrace)?;
     let mut statements = Vec::new();
@@ -677,7 +701,10 @@ fn block<'a>(
     Ok((open_brace, bump.alloc_slice_copy(&statements), close_brace))
 }
 
-fn if_statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn if_statement<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a, '_>,
+) -> Result<Statement<'a>, Error<'a>> {
     let if_token = tokens.consume(TokenKind::If)?;
     tokens.consume(TokenKind::LParen)?;
     let condition = expression(bump, tokens)?;
@@ -694,7 +721,7 @@ fn if_statement<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement
     Ok(Statement::If { if_token, condition, then, or_else })
 }
 
-fn while_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn while_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let while_token = tokens.consume(TokenKind::While)?;
     tokens.consume(TokenKind::LParen)?;
     let condition = expression(bump, tokens)?;
@@ -707,7 +734,7 @@ fn while_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'
     })
 }
 
-fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let for_token = tokens.consume(TokenKind::For)?;
     tokens.consume(TokenKind::LParen)?;
     let token = tokens.peek()?;
@@ -745,7 +772,10 @@ fn for_loop<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>
     Ok(Statement::For { for_token, init, condition, update, body })
 }
 
-fn return_stmt<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<'a>, Error<'a>> {
+fn return_stmt<'a>(
+    bump: &'a Bump,
+    tokens: &mut Tokens<'a, '_>,
+) -> Result<Statement<'a>, Error<'a>> {
     let return_token = tokens.consume(TokenKind::Return)?;
     let token = tokens.peek()?;
     let expr = if matches!(token.kind, TokenKind::Semicolon) {
@@ -760,7 +790,7 @@ fn return_stmt<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Statement<
 
 fn expression_statement<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
 ) -> Result<Statement<'a>, Error<'a>> {
     Ok(Statement::Expression {
         expr: expression(bump, tokens)?,
@@ -770,14 +800,14 @@ fn expression_statement<'a>(
 
 pub fn expression<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
 ) -> Result<Expression<'a>, Error<'a>> {
     expr_impl(bump, tokens, None)
 }
 
 fn expr_impl<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
     left_op: Option<(Token<'a>, Operator)>,
 ) -> Result<Expression<'a>, Error<'a>> {
     let mut lhs = primary(bump, tokens)?;
@@ -828,7 +858,7 @@ fn expr_impl<'a>(
     Ok(lhs)
 }
 
-fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression<'a>, Error<'a>> {
     use TokenKind::*;
     let token = tokens.peek()?;
     let mut expr = match token.kind {
@@ -855,7 +885,7 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
             }
             Ok(Token { kind: TokenKind::Dot, .. }) => {
                 tokens.consume(TokenKind::Dot)?;
-                let attribute = Name(tokens.consume(TokenKind::Identifier)?);
+                let attribute = name(tokens)?;
                 Expression::Attribute { lhs: bump.alloc(expr), attribute }
             }
             _ => break,
@@ -867,7 +897,7 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>
 
 fn call_arguments<'a>(
     bump: &'a Bump,
-    tokens: &mut Tokens<'a>,
+    tokens: &mut Tokens<'a, '_>,
 ) -> Result<&'a [Expression<'a>], Error<'a>> {
     let mut arguments = Vec::new();
 
@@ -889,14 +919,14 @@ fn call_arguments<'a>(
     Ok(bump.alloc_slice_copy(&arguments))
 }
 
-fn grouping<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+fn grouping<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression<'a>, Error<'a>> {
     let l_paren = tokens.consume(TokenKind::LParen)?;
     let expr = expression(bump, tokens)?;
     let r_paren = tokens.consume(TokenKind::RParen)?;
     Ok(Expression::Grouping { l_paren, r_paren, expr: bump.alloc(expr) })
 }
 
-fn unary_op<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+fn unary_op<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression<'a>, Error<'a>> {
     let token = tokens.consume_one_of(&[TokenKind::Minus, TokenKind::Bang])?;
     let kind = match token.kind {
         TokenKind::Minus => UnaryOpKind::Minus,
@@ -910,7 +940,7 @@ fn unary_op<'a>(bump: &'a Bump, tokens: &mut Tokens<'a>) -> Result<Expression<'a
     ))
 }
 
-fn literal<'a>(tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
+fn literal<'a>(tokens: &mut Tokens<'a, '_>) -> Result<Expression<'a>, Error<'a>> {
     use TokenKind::*;
     let token = tokens.next()?;
     let kind = match token.kind {
@@ -929,10 +959,16 @@ fn literal<'a>(tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
     Ok(Expression::Literal(Literal { kind, token }))
 }
 
-fn ident<'a>(tokens: &mut Tokens<'a>) -> Result<Expression<'a>, Error<'a>> {
-    Ok(Expression::Ident(Name(
-        tokens.consume(TokenKind::Identifier)?,
-    )))
+fn ident<'a>(tokens: &mut Tokens<'a, '_>) -> Result<Expression<'a>, Error<'a>> {
+    Ok(Expression::Ident(name(tokens)?))
+}
+
+fn name<'a>(tokens: &mut Tokens<'a, '_>) -> Result<Name<'a>, Error<'a>> {
+    let name_token = tokens.consume(TokenKind::Identifier)?;
+    Ok(Name {
+        id: tokens.interner.intern(name_token.slice()),
+        loc: name_token.loc(),
+    })
 }
 
 fn unexpected_token<'a>(expected: &'static [TokenKind], actual: Token<'a>) -> Result<!, Error<'a>> {
@@ -1044,7 +1080,7 @@ pub(crate) mod tests {
 
     pub(crate) fn parse_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Expression<'a>, Error<'a>> {
         let (tokens, eof_loc) = crate::lex(bump, Path::new("<test>"), src);
-        parse(expression, bump, tokens, eof_loc)
+        parse(expression, bump, tokens, eof_loc, &mut Interner::default())
     }
 
     #[rstest]

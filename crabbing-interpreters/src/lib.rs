@@ -3,6 +3,7 @@
 #![feature(never_type)]
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
@@ -21,13 +22,13 @@ use clap::Parser;
 use clap::ValueEnum;
 pub(crate) use crabbing_interpreters_lex as lex;
 pub use crabbing_interpreters_lex::lex;
-use crabbing_interpreters_lex::Token;
-use crabbing_interpreters_lex::TokenKind;
 
 use crate::eval::execute;
 use crate::eval::ControlFlow;
 use crate::eval::Environment;
 use crate::eval::Value;
+use crate::interner::Interner;
+use crate::lex::Loc;
 use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
@@ -35,6 +36,7 @@ use crate::scope::resolve_names;
 
 mod clone_from_cell;
 mod eval;
+mod interner;
 mod nonempty;
 mod parse;
 mod rc_str;
@@ -169,12 +171,11 @@ enum StopAt {
 
 fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
-    let globals_names = bump.alloc_slice_copy(&[Name(Token::debug_token(
-        bump,
-        TokenKind::Identifier,
-        "clock",
-    ))]);
-    let mut globals = Environment::new([("clock", 0)].into_iter().collect());
+    let mut interner = Interner::default();
+    let clock = interner.intern("clock");
+    let globals_names =
+        bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
+    let mut globals = Environment::new(HashMap::from([(clock, 0)]));
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -200,7 +201,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
             }
             first = false;
             let (tokens, eof_loc) = lex(bump, Path::new("<input>"), &line);
-            match parse(program, bump, tokens, eof_loc) {
+            match parse(program, bump, tokens, eof_loc, &mut interner) {
                 Ok(stmts) => break stmts,
                 Err(parse::Error::Eof { at: _ }) => (),
                 Err(err) => {
@@ -255,12 +256,14 @@ pub fn run<'a>(
                 ),
             ))
         })?;
-        let ast = time("ast", args.times, || parse(program, bump, tokens, eof_loc))?;
-        let globals = bump.alloc_slice_copy(&[Name(Token::debug_token(
-            bump,
-            TokenKind::Identifier,
-            "clock",
-        ))]);
+        let mut interner = Interner::default();
+        let ast = time("ast", args.times, || {
+            parse(program, bump, tokens, eof_loc, &mut interner)
+        })?;
+        let globals = bump.alloc_slice_copy(&[Name::new(
+            interner.intern("clock"),
+            bump.alloc(Loc::debug_loc(bump, "clock")),
+        )]);
         let (scoped_ast, global_name_offsets, global_cell_count) =
             time("scp", args.times, move || {
                 scope::resolve_names(bump, globals, ast)

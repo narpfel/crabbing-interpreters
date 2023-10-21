@@ -33,10 +33,6 @@ impl<'a> Token<'a> {
             _ => TokenValue::None,
         }
     }
-
-    pub fn debug_token(bump: &'a Bump, kind: TokenKind, src: &'a str) -> Self {
-        Token { kind, loc: Loc::debug_loc(bump, src) }
-    }
 }
 
 impl std::fmt::Debug for Token<'_> {
@@ -82,7 +78,7 @@ pub struct Loc<'a> {
 }
 
 impl<'a> Loc<'a> {
-    fn debug_loc(bump: &'a Bump, src: &'a str) -> Self {
+    pub fn debug_loc(bump: &'a Bump, src: &'a str) -> Self {
         Loc {
             span: Span { start: 0, end: src.len() },
             source_file: SourceFile::debug_source_file(bump, src),

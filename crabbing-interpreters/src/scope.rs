@@ -11,6 +11,7 @@ use indexmap::IndexMap;
 use itertools::Itertools as _;
 use variant_types_derive::derive_variant_types;
 
+use crate::interner::InternedString;
 use crate::lex::Loc;
 use crate::lex::Token;
 use crate::nonempty;
@@ -40,7 +41,7 @@ impl<'a> CellRef<'a> {
 }
 
 #[derive(Debug, Default)]
-struct Locals<'a>(nonempty::Vec<HashMap<&'a str, Variable<'a>>>);
+struct Locals<'a>(nonempty::Vec<HashMap<InternedString, Variable<'a>>>);
 
 #[derive(Debug, Default)]
 struct Scope<'a> {
@@ -95,7 +96,7 @@ impl std::fmt::Display for Slot {
 pub enum Error<'a> {
     #[error("Already a variable with this name in this scope: `{at}`")]
     DuplicateDefinition {
-        #[diagnostics(0(colour = Red))]
+        #[diagnostics(loc(colour = Red))]
         at: Name<'a>,
     },
 
@@ -138,7 +139,7 @@ impl<'a> Locals<'a> {
         self.0
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name.slice()))
+            .find_map(|scope| scope.get(&name.id()))
             .cloned()
             .map(|variable| variable.at(name))
     }
@@ -179,10 +180,10 @@ impl<'a> Scopes<'a> {
     fn add(&mut self, name: &'a Name<'a>) -> Result<Variable<'a>, Error<'a>> {
         if self.is_in_globals() {
             return Ok(self
-                .lookup_local_innermost(name.slice())
+                .lookup_local_innermost(name.id())
                 .unwrap_or_else(|| self.add_unconditionally(name)));
         }
-        else if self.lookup_local_innermost(name.slice()).is_some() {
+        else if self.lookup_local_innermost(name.id()).is_some() {
             return Err(Error::DuplicateDefinition { at: *name });
         }
         else {
@@ -199,7 +200,7 @@ impl<'a> Scopes<'a> {
             Variable::local(self.bump, name, slot)
         };
         let last = self.scopes.last_mut().locals.0.last_mut();
-        let was_present = last.insert(name.slice(), variable);
+        let was_present = last.insert(name.id(), variable);
         debug_assert!(was_present.is_none());
         self.offset += 1;
         variable
@@ -251,9 +252,9 @@ impl<'a> Scopes<'a> {
         cell_count
     }
 
-    fn lookup_local_innermost(&self, name: &str) -> Option<Variable<'a>> {
+    fn lookup_local_innermost(&self, name: InternedString) -> Option<Variable<'a>> {
         let last = self.scopes.last().locals.0.last();
-        last.get(name).cloned()
+        last.get(&name).cloned()
     }
 
     fn with_block<T>(
@@ -323,7 +324,7 @@ impl<'a> Scopes<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Function<'a> {
-    pub(crate) name: &'a str,
+    pub(crate) name: Name<'a>,
     pub(crate) parameters: &'a [Variable<'a>],
     pub(crate) body: &'a [Statement<'a>],
     pub(crate) cells: &'a [Option<usize>],
@@ -341,6 +342,7 @@ impl Function<'_> {
             target.map_or(String::new(), |target| target.target().to_string()),
             if target.is_some() { " " } else { "" },
             Statement::Block(body).as_sexpr(indent).trim_end(),
+            name = name.loc().slice(),
             params = parameters
                 .iter()
                 .map(|variable| variable.as_sexpr())
@@ -697,7 +699,14 @@ pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
     global_names: &'a [Name<'a>],
     program: &'a [crate::parse::Statement<'a>],
-) -> Result<(&'a [Statement<'a>], HashMap<&'a str, Variable<'a>>, usize), Error<'a>> {
+) -> Result<
+    (
+        &'a [Statement<'a>],
+        HashMap<InternedString, Variable<'a>>,
+        usize,
+    ),
+    Error<'a>,
+> {
     let mut scopes = Scopes::new(bump, global_names);
     let stmts = &*bump.alloc_slice_copy(
         &program
@@ -901,12 +910,7 @@ fn resolve_function<'a>(
         ))
     })?;
     let cells = cell_slots(bump, scopes, &nonlocal_names);
-    Ok(Function {
-        name: name.slice(),
-        parameters,
-        body,
-        cells,
-    })
+    Ok(Function { name: *name, parameters, body, cells })
 }
 
 fn cell_slots<'a>(

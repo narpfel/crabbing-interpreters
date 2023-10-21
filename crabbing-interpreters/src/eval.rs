@@ -17,6 +17,7 @@ use variant_types::IntoVariant;
 
 use crate::clone_from_cell::CloneInCellSafe;
 use crate::clone_from_cell::GetClone;
+use crate::interner::InternedString;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::LiteralKind;
@@ -127,7 +128,7 @@ pub struct Class<'a>(Rc<ClassInner<'a>>);
 
 struct ClassInner<'a> {
     name: &'a str,
-    methods: HashMap<&'a str, Value<'a>>,
+    methods: HashMap<InternedString, Value<'a>>,
 }
 
 impl Debug for Class<'_> {
@@ -153,7 +154,7 @@ pub struct Instance<'a>(Rc<InstanceInner<'a>>);
 
 struct InstanceInner<'a> {
     class: Class<'a>,
-    attributes: RefCell<HashMap<&'a str, Value<'a>>>,
+    attributes: RefCell<HashMap<InternedString, Value<'a>>>,
 }
 
 impl Debug for Instance<'_> {
@@ -235,7 +236,7 @@ pub enum Error<'a> {
 
     #[error("Undefined variable `{at}`.")]
     UndefinedName {
-        #[diagnostics(0(colour = Magenta))]
+        #[diagnostics(loc(colour = Magenta))]
         at: Name<'a>,
     },
 
@@ -300,11 +301,11 @@ const ENV_SIZE: usize = 100_000;
 
 pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,
-    globals: HashMap<&'a str, usize>,
+    globals: HashMap<InternedString, usize>,
 }
 
 impl<'a> Environment<'a> {
-    pub fn new(globals: HashMap<&'a str, usize>) -> Self {
+    pub fn new(globals: HashMap<InternedString, usize>) -> Self {
         let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
             .into_boxed_slice()
             .try_into()
@@ -337,7 +338,7 @@ impl<'a> Environment<'a> {
 
     fn get_global_slot_by_name(&self, name: &'a Name<'a>) -> Result<usize, Box<Error<'a>>> {
         self.globals
-            .get(name.slice())
+            .get(&name.id())
             .copied()
             .ok_or_else(|| Box::new(Error::UndefinedName { at: *name }))
     }
@@ -437,7 +438,7 @@ pub fn eval<'a>(
                                 .0
                                 .attributes
                                 .borrow_mut()
-                                .insert(attribute.slice(), value.clone());
+                                .insert(attribute.id(), value.clone());
                         }
                         _ => Err(Error::NoFields {
                             lhs: target_value,
@@ -580,8 +581,8 @@ pub fn eval<'a>(
                     .0
                     .attributes
                     .borrow()
-                    .get(attribute.slice())
-                    .or_else(|| instance.0.class.0.methods.get(attribute.slice()))
+                    .get(&attribute.id())
+                    .or_else(|| instance.0.class.0.methods.get(&attribute.id()))
                     .ok_or_else(|| Error::UndefinedProperty {
                         lhs: lhs.clone(),
                         attribute: *attribute,
@@ -671,7 +672,7 @@ pub fn execute<'a>(
                 env.define(cell_vars, offset, target.target(), Value::Nil)?;
                 let methods: HashMap<_, _> = methods
                     .iter()
-                    .map(|method| (method.name, eval_function(cell_vars, method)))
+                    .map(|method| (method.name.id(), eval_function(cell_vars, method)))
                     .collect();
                 env.set(
                     cell_vars,
@@ -702,7 +703,7 @@ fn eval_function<'a>(
         })
         .collect();
     Value::Function(Function(Rc::new(FunctionInner {
-        name,
+        name: name.slice(),
         parameters,
         code: body,
         cells,
