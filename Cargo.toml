@@ -20,6 +20,7 @@ logos = "0.13.0"
 proc-macro2 = "1.0.66"
 quote = "1.0.32"
 regex = "1.9.1"
+rustc-hash = "1.1.0"
 syn = { version = "2.0.28", features = ["fold", "visit"] }
 
 insta = { version = "1.38.0", features = ["filters"] }

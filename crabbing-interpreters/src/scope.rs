@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::primitive::usize;
 use std::ptr;
@@ -9,6 +8,7 @@ use bumpalo::Bump;
 use crabbing_interpreters_derive_report::Report;
 use indexmap::IndexMap;
 use itertools::Itertools as _;
+use rustc_hash::FxHashMap as HashMap;
 use variant_types_derive::derive_variant_types;
 
 use crate::interner::InternedString;

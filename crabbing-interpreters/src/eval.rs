@@ -1,6 +1,5 @@
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -13,6 +12,7 @@ use ariadne::Color::Green;
 use ariadne::Color::Magenta;
 use ariadne::Color::Red;
 use crabbing_interpreters_derive_report::Report;
+use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant;
 
 use crate::clone_from_cell::CloneInCellSafe;

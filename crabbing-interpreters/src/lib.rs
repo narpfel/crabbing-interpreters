@@ -3,7 +3,6 @@
 #![feature(never_type)]
 
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
@@ -175,7 +174,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
     let clock = interner.intern("clock");
     let globals_names =
         bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
-    let mut globals = Environment::new(HashMap::from([(clock, 0)]));
+    let mut globals = Environment::new([(clock, 0)].into_iter().collect());
     let mut line = String::new();
     'repl: loop {
         line.clear();

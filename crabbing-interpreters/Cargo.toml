@@ -11,6 +11,7 @@ crabbing-interpreters-derive-report = { path = "../crabbing-interpreters-derive-
 crabbing-interpreters-lex = { path = "../crabbing-interpreters-lex" }
 indexmap = { workspace = true }
 itertools = { workspace = true }
+rustc-hash = { workspace = true }
 variant-types = { path = "../variant-types" }
 variant-types-derive = { path = "../variant-types-derive" }
 
