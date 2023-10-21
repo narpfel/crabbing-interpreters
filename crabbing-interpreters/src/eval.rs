@@ -652,8 +652,8 @@ pub fn execute<'a>(
                         eval(env, cell_vars, offset, update)?;
                     }
                 }
-                Ok::<_, Box<Error<'a>>>(Value::Nil)
-            }?,
+                Value::Nil
+            }
             Statement::Function { target, function } => {
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
