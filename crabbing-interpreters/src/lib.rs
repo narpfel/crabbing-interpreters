@@ -41,8 +41,6 @@ mod parse;
 mod rc_str;
 mod scope;
 
-const ESC: &str = "\x1B";
-
 pub trait AllocPath {
     fn alloc_path(&self, path: impl AsRef<Path>) -> &Path;
 }
@@ -181,14 +179,14 @@ fn repl() -> Result<(), Box<dyn Report>> {
         let mut first = true;
         let stmts = loop {
             if first {
-                print!("{ESC}[0mλ» {ESC}[1m");
+                print!("\x1B[0mλ» \x1B[1m");
             }
             else {
-                print!("{ESC}[0m.. {ESC}[1m");
+                print!("\x1B[0m.. \x1B[1m");
             }
             stdout().flush()?;
             let len = stdin().read_line(&mut line)?;
-            print!("{ESC}[0m");
+            print!("\x1B[0m");
             if len == 0 {
                 if first {
                     return Ok(());
@@ -223,7 +221,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
-                    println!("{ESC}[38;2;170;034;255m{ESC}[1m=> {}{ESC}[0m", value);
+                    println!("\x1B[38;2;170;034;255m\x1B[1m=> {}\x1B[0m", value);
                 },
             Err(ControlFlow::Error(err)) => err.print(),
         }
