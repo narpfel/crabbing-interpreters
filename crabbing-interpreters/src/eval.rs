@@ -17,6 +17,7 @@ use variant_types::IntoVariant;
 
 use crate::clone_from_cell::CloneInCellSafe;
 use crate::clone_from_cell::GetClone;
+use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -555,11 +556,59 @@ pub fn eval<'a>(
                         },
                     })?
                 }
-                Value::Class(ref class) =>
-                    Value::Instance(self::Instance(Rc::new(InstanceInner {
+                Value::Class(ref class) => {
+                    let instance = Value::Instance(self::Instance(Rc::new(InstanceInner {
                         class: class.clone(),
                         attributes: RefCell::new(HashMap::default()),
-                    }))),
+                    })));
+                    if let Some(Value::Function(ref init)) = class.0.methods.get(&interned::INIT) {
+                        let parameters = init.0.parameters.iter().skip(1);
+                        if arguments.len() != parameters.len() {
+                            Err(Error::ArityMismatch {
+                                callee: callee.clone(),
+                                expected: parameters.len(),
+                                at: expr.into_variant(),
+                            })?;
+                        }
+                        env.define(
+                            &init.0.cells,
+                            offset + stack_size_at_callsite,
+                            init.0.parameters[0].target(),
+                            instance.clone(),
+                        )?;
+                        arguments
+                            .iter()
+                            .zip(parameters)
+                            .try_for_each(|(arg, param)| {
+                                let arg = eval(env, cell_vars, offset, arg)?;
+                                env.define(
+                                    &init.0.cells,
+                                    offset + stack_size_at_callsite,
+                                    param.target(),
+                                    arg,
+                                )
+                            })?;
+                        match execute(
+                            env,
+                            offset + stack_size_at_callsite,
+                            init.0.code,
+                            &init.0.cells,
+                        ) {
+                            Ok(_) => Ok(Value::Nil),
+                            Err(ControlFlow::Return(value)) => Ok(value),
+                            Err(ControlFlow::Error(err)) => Err(err),
+                        }?;
+                        // FIXME: truncate env here to drop the callee’s locals
+                    }
+                    else if !arguments.is_empty() {
+                        Err(Error::ArityMismatch {
+                            callee: callee.clone(),
+                            expected: 0,
+                            at: expr.into_variant(),
+                        })?;
+                    }
+                    instance
+                }
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
