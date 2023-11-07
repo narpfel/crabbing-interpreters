@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::hash::Hash;
+use std::iter;
 use std::primitive::usize;
 use std::ptr;
 
@@ -7,10 +8,12 @@ use ariadne::Color::Red;
 use bumpalo::Bump;
 use crabbing_interpreters_derive_report::Report;
 use indexmap::IndexMap;
+use itertools::Either;
 use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types_derive::derive_variant_types;
 
+use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::lex::Loc;
 use crate::lex::Token;
@@ -104,6 +107,12 @@ pub enum Error<'a> {
     TopLevelReturn {
         #[diagnostics(0(colour = Red))]
         at: ErrorAtToken<'a>,
+    },
+
+    #[error("Can’t use `{at}` outside of class.")]
+    TopLevelThis {
+        #[diagnostics(loc(colour = Red))]
+        at: Name<'a>,
     },
 }
 
@@ -735,8 +744,8 @@ fn resolve_stmt<'a>(
 ) -> Result<Statement<'a>, Error<'a>> {
     use parse::Statement::*;
     Ok(match stmt {
-        Expression { expr, semi: _ } => Statement::Expression(resolve_expr(bump, scopes, expr)),
-        Print { print: _, expr, semi: _ } => Statement::Print(resolve_expr(bump, scopes, expr)),
+        Expression { expr, semi: _ } => Statement::Expression(resolve_expr(bump, scopes, expr)?),
+        Print { print: _, expr, semi: _ } => Statement::Print(resolve_expr(bump, scopes, expr)?),
         Var { var: _, name, init, semi: _ } => {
             // FIXME
             // > { var q = q; print q; }
@@ -745,7 +754,10 @@ fn resolve_stmt<'a>(
             // > var q = q; print q;
             // Undefined variable 'q'.
             // [line 1] in script
-            let init = init.as_ref().map(|init| resolve_expr(bump, scopes, init));
+            let init = init
+                .as_ref()
+                .map(|init| resolve_expr(bump, scopes, init))
+                .transpose()?;
             let variable = scopes.add(name)?;
             Statement::Var(variable, init)
         }
@@ -760,14 +772,14 @@ fn resolve_stmt<'a>(
             ))
         })?,
         If { if_token: _, condition, then, or_else } => Statement::If {
-            condition: resolve_expr(bump, scopes, condition),
+            condition: resolve_expr(bump, scopes, condition)?,
             then: bump.alloc(resolve_stmt(bump, scopes, then)?),
             or_else: or_else
                 .map(|or_else| Ok(&*bump.alloc(resolve_stmt(bump, scopes, or_else)?)))
                 .transpose()?,
         },
         While { while_token: _, condition, body } => Statement::While {
-            condition: resolve_expr(bump, scopes, condition),
+            condition: resolve_expr(bump, scopes, condition)?,
             body: bump.alloc(resolve_stmt(bump, scopes, body)?),
         },
         For {
@@ -785,10 +797,12 @@ fn resolve_stmt<'a>(
                     Ok((
                         condition
                             .as_ref()
-                            .map(|condition| resolve_expr(bump, scopes, condition)),
+                            .map(|condition| resolve_expr(bump, scopes, condition))
+                            .transpose()?,
                         update
                             .as_ref()
-                            .map(|update| resolve_expr(bump, scopes, update)),
+                            .map(|update| resolve_expr(bump, scopes, update))
+                            .transpose()?,
                         bump.alloc(resolve_stmt(bump, scopes, body)?),
                     ))
                 })?;
@@ -798,7 +812,7 @@ fn resolve_stmt<'a>(
         }
         function @ Function { name, .. } => {
             let target = scopes.add(name)?;
-            let function = resolve_function(bump, scopes, function)?;
+            let function = resolve_function(bump, scopes, function, FunctionKind::Function)?;
             Statement::Function { target, function }
         }
         Return { return_token, expr, semi: _ } =>
@@ -806,14 +820,18 @@ fn resolve_stmt<'a>(
                 Err(Error::TopLevelReturn { at: ErrorAtToken::at(*return_token) })?
             }
             else {
-                Statement::Return(expr.as_ref().map(|expr| resolve_expr(bump, scopes, expr)))
+                Statement::Return(
+                    expr.as_ref()
+                        .map(|expr| resolve_expr(bump, scopes, expr))
+                        .transpose()?,
+                )
             },
         Class { class: _, name, methods, close_brace: _ } => {
             let target = scopes.add(name)?;
             let methods = bump.alloc_slice_copy(
                 &methods
                     .iter()
-                    .map(|method| resolve_function(bump, scopes, method))
+                    .map(|method| resolve_function(bump, scopes, method, FunctionKind::Method))
                     .collect::<Result<Vec<_>, _>>()?,
             );
             Statement::Class { target, methods }
@@ -825,19 +843,19 @@ fn resolve_expr<'a>(
     bump: &'a Bump,
     scopes: &mut Scopes<'a>,
     expr: &'a parse::Expression<'a>,
-) -> Expression<'a> {
+) -> Result<Expression<'a>, Error<'a>> {
     use parse::Expression::*;
-    match expr {
+    Ok(match expr {
         Literal(lit) => Expression::Literal(*lit),
-        Unary(op, expr) => Expression::Unary(*op, bump.alloc(resolve_expr(bump, scopes, expr))),
+        Unary(op, expr) => Expression::Unary(*op, bump.alloc(resolve_expr(bump, scopes, expr)?)),
         Binary { lhs, op, rhs } => Expression::Binary {
-            lhs: bump.alloc(resolve_expr(bump, scopes, lhs)),
+            lhs: bump.alloc(resolve_expr(bump, scopes, lhs)?),
             op: *op,
-            rhs: bump.alloc(resolve_expr(bump, scopes, rhs)),
+            rhs: bump.alloc(resolve_expr(bump, scopes, rhs)?),
         },
         Grouping { l_paren, expr, r_paren } => Expression::Grouping {
             l_paren: *l_paren,
-            expr: bump.alloc(resolve_expr(bump, scopes, expr)),
+            expr: bump.alloc(resolve_expr(bump, scopes, expr)?),
             r_paren: *r_paren,
         },
         Ident(name) => Expression::Name(
@@ -854,35 +872,45 @@ fn resolve_expr<'a>(
                 ),
                 parse::AssignmentTarget::Attribute { lhs, attribute } =>
                     AssignmentTarget::Attribute {
-                        lhs: bump.alloc(resolve_expr(bump, scopes, lhs)),
+                        lhs: bump.alloc(resolve_expr(bump, scopes, lhs)?),
                         attribute: *attribute,
                     },
             };
             Expression::Assign {
                 target,
                 equal: *equal,
-                value: bump.alloc(resolve_expr(bump, scopes, value)),
+                value: bump.alloc(resolve_expr(bump, scopes, value)?),
             }
         }
         Call { callee, l_paren, arguments, r_paren } => Expression::Call {
-            callee: bump.alloc(resolve_expr(bump, scopes, callee)),
+            callee: bump.alloc(resolve_expr(bump, scopes, callee)?),
             l_paren: *l_paren,
-            arguments: bump
-                .alloc_slice_fill_iter(arguments.iter().map(|arg| resolve_expr(bump, scopes, arg))),
+            arguments: bump.alloc_slice_copy(
+                &arguments
+                    .iter()
+                    .map(|arg| resolve_expr(bump, scopes, arg))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
             r_paren: *r_paren,
             stack_size_at_callsite: scopes.current_stack_size(),
         },
         Attribute { lhs, attribute } => Expression::Attribute {
-            lhs: bump.alloc(resolve_expr(bump, scopes, lhs)),
+            lhs: bump.alloc(resolve_expr(bump, scopes, lhs)?),
             attribute: *attribute,
         },
-    }
+        This(this) => Expression::Name(
+            scopes
+                .lookup(this)
+                .ok_or(Error::TopLevelThis { at: *this })?,
+        ),
+    })
 }
 
 fn resolve_function<'a>(
     bump: &'a Bump,
     scopes: &mut Scopes<'a>,
     function: &'a parse::Statement<'a>,
+    kind: FunctionKind,
 ) -> Result<Function<'a>, Error<'a>> {
     let parse::Statement::Function {
         fun: _,
@@ -895,8 +923,18 @@ fn resolve_function<'a>(
         unreachable!()
     };
     let (parameters, body, nonlocal_names) = scopes.with_function(|scopes| {
-        let variables: Vec<_> = parameters
-            .iter()
+        let this = match kind {
+            FunctionKind::Function => Either::Left(iter::empty()),
+            FunctionKind::Method => {
+                // FIXME: this allocates one `this` per method, also the source location is
+                // wrong
+                let this = bump.alloc(Loc::debug_loc(bump, "this"));
+                let this = &*bump.alloc(Name::new(interned::THIS, this));
+                Either::Right(iter::once(this))
+            }
+        };
+        let variables: Vec<_> = this
+            .chain(parameters.iter())
             .map(|name| scopes.add(name))
             .try_collect()?;
         Ok((

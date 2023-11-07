@@ -5,15 +5,10 @@ info:
   args:
     - craftinginterpreters/test/field/method_binds_this.lox
 ---
-success: false
-exit_code: 65
+success: true
+exit_code: 0
 ----- stdout -----
+foo1
+1
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/field/method_binds_this.lox:3:11]
-   │
- 3 │     print this.name;
-   │           ────  
-   │                  
-───╯

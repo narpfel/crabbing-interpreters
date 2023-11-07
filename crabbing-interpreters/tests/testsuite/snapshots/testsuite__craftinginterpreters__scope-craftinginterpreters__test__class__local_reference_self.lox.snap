@@ -13,7 +13,7 @@ exit_code: 0
 (program
    (block
       (class Foo (cell @0)
-         (method returnSelf [] [Some(0)]
+         (method returnSelf [(local this @0)] [Some(0)]
             (block
                (return (cell Foo @0)))))
       (print (call +1 (attr (call +1 (cell Foo @0)) returnSelf)))))

@@ -260,6 +260,7 @@ pub enum Expression<'a> {
         lhs: &'a Expression<'a>,
         attribute: Name<'a>,
     },
+    This(Name<'a>),
 }
 
 impl<'a> Expression<'a> {
@@ -273,6 +274,7 @@ impl<'a> Expression<'a> {
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
             Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+            Expression::This(this) => this.loc(),
         }
     }
 
@@ -290,6 +292,7 @@ impl<'a> Expression<'a> {
             Expression::Assign { .. } => "assignment",
             Expression::Call { .. } => "call expression",
             Expression::Attribute { .. } => "attribute access",
+            Expression::This(_) => "this expression",
         }
     }
 
@@ -323,7 +326,8 @@ impl<'a> Expression<'a> {
                     .join(" ")
             ),
             Expression::Attribute { lhs, attribute } =>
-                format!("(attr {} {})", lhs.as_sexpr(), attribute.slice(),),
+                format!("(attr {} {})", lhs.as_sexpr(), attribute.slice()),
+            Expression::This(_) => "(this)".to_string(),
         }
     }
 }
@@ -866,6 +870,13 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression
         String | Number | True | False | Nil => literal(tokens)?,
         Minus | Bang => unary_op(bump, tokens)?,
         Identifier => ident(tokens)?,
+        This => {
+            let this = tokens.consume(This)?;
+            Expression::This(Name {
+                id: tokens.interner.intern(this.slice()),
+                loc: this.loc(),
+            })
+        }
         // TODO: could error with “expected expression” error here
         _ => unexpected_token_with_message("expression", token)?,
     };

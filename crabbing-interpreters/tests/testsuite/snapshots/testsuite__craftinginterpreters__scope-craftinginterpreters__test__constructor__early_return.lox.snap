@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (class Foo (global @1)
-      (method init [] []
+      (method init [(local this @0)] []
          (block
             (print "init")
             (return ∅)

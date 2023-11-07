@@ -5,6 +5,7 @@ pub mod interned {
 
     pub const CLOCK: InternedString = InternedString(0);
     pub const INIT: InternedString = InternedString(1);
+    pub const THIS: InternedString = InternedString(2);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,9 +19,13 @@ pub struct Interner<'a> {
 impl Default for Interner<'_> {
     fn default() -> Self {
         Self {
-            interned_strings: [("clock", interned::CLOCK), ("init", interned::INIT)]
-                .into_iter()
-                .collect(),
+            interned_strings: [
+                ("clock", interned::CLOCK),
+                ("init", interned::INIT),
+                ("this", interned::THIS),
+            ]
+            .into_iter()
+            .collect(),
         }
     }
 }

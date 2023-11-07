@@ -12,9 +12,9 @@ exit_code: 0
 ----- stdout -----
 (program
    (class Foo (global @1)
-      (method bar [(local arg @0)] []
+      (method bar [(local this @0) (local arg @1)] []
          (block
-            (print (local arg @0)))))
+            (print (local arg @1)))))
    (var bar (global @2) (attr (call +2 (global Foo @1)) bar))
    (print "got method")
    (expr (call +3 (global bar @2) "arg")))

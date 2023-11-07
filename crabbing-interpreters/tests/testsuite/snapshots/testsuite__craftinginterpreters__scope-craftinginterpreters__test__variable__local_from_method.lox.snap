@@ -13,7 +13,7 @@ exit_code: 0
 (program
    (var foo (global @1) "variable")
    (class Foo (global @2)
-      (method method [] []
+      (method method [(local this @0)] []
          (block
             (print (global foo @1)))))
    (expr (call +3 (attr (call +3 (global Foo @2)) method))))

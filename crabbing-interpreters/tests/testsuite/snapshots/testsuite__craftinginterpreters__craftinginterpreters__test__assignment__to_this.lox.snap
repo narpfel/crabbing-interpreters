@@ -10,10 +10,12 @@ exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
-Error: Expect expression.
-   ╭─[craftinginterpreters/test/assignment/to_this.lox:3:5]
+Error: invalid assignment target: `this`
+   ╭─[craftinginterpreters/test/assignment/to_this.lox:3:10]
    │
  3 │     this = "value"; // Error at '=': Invalid assignment target.
-   │     ────  
-   │            
+   │     ──┬─ ─  
+   │       ╰───── only names can be assigned to, not this expressions
+   │             
+   │              
 ───╯

@@ -12,12 +12,12 @@ exit_code: 0
 ----- stdout -----
 (program
    (class Foo (global @1)
-      (method init [] []
+      (method init [(local this @0)] []
          (block
-            (fun init (local @0) [] []
+            (fun init (local @1) [] []
                (block
                   (return "bar")))
-            (print (call +1 (local init @0))))))
+            (print (call +2 (local init @1))))))
    (print (call +2 (global Foo @1))))
 
 ----- stderr -----

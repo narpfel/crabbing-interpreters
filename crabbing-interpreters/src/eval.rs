@@ -46,6 +46,7 @@ pub enum Value<'a> {
     NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
     Class(Class<'a>),
     Instance(Instance<'a>),
+    BoundMethod(Function<'a>, Instance<'a>),
 }
 
 unsafe impl CloneInCellSafe for Value<'_> {}
@@ -71,6 +72,7 @@ impl Value<'_> {
             Value::NativeFunction(_) => "NativeFunction",
             Value::Class(_) => "Class",
             Value::Instance(_) => "Instance",
+            Value::BoundMethod(_, _) => "BoundMethod",
         }
     }
 
@@ -102,6 +104,11 @@ impl Display for Value<'_> {
             Value::NativeFunction(_) => write!(f, "<native fn>"),
             Value::Class(class) => write!(f, "{class:?}"),
             Value::Instance(instance) => write!(f, "{instance:?}"),
+            Value::BoundMethod(method, instance) => write!(
+                f,
+                "<bound method {name} of {instance:?}>",
+                name = method.0.name
+            ),
         }
     }
 }
@@ -609,6 +616,46 @@ pub fn eval<'a>(
                     }
                     instance
                 }
+                Value::BoundMethod(ref method, ref instance) => {
+                    let parameters = method.0.parameters.iter().skip(1);
+                    if arguments.len() != parameters.len() {
+                        Err(Error::ArityMismatch {
+                            callee: callee.clone(),
+                            expected: parameters.len(),
+                            at: expr.into_variant(),
+                        })?;
+                    }
+                    env.define(
+                        &method.0.cells,
+                        offset + stack_size_at_callsite,
+                        method.0.parameters[0].target(),
+                        Value::Instance(instance.clone()),
+                    )?;
+                    arguments
+                        .iter()
+                        .zip(parameters)
+                        .try_for_each(|(arg, param)| {
+                            let arg = eval(env, cell_vars, offset, arg)?;
+                            env.define(
+                                &method.0.cells,
+                                offset + stack_size_at_callsite,
+                                param.target(),
+                                arg,
+                            )
+                        })?;
+                    match execute(
+                        env,
+                        offset + stack_size_at_callsite,
+                        method.0.code,
+                        &method.0.cells,
+                    ) {
+                        // FIXME: When explicitly calling `init`, the instance should be returned
+                        Ok(_) => Ok(Value::Nil),
+                        Err(ControlFlow::Return(value)) => Ok(value),
+                        Err(ControlFlow::Error(err)) => Err(err),
+                    }?
+                    // FIXME: truncate env here to drop the callee’s locals
+                }
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
@@ -631,13 +678,25 @@ pub fn eval<'a>(
                     .attributes
                     .borrow()
                     .get(&attribute.id())
-                    .or_else(|| instance.0.class.0.methods.get(&attribute.id()))
+                    .cloned()
+                    .or_else(|| {
+                        instance
+                            .0
+                            .class
+                            .0
+                            .methods
+                            .get(&attribute.id())
+                            .map(|method| match method {
+                                Value::Function(method) =>
+                                    Value::BoundMethod(method.clone(), instance.clone()),
+                                _ => unreachable!(),
+                            })
+                    })
                     .ok_or_else(|| Error::UndefinedProperty {
                         lhs: lhs.clone(),
                         attribute: *attribute,
                         at: expr.into_variant(),
-                    })?
-                    .clone(),
+                    })?,
                 _ => Err(Error::NoProperty { lhs, at: expr.into_variant() })?,
             }
         }
