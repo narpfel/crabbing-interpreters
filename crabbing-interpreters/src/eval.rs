@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::iter::zip;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -525,18 +526,15 @@ pub fn eval<'a>(
                             at: expr.into_variant(),
                         })?;
                     }
-                    arguments
-                        .iter()
-                        .zip(func.0.parameters)
-                        .try_for_each(|(arg, param)| {
-                            let arg = eval(env, cell_vars, offset, arg)?;
-                            env.define(
-                                &func.0.cells,
-                                offset + stack_size_at_callsite,
-                                param.target(),
-                                arg,
-                            )
-                        })?;
+                    zip(*arguments, func.0.parameters).try_for_each(|(arg, param)| {
+                        let arg = eval(env, cell_vars, offset, arg)?;
+                        env.define(
+                            &func.0.cells,
+                            offset + stack_size_at_callsite,
+                            param.target(),
+                            arg,
+                        )
+                    })?;
                     match execute(
                         env,
                         offset + stack_size_at_callsite,
@@ -583,18 +581,15 @@ pub fn eval<'a>(
                             init.0.parameters[0].target(),
                             instance.clone(),
                         )?;
-                        arguments
-                            .iter()
-                            .zip(parameters)
-                            .try_for_each(|(arg, param)| {
-                                let arg = eval(env, cell_vars, offset, arg)?;
-                                env.define(
-                                    &init.0.cells,
-                                    offset + stack_size_at_callsite,
-                                    param.target(),
-                                    arg,
-                                )
-                            })?;
+                        zip(*arguments, parameters).try_for_each(|(arg, param)| {
+                            let arg = eval(env, cell_vars, offset, arg)?;
+                            env.define(
+                                &init.0.cells,
+                                offset + stack_size_at_callsite,
+                                param.target(),
+                                arg,
+                            )
+                        })?;
                         match execute(
                             env,
                             offset + stack_size_at_callsite,
@@ -631,18 +626,15 @@ pub fn eval<'a>(
                         method.0.parameters[0].target(),
                         Value::Instance(instance.clone()),
                     )?;
-                    arguments
-                        .iter()
-                        .zip(parameters)
-                        .try_for_each(|(arg, param)| {
-                            let arg = eval(env, cell_vars, offset, arg)?;
-                            env.define(
-                                &method.0.cells,
-                                offset + stack_size_at_callsite,
-                                param.target(),
-                                arg,
-                            )
-                        })?;
+                    zip(*arguments, parameters).try_for_each(|(arg, param)| {
+                        let arg = eval(env, cell_vars, offset, arg)?;
+                        env.define(
+                            &method.0.cells,
+                            offset + stack_size_at_callsite,
+                            param.target(),
+                            arg,
+                        )
+                    })?;
                     match execute(
                         env,
                         offset + stack_size_at_callsite,
