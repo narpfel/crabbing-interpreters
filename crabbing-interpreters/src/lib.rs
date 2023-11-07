@@ -1,6 +1,7 @@
 #![feature(closure_lifetime_binder)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
+#![feature(stmt_expr_attributes)]
 
 use std::cell::Cell;
 use std::ffi::OsStr;

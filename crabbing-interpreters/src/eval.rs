@@ -1,8 +1,10 @@
+use core::slice;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::zip;
+use std::iter::Skip;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -517,36 +519,64 @@ pub fn eval<'a>(
             ..
         } => {
             let callee = eval(env, cell_vars, offset, callee)?;
-            match callee {
-                Value::Function(ref func) => {
-                    if arguments.len() != func.0.parameters.len() {
-                        Err(Error::ArityMismatch {
-                            callee: callee.clone(),
-                            expected: func.0.parameters.len(),
-                            at: expr.into_variant(),
-                        })?;
-                    }
-                    zip(*arguments, func.0.parameters).try_for_each(|(arg, param)| {
-                        let arg = eval(env, cell_vars, offset, arg)?;
-                        env.define(
-                            &func.0.cells,
-                            offset + stack_size_at_callsite,
-                            param.target(),
-                            arg,
-                        )
+
+            let eval_call = #[inline(always)]
+            |env: &mut Environment<'a>,
+                             function: &self::Function<'a>,
+                             parameters: Skip<slice::Iter<Variable<'a>>>|
+             -> Result<Value<'a>, Box<Error<'a>>> {
+                if arguments.len() != parameters.len() {
+                    Err(Error::ArityMismatch {
+                        callee: callee.clone(),
+                        expected: parameters.len(),
+                        at: expr.into_variant(),
                     })?;
-                    match execute(
-                        env,
-                        offset + stack_size_at_callsite,
-                        func.0.code,
-                        &func.0.cells,
-                    ) {
-                        Ok(_) => Ok(Value::Nil),
-                        Err(ControlFlow::Return(value)) => Ok(value),
-                        Err(ControlFlow::Error(err)) => Err(err),
-                    }?
-                    // FIXME: truncate env here to drop the callee’s locals
                 }
+                zip(*arguments, parameters).try_for_each(|(arg, param)| {
+                    let arg = eval(env, cell_vars, offset, arg)?;
+                    env.define(
+                        &function.0.cells,
+                        offset + stack_size_at_callsite,
+                        param.target(),
+                        arg,
+                    )
+                })?;
+                match execute(
+                    env,
+                    offset + stack_size_at_callsite,
+                    function.0.code,
+                    &function.0.cells,
+                ) {
+                    Ok(_) => Ok(Value::Nil),
+                    Err(ControlFlow::Return(value)) => Ok(value),
+                    Err(ControlFlow::Error(err)) => Err(err),
+                }
+                // FIXME: truncate env here to drop the callee’s locals
+            };
+
+            let eval_method_call = #[inline(always)]
+            |env: &mut Environment<'a>,
+                                    method: &self::Function<'a>,
+                                    instance: Value<'a>|
+             -> Result<Value<'a>, Box<Error<'a>>> {
+                env.define(
+                    &method.0.cells,
+                    offset + stack_size_at_callsite,
+                    method.0.parameters[0].target(),
+                    instance,
+                )?;
+                let parameters = method.0.parameters.iter().skip(1);
+                eval_call(env, method, parameters)
+            };
+
+            match callee {
+                Value::Function(ref func) => eval_call(
+                    env,
+                    func,
+                    // FIXME: clippy issue 11761
+                    #[allow(clippy::iter_skip_zero)]
+                    func.0.parameters.iter().skip(0),
+                )?,
                 Value::NativeFunction(func) => {
                     let arguments = arguments
                         .iter()
@@ -567,40 +597,7 @@ pub fn eval<'a>(
                         attributes: RefCell::new(HashMap::default()),
                     })));
                     if let Some(Value::Function(ref init)) = class.0.methods.get(&interned::INIT) {
-                        let parameters = init.0.parameters.iter().skip(1);
-                        if arguments.len() != parameters.len() {
-                            Err(Error::ArityMismatch {
-                                callee: callee.clone(),
-                                expected: parameters.len(),
-                                at: expr.into_variant(),
-                            })?;
-                        }
-                        env.define(
-                            &init.0.cells,
-                            offset + stack_size_at_callsite,
-                            init.0.parameters[0].target(),
-                            instance.clone(),
-                        )?;
-                        zip(*arguments, parameters).try_for_each(|(arg, param)| {
-                            let arg = eval(env, cell_vars, offset, arg)?;
-                            env.define(
-                                &init.0.cells,
-                                offset + stack_size_at_callsite,
-                                param.target(),
-                                arg,
-                            )
-                        })?;
-                        match execute(
-                            env,
-                            offset + stack_size_at_callsite,
-                            init.0.code,
-                            &init.0.cells,
-                        ) {
-                            Ok(_) => Ok(Value::Nil),
-                            Err(ControlFlow::Return(value)) => Ok(value),
-                            Err(ControlFlow::Error(err)) => Err(err),
-                        }?;
-                        // FIXME: truncate env here to drop the callee’s locals
+                        eval_method_call(env, init, instance.clone())?;
                     }
                     else if !arguments.is_empty() {
                         Err(Error::ArityMismatch {
@@ -611,43 +608,9 @@ pub fn eval<'a>(
                     }
                     instance
                 }
-                Value::BoundMethod(ref method, ref instance) => {
-                    let parameters = method.0.parameters.iter().skip(1);
-                    if arguments.len() != parameters.len() {
-                        Err(Error::ArityMismatch {
-                            callee: callee.clone(),
-                            expected: parameters.len(),
-                            at: expr.into_variant(),
-                        })?;
-                    }
-                    env.define(
-                        &method.0.cells,
-                        offset + stack_size_at_callsite,
-                        method.0.parameters[0].target(),
-                        Value::Instance(instance.clone()),
-                    )?;
-                    zip(*arguments, parameters).try_for_each(|(arg, param)| {
-                        let arg = eval(env, cell_vars, offset, arg)?;
-                        env.define(
-                            &method.0.cells,
-                            offset + stack_size_at_callsite,
-                            param.target(),
-                            arg,
-                        )
-                    })?;
-                    match execute(
-                        env,
-                        offset + stack_size_at_callsite,
-                        method.0.code,
-                        &method.0.cells,
-                    ) {
-                        // FIXME: When explicitly calling `init`, the instance should be returned
-                        Ok(_) => Ok(Value::Nil),
-                        Err(ControlFlow::Return(value)) => Ok(value),
-                        Err(ControlFlow::Error(err)) => Err(err),
-                    }?
-                    // FIXME: truncate env here to drop the callee’s locals
-                }
+                // FIXME: When explicitly calling `init`, the instance should be returned
+                Value::BoundMethod(ref method, ref instance) =>
+                    eval_method_call(env, method, Value::Instance(instance.clone()))?,
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
