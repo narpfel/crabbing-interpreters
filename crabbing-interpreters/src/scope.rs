@@ -388,6 +388,7 @@ pub enum Statement<'a> {
     Return(Option<Expression<'a>>),
     Class {
         target: Variable<'a>,
+        base: Option<Expression<'a>>,
         methods: &'a [Function<'a>],
     },
 }
@@ -445,10 +446,12 @@ impl Statement<'_> {
                 "(return {})",
                 expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr()),
             ),
-            Statement::Class { target, methods } => format!(
-                "(class {} {}{}{})",
+            Statement::Class { target, base, methods } => format!(
+                "(class {} {} {}{}{})",
                 target.name.slice(),
                 target.target(),
+                base.map(|base| base.as_sexpr())
+                    .unwrap_or_else(|| "∅".to_string()),
                 if methods.is_empty() { "" } else { "\n" },
                 methods
                     .iter()
@@ -578,7 +581,7 @@ impl<'a> Variable<'a> {
         }
     }
 
-    fn loc(&self) -> Loc<'a> {
+    pub(crate) fn loc(&self) -> Loc<'a> {
         self.name.loc()
     }
 }
@@ -826,7 +829,17 @@ fn resolve_stmt<'a>(
                         .transpose()?,
                 )
             },
-        Class { class: _, name, methods, close_brace: _ } => {
+        Class {
+            class: _,
+            name,
+            base,
+            methods,
+            close_brace: _,
+        } => {
+            let base = base
+                .as_ref()
+                .map(|base| resolve_expr(bump, scopes, base))
+                .transpose()?;
             let target = scopes.add(name)?;
             let methods = bump.alloc_slice_copy(
                 &methods
@@ -834,7 +847,7 @@ fn resolve_stmt<'a>(
                     .map(|method| resolve_function(bump, scopes, method, FunctionKind::Method))
                     .collect::<Result<Vec<_>, _>>()?,
             );
-            Statement::Class { target, methods }
+            Statement::Class { target, base, methods }
         }
     })
 }

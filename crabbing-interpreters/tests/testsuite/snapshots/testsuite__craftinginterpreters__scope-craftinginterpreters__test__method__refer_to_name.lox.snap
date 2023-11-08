@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1)
+   (class Foo (global @1) ∅
       (method method [(local this @0)] []
          (block
             (print (global-by-name method)))))

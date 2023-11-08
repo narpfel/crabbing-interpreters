@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (var foo (global @1) "variable")
-   (class Foo (global @2)
+   (class Foo (global @2) ∅
       (method method [(local this @0)] []
          (block
             (print (global foo @1)))))

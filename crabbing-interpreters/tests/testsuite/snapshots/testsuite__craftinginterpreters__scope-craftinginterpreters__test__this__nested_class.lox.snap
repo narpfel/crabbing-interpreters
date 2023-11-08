@@ -11,14 +11,14 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Outer (global @1)
+   (class Outer (global @1) ∅
       (method method [(cell this @0)] [None]
          (block
             (print (cell this @0))
             (fun f (local @1) [] [Some(0)]
                (block
                   (print (cell this @0))
-                  (class Inner (local @0)
+                  (class Inner (local @0) ∅
                      (method method [(local this @0)] []
                         (block
                            (print (local this @0)))))

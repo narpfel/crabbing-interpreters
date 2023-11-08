@@ -3,7 +3,7 @@ source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/field/get_on_class.lox
+    - craftinginterpreters/test/class/inherit_self.lox
     - "--scopes"
     - "--stop-at=scopes"
 ---
@@ -11,7 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅)
-   (expr (attr (global Foo @1) bar)))
+   (class Foo (global @1) (global-by-name Foo)))
 
 ----- stderr -----

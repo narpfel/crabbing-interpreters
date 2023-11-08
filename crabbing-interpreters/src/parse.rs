@@ -173,6 +173,7 @@ pub enum Statement<'a> {
     Class {
         class: Token<'a>,
         name: Name<'a>,
+        base: Option<Expression<'a>>,
         methods: &'a [Statement<'a>],
         close_brace: Token<'a>,
     },
@@ -209,8 +210,13 @@ impl<'a> Statement<'a> {
                 .until(close_brace.loc()),
             Statement::Return { return_token, expr: _, semi } =>
                 return_token.loc().until(semi.loc()),
-            Statement::Class { class, name: _, methods: _, close_brace } =>
-                class.loc().until(close_brace.loc()),
+            Statement::Class {
+                class,
+                name: _,
+                base: _,
+                methods: _,
+                close_brace,
+            } => class.loc().until(close_brace.loc()),
         }
     }
 
@@ -593,6 +599,14 @@ fn declaration<'a>(
 fn class<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a>, Error<'a>> {
     let class = tokens.consume(TokenKind::Class)?;
     let name = name(tokens)?;
+    let token = tokens.peek()?;
+    let base = if matches!(token.kind, TokenKind::Less) {
+        tokens.consume(TokenKind::Less)?;
+        Some(ident(tokens)?)
+    }
+    else {
+        None
+    };
     tokens.consume(TokenKind::LBrace)?;
     let mut methods = Vec::new();
     loop {
@@ -606,6 +620,7 @@ fn class<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Statement<'a
     Ok(Statement::Class {
         class,
         name,
+        base,
         methods: bump.alloc_slice_copy(&methods),
         close_brace,
     })

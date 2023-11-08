@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (var f (global @1) ∅)
-   (class Foo (global @2)
+   (class Foo (global @2) ∅
       (method method [(local this @0) (cell param @0)] [None]
          (block
             (fun f_ (local @2) [] [Some(0)]

@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1))
+   (class Foo (global @1) ∅)
    (var foo (global @2) (call +2 (global Foo @1)))
    (print (global foo @2)))
 

@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1)
+   (class Foo (global @1) ∅
       (method getClosure [(cell this @0)] [None]
          (block
             (fun closure (local @1) [] [Some(0)]

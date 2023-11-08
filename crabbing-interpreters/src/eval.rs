@@ -3,6 +3,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::iter;
 use std::iter::zip;
 use std::iter::Skip;
 use std::ops::Deref;
@@ -139,7 +140,19 @@ pub struct Class<'a>(Rc<ClassInner<'a>>);
 
 struct ClassInner<'a> {
     name: &'a str,
+    base: Option<Class<'a>>,
     methods: HashMap<InternedString, Value<'a>>,
+}
+
+impl<'a> ClassInner<'a> {
+    fn mro(&self) -> impl Iterator<Item = &Self> {
+        let mut class = Some(self);
+        iter::from_fn(move || {
+            let result = class;
+            class = class.and_then(|class| class.base.as_ref().map(|class| &*class.0));
+            result
+        })
+    }
 }
 
 impl Debug for Class<'_> {
@@ -300,6 +313,14 @@ pub enum Error<'a> {
         lhs: Value<'a>,
         #[diagnostics(lhs(colour = Red), attribute(colour = Magenta))]
         at: AssignmentTargetTypes::Attribute<'a>,
+    },
+
+    #[error("only classes can be inherited from, but `{base}` is of type `{ty}`")]
+    #[with(ty = base.typ())]
+    InvalidBase {
+        base: Value<'a>,
+        #[diagnostics(0(colour = Red))]
+        at: ExpressionTypes::Name<'a>,
     },
 }
 
@@ -639,8 +660,8 @@ pub fn eval<'a>(
                             .0
                             .class
                             .0
-                            .methods
-                            .get(&attribute.id())
+                            .mro()
+                            .find_map(|class| class.methods.get(&attribute.id()))
                             .map(|method| match method {
                                 Value::Function(method) =>
                                     Value::BoundMethod(method.clone(), instance.clone()),
@@ -731,7 +752,14 @@ pub fn execute<'a>(
                     .map_or(Ok(Value::Nil), |expr| eval(env, cell_vars, offset, expr))?;
                 Err(ControlFlow::Return(return_value))?
             }
-            Statement::Class { target, methods } => {
+            Statement::Class { target, base, methods } => {
+                let base = base
+                    .as_ref()
+                    .map(|base| match eval(env, cell_vars, offset, base)? {
+                        Value::Class(class) => Ok::<Class, Box<Error<'a>>>(class),
+                        value => Err(Error::InvalidBase { base: value, at: base.into_variant() })?,
+                    })
+                    .transpose()?;
                 env.define(cell_vars, offset, target.target(), Value::Nil)?;
                 let methods: HashMap<_, _> = methods
                     .iter()
@@ -743,6 +771,7 @@ pub fn execute<'a>(
                     target.target(),
                     Value::Class(Class(Rc::new(ClassInner {
                         name: target.name.slice(),
+                        base,
                         methods,
                     }))),
                 )?;

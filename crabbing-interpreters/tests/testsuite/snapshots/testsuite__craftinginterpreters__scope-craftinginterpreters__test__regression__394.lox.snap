@@ -3,7 +3,7 @@ source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/field/get_on_class.lox
+    - craftinginterpreters/test/regression/394.lox
     - "--scopes"
     - "--stop-at=scopes"
 ---
@@ -11,7 +11,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅)
-   (expr (attr (global Foo @1) bar)))
+   (block
+      (class A (local @1) ∅)
+      (class B (local @2) (local A @1))
+      (print (local B @2))))
 
 ----- stderr -----
