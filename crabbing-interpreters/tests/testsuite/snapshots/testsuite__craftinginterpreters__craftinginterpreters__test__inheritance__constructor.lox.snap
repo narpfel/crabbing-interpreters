@@ -5,15 +5,9 @@ info:
   args:
     - craftinginterpreters/test/inheritance/constructor.lox
 ---
-success: false
-exit_code: 70
+success: true
+exit_code: 0
 ----- stdout -----
+value
 
 ----- stderr -----
-Error: arity error: `<class B at [POINTER]>` expects 0 args but 1 args were passed
-    ╭─[craftinginterpreters/test/inheritance/constructor.lox:13:9]
-    │
- 13 │ var b = B("value");
-    │         ┬  
-    │         ╰── expects 0 arguments
-────╯

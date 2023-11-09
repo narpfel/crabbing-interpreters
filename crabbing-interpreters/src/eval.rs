@@ -152,6 +152,10 @@ impl<'a> ClassInner<'a> {
             )
         })
     }
+
+    fn lookup_method(&self, name: InternedString) -> Option<&Value<'a>> {
+        self.mro().find_map(|class| class.methods.get(&name))
+    }
 }
 
 impl Debug for Class<'_> {
@@ -627,15 +631,17 @@ pub fn eval<'a>(
                         class: class.clone(),
                         attributes: RefCell::new(HashMap::default()),
                     })));
-                    if let Some(Value::Function(ref init)) = class.0.methods.get(&interned::INIT) {
-                        eval_method_call(env, init, instance.clone())?;
-                    }
-                    else if !arguments.is_empty() {
-                        Err(Error::ArityMismatch {
+                    match class.0.lookup_method(interned::INIT) {
+                        Some(Value::Function(ref init)) => {
+                            eval_method_call(env, init, instance.clone())?;
+                        }
+                        Some(_) => unreachable!(),
+                        None if arguments.is_empty() => (),
+                        None => Err(Error::ArityMismatch {
                             callee: callee.clone(),
                             expected: 0,
                             at: expr.into_variant(),
-                        })?;
+                        })?,
                     }
                     instance
                 }
@@ -666,17 +672,13 @@ pub fn eval<'a>(
                     .get(&attribute.id())
                     .cloned()
                     .or_else(|| {
-                        instance
-                            .0
-                            .class
-                            .0
-                            .mro()
-                            .find_map(|class| class.methods.get(&attribute.id()))
-                            .map(|method| match method {
+                        instance.0.class.0.lookup_method(attribute.id()).map(
+                            |method| match method {
                                 Value::Function(method) =>
                                     Value::BoundMethod(method.clone(), instance.clone()),
                                 _ => unreachable!(),
-                            })
+                            },
+                        )
                     })
                     .ok_or_else(|| Error::UndefinedProperty {
                         lhs: lhs.clone(),
