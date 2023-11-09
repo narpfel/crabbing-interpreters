@@ -267,6 +267,10 @@ pub enum Expression<'a> {
         attribute: Name<'a>,
     },
     This(Name<'a>),
+    Super {
+        super_: Name<'a>,
+        attribute: Name<'a>,
+    },
 }
 
 impl<'a> Expression<'a> {
@@ -281,6 +285,7 @@ impl<'a> Expression<'a> {
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
             Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
             Expression::This(this) => this.loc(),
+            Expression::Super { super_, attribute } => super_.loc().until(attribute.loc()),
         }
     }
 
@@ -299,6 +304,7 @@ impl<'a> Expression<'a> {
             Expression::Call { .. } => "call expression",
             Expression::Attribute { .. } => "attribute access",
             Expression::This(_) => "this expression",
+            Expression::Super { .. } => "super expression",
         }
     }
 
@@ -334,6 +340,7 @@ impl<'a> Expression<'a> {
             Expression::Attribute { lhs, attribute } =>
                 format!("(attr {} {})", lhs.as_sexpr(), attribute.slice()),
             Expression::This(_) => "(this)".to_string(),
+            Expression::Super { super_: _, attribute } => format!("(super {})", attribute.slice()),
         }
     }
 }
@@ -468,6 +475,10 @@ impl<'a> Name<'a> {
 
     pub(crate) fn loc(&self) -> Loc<'a> {
         self.loc
+    }
+
+    pub(crate) fn loc_ref(&'a self) -> &'a Loc<'a> {
+        &self.loc
     }
 
     pub(crate) fn slice(&self) -> &'a str {
@@ -891,6 +902,16 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression
                 id: tokens.interner.intern(this.slice()),
                 loc: this.loc(),
             })
+        }
+        Super => {
+            let super_ = tokens.consume(Super)?;
+            let super_ = Name {
+                id: tokens.interner.intern(super_.slice()),
+                loc: super_.loc(),
+            };
+            tokens.consume(TokenKind::Dot)?;
+            let attribute = name(tokens)?;
+            Expression::Super { super_, attribute }
         }
         // TODO: could error with “expected expression” error here
         _ => unexpected_token_with_message("expression", token)?,

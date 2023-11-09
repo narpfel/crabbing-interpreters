@@ -310,6 +310,15 @@ pub enum Error<'a> {
         at: ExpressionTypes::Attribute<'a>,
     },
 
+    #[error("undefined super property `{name}` of value `{super_}`")]
+    #[with(name = attribute.slice())]
+    UndefinedSuperProperty {
+        super_: Value<'a>,
+        attribute: Name<'a>,
+        #[diagnostics(super_(colour = Red), attribute(colour = Magenta))]
+        at: ExpressionTypes::Super<'a>,
+    },
+
     #[error("only instances have fields, but `{lhs}` is of type `{lhs_typ}`")]
     #[with(lhs_typ = lhs.typ())]
     NoFields {
@@ -688,6 +697,29 @@ pub fn eval<'a>(
                 _ => Err(Error::NoProperty { lhs, at: expr.into_variant() })?,
             }
         }
+        Expression::Super { super_, this, attribute } => {
+            let this = eval(env, cell_vars, offset, &Expression::Name(*this))?;
+            let super_ = match eval(env, cell_vars, offset, &Expression::Name(*super_))? {
+                Value::Class(super_) => super_,
+                value => unreachable!("invalid base class value: {value}"),
+            };
+            match this {
+                Value::Instance(ref instance) => super_
+                    .0
+                    .lookup_method(attribute.id())
+                    .map(|method| match method {
+                        Value::Function(method) =>
+                            Value::BoundMethod(method.clone(), instance.clone()),
+                        _ => unreachable!(),
+                    })
+                    .ok_or_else(|| Error::UndefinedSuperProperty {
+                        super_: this.clone(),
+                        attribute: *attribute,
+                        at: expr.into_variant(),
+                    })?,
+                _ => unreachable!(),
+            }
+        }
     })
 }
 
@@ -777,16 +809,27 @@ pub fn execute<'a>(
                     .iter()
                     .map(|method| (method.name.id(), eval_function(cell_vars, method)))
                     .collect();
+                let class = Class(Rc::new(ClassInner {
+                    name: target.name.slice(),
+                    base,
+                    methods,
+                }));
                 env.set(
                     cell_vars,
                     offset,
                     target.target(),
-                    Value::Class(Class(Rc::new(ClassInner {
-                        name: target.name.slice(),
-                        base,
-                        methods,
-                    }))),
+                    Value::Class(class.clone()),
                 )?;
+                if let Some(ref base) = class.0.base {
+                    let base = Value::Class(base.clone());
+                    class.0.methods.values().for_each(|method| {
+                        let Value::Function(method) = method
+                        else {
+                            unreachable!()
+                        };
+                        method.0.cells[0].set(Rc::new(Cell::new(base.clone())));
+                    });
+                }
                 Value::Nil
             }
         }

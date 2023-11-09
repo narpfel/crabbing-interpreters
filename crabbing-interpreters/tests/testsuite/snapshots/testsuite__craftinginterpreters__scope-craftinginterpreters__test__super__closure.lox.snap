@@ -1,0 +1,31 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/closure.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Base (global @1) ∅
+      (method toString [(local this @0)] []
+         (block
+            (return "Base"))))
+   (class Derived (global @2) (global Base @1)
+      (method getClosure [(cell this @1)] [None, None]
+         (block
+            (fun closure (local @1) [] [Some(1), Some(0)]
+               (block
+                  (return (call +0 (super (cell super @1) (cell super @0) toString)))))
+            (return (local closure @1))))
+      (method toString [(local this @0)] [None]
+         (block
+            (return "Derived"))))
+   (var closure (global @3) (call +3 (attr (call +3 (global Derived @2)) getClosure)))
+   (print (call +4 (global closure @3))))
+
+----- stderr -----

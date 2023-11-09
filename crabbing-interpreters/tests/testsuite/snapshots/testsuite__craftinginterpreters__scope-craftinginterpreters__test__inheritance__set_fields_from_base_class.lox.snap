@@ -21,11 +21,11 @@ exit_code: 0
             (print (attr (local this @0) field1))
             (print (attr (local this @0) field2)))))
    (class Bar (global @2) (global Foo @1)
-      (method bar [(local this @0) (local a @1) (local b @2)] []
+      (method bar [(local this @0) (local a @1) (local b @2)] [None]
          (block
             (expr (= (setattr (local this @0) field1) (local a @1)))
             (expr (= (setattr (local this @0) field2) (local b @2)))))
-      (method barPrint [(local this @0)] []
+      (method barPrint [(local this @0)] [None]
          (block
             (print (attr (local this @0) field1))
             (print (attr (local this @0) field2)))))

@@ -16,11 +16,11 @@ exit_code: 0
          (block
             (print "in foo"))))
    (class Bar (global @2) (global Foo @1)
-      (method inBar [(local this @0)] []
+      (method inBar [(local this @0)] [None]
          (block
             (print "in bar"))))
    (class Baz (global @3) (global Bar @2)
-      (method inBaz [(local this @0)] []
+      (method inBaz [(local this @0)] [None]
          (block
             (print "in baz"))))
    (var baz (global @4) (call +4 (global Baz @3)))

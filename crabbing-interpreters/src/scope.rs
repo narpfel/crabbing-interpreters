@@ -28,6 +28,38 @@ use crate::IndentLines;
 
 const EMPTY: &str = "";
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum HasBase {
+    Yes,
+    No,
+}
+
+impl From<HasBase> for bool {
+    fn from(value: HasBase) -> Self {
+        match value {
+            HasBase::Yes => true,
+            HasBase::No => false,
+        }
+    }
+}
+
+impl From<bool> for HasBase {
+    fn from(value: bool) -> Self {
+        if value {
+            HasBase::Yes
+        }
+        else {
+            HasBase::No
+        }
+    }
+}
+
+#[derive(Debug)]
+enum FunctionKindWithBase {
+    Function,
+    Method(HasBase),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum CellRef<'a> {
     Local(Variable<'a>),
@@ -111,6 +143,18 @@ pub enum Error<'a> {
 
     #[error("Can’t use `{at}` outside of class.")]
     TopLevelThis {
+        #[diagnostics(loc(colour = Red))]
+        at: Name<'a>,
+    },
+
+    #[error("Can’t use `{at}` outside of class.")]
+    TopLevelSuper {
+        #[diagnostics(loc(colour = Red))]
+        at: Name<'a>,
+    },
+
+    #[error("Can’t use `{at}` in a class with no bases.")]
+    SuperInParentlessClass {
         #[diagnostics(loc(colour = Red))]
         at: Name<'a>,
     },
@@ -500,13 +544,7 @@ impl<'a> Variable<'a> {
 
 impl PartialEq for Variable<'_> {
     fn eq(&self, other: &Self) -> bool {
-        if PointerCompare(self.target) == PointerCompare(other.target) {
-            debug_assert_eq!(self.name.slice(), other.name.slice());
-            true
-        }
-        else {
-            false
-        }
+        PointerCompare(self.target) == PointerCompare(other.target)
     }
 }
 
@@ -618,6 +656,11 @@ pub enum Expression<'a> {
         lhs: &'a Expression<'a>,
         attribute: Name<'a>,
     },
+    Super {
+        super_: Variable<'a>,
+        this: Variable<'a>,
+        attribute: Name<'a>,
+    },
 }
 
 impl<'a> Expression<'a> {
@@ -631,6 +674,7 @@ impl<'a> Expression<'a> {
             Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
             Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
             Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+            Expression::Super { super_, this: _, attribute } => super_.loc().until(attribute.loc()),
         }
     }
 
@@ -670,6 +714,12 @@ impl<'a> Expression<'a> {
             Expression::Name(variable) => variable.as_sexpr(),
             Expression::Attribute { lhs, attribute } =>
                 format!("(attr {} {})", lhs.as_sexpr(), attribute.slice()),
+            Expression::Super { super_, this, attribute } => format!(
+                "(super {} {} {})",
+                super_.as_sexpr(),
+                this.as_sexpr(),
+                attribute.slice(),
+            ),
         }
     }
 }
@@ -808,7 +858,8 @@ fn resolve_stmt<'a>(
         }
         function @ Function { name, .. } => {
             let target = scopes.add(name)?;
-            let function = resolve_function(bump, scopes, function, FunctionKind::Function)?;
+            let function =
+                resolve_function(bump, scopes, function, FunctionKindWithBase::Function)?;
             Statement::Function { target, function }
         }
         Return { return_token, expr, semi: _ } =>
@@ -837,7 +888,14 @@ fn resolve_stmt<'a>(
             let methods = bump.alloc_slice_copy(
                 &methods
                     .iter()
-                    .map(|method| resolve_function(bump, scopes, method, FunctionKind::Method))
+                    .map(|method| {
+                        resolve_function(
+                            bump,
+                            scopes,
+                            method,
+                            FunctionKindWithBase::Method(base.is_some().into()),
+                        )
+                    })
                     .collect::<Result<Vec<_>, _>>()?,
             );
             Statement::Class { target, base, methods }
@@ -909,6 +967,16 @@ fn resolve_expr<'a>(
                 .lookup(this)
                 .ok_or(Error::TopLevelThis { at: *this })?,
         ),
+        Super { super_, attribute } => {
+            let this = &*bump.alloc(Name::new(interned::THIS, super_.loc_ref()));
+            let this = scopes
+                .lookup(this)
+                .ok_or(Error::TopLevelSuper { at: *super_ })?;
+            let super_ = scopes
+                .lookup(super_)
+                .ok_or(Error::SuperInParentlessClass { at: *super_ })?;
+            Expression::Super { super_, this, attribute: *attribute }
+        }
     })
 }
 
@@ -916,7 +984,7 @@ fn resolve_function<'a>(
     bump: &'a Bump,
     scopes: &mut Scopes<'a>,
     function: &'a parse::Statement<'a>,
-    kind: FunctionKind,
+    kind: FunctionKindWithBase,
 ) -> Result<Function<'a>, Error<'a>> {
     let parse::Statement::Function {
         fun: _,
@@ -930,8 +998,21 @@ fn resolve_function<'a>(
     };
     let (parameters, body, nonlocal_names) = scopes.with_function(|scopes| {
         let this = match kind {
-            FunctionKind::Function => Either::Left(iter::empty()),
-            FunctionKind::Method => {
+            FunctionKindWithBase::Function => Either::Left(iter::empty()),
+            FunctionKindWithBase::Method(has_base) => {
+                if has_base.into() {
+                    // FIXME: this is only needed if the method body actually uses `super`, however
+                    // conservatively assuming `super` might be used is a one-time cost at class
+                    // creation time
+                    // FIXME: this allocates one `super` per method, also the source location is
+                    // wrong
+                    let super_ = bump.alloc(Loc::debug_loc(bump, "super"));
+                    let super_ = &*bump.alloc(Name::new(interned::SUPER, super_));
+                    let super_ = scopes.add(super_).unwrap();
+                    scopes.local_to_cell(super_);
+                    // FIXME: ugly hack to avoid a hole in the stack layout of *every* method
+                    scopes.offset -= 1;
+                }
                 // FIXME: this allocates one `this` per method, also the source location is
                 // wrong
                 let this = bump.alloc(Loc::debug_loc(bump, "this"));

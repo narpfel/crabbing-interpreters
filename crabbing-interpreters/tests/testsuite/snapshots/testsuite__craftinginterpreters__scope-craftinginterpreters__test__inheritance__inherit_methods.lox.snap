@@ -19,10 +19,10 @@ exit_code: 0
          (block
             (print "foo"))))
    (class Bar (global @2) (global Foo @1)
-      (method methodOnBar [(local this @0)] []
+      (method methodOnBar [(local this @0)] [None]
          (block
             (print "bar")))
-      (method override [(local this @0)] []
+      (method override [(local this @0)] [None]
          (block
             (print "bar"))))
    (var bar (global @3) (call +3 (global Bar @2)))

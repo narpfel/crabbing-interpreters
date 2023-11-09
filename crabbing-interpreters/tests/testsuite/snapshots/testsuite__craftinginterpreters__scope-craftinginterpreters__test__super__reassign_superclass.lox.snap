@@ -1,0 +1,31 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/reassign_superclass.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Base (global @1) ∅
+      (method method [(local this @0)] []
+         (block
+            (print "Base.method()"))))
+   (class Derived (global @2) (global Base @1)
+      (method method [(local this @0)] [None]
+         (block
+            (expr (call +1 (super (cell super @0) (local super @0) method))))))
+   (class OtherBase (global @3) ∅
+      (method method [(local this @0)] []
+         (block
+            (print "OtherBase.method()"))))
+   (var derived (global @4) (call +4 (global Derived @2)))
+   (expr (call +5 (attr (global derived @4) method)))
+   (expr (= (global Base @1) (global OtherBase @3)))
+   (expr (call +5 (attr (global derived @4) method))))
+
+----- stderr -----

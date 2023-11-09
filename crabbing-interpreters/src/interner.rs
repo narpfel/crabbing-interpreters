@@ -6,6 +6,7 @@ pub mod interned {
     pub const CLOCK: InternedString = InternedString(0);
     pub const INIT: InternedString = InternedString(1);
     pub const THIS: InternedString = InternedString(2);
+    pub const SUPER: InternedString = InternedString(3);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -23,6 +24,7 @@ impl Default for Interner<'_> {
                 ("clock", interned::CLOCK),
                 ("init", interned::INIT),
                 ("this", interned::THIS),
+                ("super", interned::SUPER),
             ]
             .into_iter()
             .collect(),

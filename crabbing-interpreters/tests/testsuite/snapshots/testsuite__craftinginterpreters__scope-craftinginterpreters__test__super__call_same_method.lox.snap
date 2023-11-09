@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/call_same_method.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Base (global @1) ∅
+      (method foo [(local this @0)] []
+         (block
+            (print "Base.foo()"))))
+   (class Derived (global @2) (global Base @1)
+      (method foo [(local this @0)] [None]
+         (block
+            (print "Derived.foo()")
+            (expr (call +1 (super (cell super @0) (local super @0) foo))))))
+   (expr (call +3 (attr (call +3 (global Derived @2)) foo))))
+
+----- stderr -----
