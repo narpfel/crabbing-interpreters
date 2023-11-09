@@ -3,7 +3,6 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::iter;
 use std::iter::zip;
 use std::iter::Skip;
 use std::ops::Deref;
@@ -146,11 +145,11 @@ struct ClassInner<'a> {
 
 impl<'a> ClassInner<'a> {
     fn mro(&self) -> impl Iterator<Item = &Self> {
-        let mut class = Some(self);
-        iter::from_fn(move || {
-            let result = class;
-            class = class.and_then(|class| class.base.as_ref().map(|class| &*class.0));
-            result
+        itertools::unfold(Some(self), |class| {
+            std::mem::replace(
+                class,
+                class.and_then(|class| class.base.as_ref().map(|class| &*class.0)),
+            )
         })
     }
 }
