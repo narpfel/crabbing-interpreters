@@ -29,6 +29,7 @@ use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
 use crate::rc_str::RcStr;
+use crate::rc_value::RcValue;
 use crate::scope::AssignmentTarget;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
@@ -53,16 +54,6 @@ pub enum Value<'a> {
 }
 
 unsafe impl CloneInCellSafe for Value<'_> {}
-
-#[derive(Clone)]
-pub struct Function<'a>(Rc<FunctionInner<'a>>);
-
-struct FunctionInner<'a> {
-    name: &'a str,
-    parameters: &'a [Variable<'a>],
-    code: &'a [Statement<'a>],
-    cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
-}
 
 impl Value<'_> {
     pub fn typ(&self) -> &'static str {
@@ -110,34 +101,30 @@ impl Display for Value<'_> {
             Value::BoundMethod(method, instance) => write!(
                 f,
                 "<bound method {name} of {instance:?}>",
-                name = method.0.name
+                name = method.name,
             ),
         }
     }
 }
 
+pub type Function<'a> = RcValue<FunctionInner<'a>>;
+
+pub struct FunctionInner<'a> {
+    name: &'a str,
+    parameters: &'a [Variable<'a>],
+    code: &'a [Statement<'a>],
+    cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
+}
+
 impl Debug for Function<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<function {} at {:p}>", self.0.name, Rc::as_ptr(&self.0))
+        write!(f, "<function {} at {:p}>", self.name, Self::as_ptr(self))
     }
 }
 
-impl PartialEq for Function<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
+pub type Class<'a> = RcValue<ClassInner<'a>>;
 
-impl PartialOrd for Function<'_> {
-    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
-        None
-    }
-}
-
-#[derive(Clone)]
-pub struct Class<'a>(Rc<ClassInner<'a>>);
-
-struct ClassInner<'a> {
+pub struct ClassInner<'a> {
     name: &'a str,
     base: Option<Class<'a>>,
     methods: HashMap<InternedString, Value<'a>>,
@@ -146,10 +133,7 @@ struct ClassInner<'a> {
 impl<'a> ClassInner<'a> {
     fn mro(&self) -> impl Iterator<Item = &Self> {
         itertools::unfold(Some(self), |class| {
-            std::mem::replace(
-                class,
-                class.and_then(|class| class.base.as_ref().map(|class| &*class.0)),
-            )
+            std::mem::replace(class, class.and_then(|class| class.base.as_deref()))
         })
     }
 
@@ -160,26 +144,13 @@ impl<'a> ClassInner<'a> {
 
 impl Debug for Class<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<class {} at {:p}>", self.0.name, Rc::as_ptr(&self.0))
+        write!(f, "<class {} at {:p}>", self.name, Self::as_ptr(self))
     }
 }
 
-impl PartialEq for Class<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
+pub type Instance<'a> = RcValue<InstanceInner<'a>>;
 
-impl PartialOrd for Class<'_> {
-    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
-        None
-    }
-}
-
-#[derive(Clone)]
-pub struct Instance<'a>(Rc<InstanceInner<'a>>);
-
-struct InstanceInner<'a> {
+pub struct InstanceInner<'a> {
     class: Class<'a>,
     attributes: RefCell<HashMap<InternedString, Value<'a>>>,
 }
@@ -189,21 +160,9 @@ impl Debug for Instance<'_> {
         write!(
             f,
             "<{} instance at {:p}>",
-            self.0.class.0.name,
-            Rc::as_ptr(&self.0)
+            self.class.name,
+            Self::as_ptr(self),
         )
-    }
-}
-
-impl PartialEq for Instance<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl PartialOrd for Instance<'_> {
-    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
-        None
     }
 }
 
@@ -490,7 +449,6 @@ pub fn eval<'a>(
                     match target_value {
                         Value::Instance(instance) => {
                             instance
-                                .0
                                 .attributes
                                 .borrow_mut()
                                 .insert(attribute.id(), value.clone());
@@ -579,7 +537,7 @@ pub fn eval<'a>(
                 zip(*arguments, parameters).try_for_each(|(arg, param)| {
                     let arg = eval(env, cell_vars, offset, arg)?;
                     env.define(
-                        &function.0.cells,
+                        &function.cells,
                         offset + stack_size_at_callsite,
                         param.target(),
                         arg,
@@ -588,8 +546,8 @@ pub fn eval<'a>(
                 match execute(
                     env,
                     offset + stack_size_at_callsite,
-                    function.0.code,
-                    &function.0.cells,
+                    function.code,
+                    &function.cells,
                 ) {
                     Ok(_) => Ok(Value::Nil),
                     Err(ControlFlow::Return(value)) => Ok(value),
@@ -604,12 +562,12 @@ pub fn eval<'a>(
                                     instance: Value<'a>|
              -> Result<Value<'a>, Box<Error<'a>>> {
                 env.define(
-                    &method.0.cells,
+                    &method.cells,
                     offset + stack_size_at_callsite,
-                    method.0.parameters[0].target(),
+                    method.parameters[0].target(),
                     instance,
                 )?;
-                let parameters = method.0.parameters.iter().skip(1);
+                let parameters = method.parameters.iter().skip(1);
                 eval_call(env, method, parameters)
             };
 
@@ -619,7 +577,7 @@ pub fn eval<'a>(
                     func,
                     // FIXME: clippy issue 11761
                     #[expect(clippy::iter_skip_zero)]
-                    func.0.parameters.iter().skip(0),
+                    func.parameters.iter().skip(0),
                 )?,
                 Value::NativeFunction(func) => {
                     let arguments = arguments
@@ -636,11 +594,11 @@ pub fn eval<'a>(
                     })?
                 }
                 Value::Class(ref class) => {
-                    let instance = Value::Instance(self::Instance(Rc::new(InstanceInner {
+                    let instance = Value::Instance(RcValue::new(InstanceInner {
                         class: class.clone(),
                         attributes: RefCell::new(HashMap::default()),
-                    })));
-                    match class.0.lookup_method(interned::INIT) {
+                    }));
+                    match class.lookup_method(interned::INIT) {
                         Some(Value::Function(ref init)) => {
                             eval_method_call(env, init, instance.clone())?;
                         }
@@ -675,19 +633,19 @@ pub fn eval<'a>(
             let lhs = eval(env, cell_vars, offset, lhs)?;
             match lhs {
                 Value::Instance(ref instance) => instance
-                    .0
                     .attributes
                     .borrow()
                     .get(&attribute.id())
                     .cloned()
                     .or_else(|| {
-                        instance.0.class.0.lookup_method(attribute.id()).map(
-                            |method| match method {
+                        instance
+                            .class
+                            .lookup_method(attribute.id())
+                            .map(|method| match method {
                                 Value::Function(method) =>
                                     Value::BoundMethod(method.clone(), instance.clone()),
                                 _ => unreachable!(),
-                            },
-                        )
+                            })
                     })
                     .ok_or_else(|| Error::UndefinedProperty {
                         lhs: lhs.clone(),
@@ -705,7 +663,6 @@ pub fn eval<'a>(
             };
             match this {
                 Value::Instance(ref instance) => super_
-                    .0
                     .lookup_method(attribute.id())
                     .map(|method| match method {
                         Value::Function(method) =>
@@ -809,25 +766,21 @@ pub fn execute<'a>(
                     .iter()
                     .map(|method| (method.name.id(), eval_function(cell_vars, method)))
                     .collect();
-                let class = Class(Rc::new(ClassInner {
-                    name: target.name.slice(),
-                    base,
-                    methods,
-                }));
+                let class = RcValue::new(ClassInner { name: target.name.slice(), base, methods });
                 env.set(
                     cell_vars,
                     offset,
                     target.target(),
                     Value::Class(class.clone()),
                 )?;
-                if let Some(ref base) = class.0.base {
+                if let Some(ref base) = class.base {
                     let base = Value::Class(base.clone());
-                    class.0.methods.values().for_each(|method| {
+                    class.methods.values().for_each(|method| {
                         let Value::Function(method) = method
                         else {
                             unreachable!()
                         };
-                        method.0.cells[0].set(Rc::new(Cell::new(base.clone())));
+                        method.cells[0].set(Rc::new(Cell::new(base.clone())));
                     });
                 }
                 Value::Nil
@@ -849,12 +802,12 @@ fn eval_function<'a>(
             None => Cell::new(Rc::new(Cell::new(Value::Nil))),
         })
         .collect();
-    Value::Function(Function(Rc::new(FunctionInner {
+    Value::Function(RcValue::new(FunctionInner {
         name: name.slice(),
         parameters,
         code: body,
         cells,
-    })))
+    }))
 }
 
 #[cfg(test)]

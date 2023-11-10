@@ -40,6 +40,7 @@ mod interner;
 mod nonempty;
 mod parse;
 mod rc_str;
+mod rc_value;
 mod scope;
 
 pub trait AllocPath {
