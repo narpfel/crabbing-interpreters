@@ -1,0 +1,20 @@
+name: pre-commit
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: pre-commit
+        uses: pre-commit/action@v3.0.1
