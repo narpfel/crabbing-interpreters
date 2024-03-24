@@ -16,8 +16,9 @@ jobs:
         with:
           submodules: recursive
       - name: Install Rust nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2024-03-23
           components: clippy
       - name: test
         run: |

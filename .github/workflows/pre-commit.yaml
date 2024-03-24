@@ -13,8 +13,9 @@ jobs:
         with:
           submodules: recursive
       - name: Install Rust nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2024-03-23
           components: rustfmt
       - name: pre-commit
         uses: pre-commit/action@v3.0.1
