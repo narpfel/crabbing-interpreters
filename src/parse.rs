@@ -408,6 +408,9 @@ mod tests {
     #[case::plus_eq("1 + 2 == 3", "(== (+ 1.0 2.0) 3.0)")]
     #[case::eq_plus("1 == 2 + 3", "(== 1.0 (+ 2.0 3.0))")]
     #[case::minus_unary_minus("1--1", "(- 1.0 (- 1.0))")]
+    #[case::string_concat(r#""a" + "b""#, "(+ a b)")]
+    #[case::bool_conjunction("true < false", "(< true false)")]
+    #[case::nil("nil", "nil")]
     fn test_parser(#[case] src: &str, #[case] expected: &str) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);
@@ -433,6 +436,16 @@ mod tests {
         "1 == 2 == 3",
         check_err!(Error::AmbiguousPrecedences { .. }),
     )]
+    #[case::eof_after_operator("1 -", check_err!(Error::Eof(_)))]
+    #[case::three_adjecent_numbers(
+        "1 2 3",
+        check_err!(Error::UnexpectedTokenMsg {
+            expected: "a binary operator",
+            actual: Token { kind: TokenKind::Number, .. },
+        }),
+    )]
+    #[case::expect_expr_in_parens("()", check_err!(Error::UnexpectedToken { .. }))]
+    #[case::unclosed_paren("(1 + 2", check_err!(Error::Eof(_)))]
     fn test_parse_error(
         #[case] src: &str,
         #[case] expected: impl for<'a> FnOnce(Result<Expression<'a>, Error<'a>>),
