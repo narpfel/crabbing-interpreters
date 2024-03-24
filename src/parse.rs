@@ -410,7 +410,7 @@ mod tests {
     #[case::minus_unary_minus("1--1", "(- 1.0 (- 1.0))")]
     fn test_parser(#[case] src: &str, #[case] expected: &str) {
         let bump = &Bump::new();
-        assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);
+        pretty_assertions::assert_eq!(parse_str(bump, src).unwrap().as_sexpr(), expected);
     }
 
     macro_rules! check {
@@ -424,7 +424,7 @@ mod tests {
 
     macro_rules! check_err {
         ($pattern:pat) => {
-            check!(|result| assert!(matches!(result, Err($pattern))))
+            check!(|result| pretty_assertions::assert_matches!(result, Err($pattern)))
         };
     }
 

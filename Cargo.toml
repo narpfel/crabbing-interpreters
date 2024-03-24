@@ -10,4 +10,5 @@ logos = "0.13.0"
 thiserror = "1.0.40"
 
 [dev-dependencies]
+pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 rstest = { version = "0.18.1", default-features = false }
