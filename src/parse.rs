@@ -454,9 +454,9 @@ mod tests {
     #[case::expect_expr_in_parens("()", check_err!(Error::UnexpectedToken { .. }))]
     #[case::unclosed_paren("(1 + 2", check_err!(Error::Eof(_)))]
     #[case::one_plus("1+", check_err!(Error::Eof(_)))]
-    #[case::comparison_of_lt("1 > 2 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
-    #[case::comparison_of_lt("1 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
-    #[case::comparison_of_lt("1 > 2 == 3", check_err!(Error::AmbiguousPrecedences { .. }))]
+    #[case::comparison_of_gt("1 > 2 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
+    #[case::comparison_of_gt("1 == 3 > 4", check_err!(Error::AmbiguousPrecedences { .. }))]
+    #[case::comparison_of_gt("1 > 2 == 3", check_err!(Error::AmbiguousPrecedences { .. }))]
     fn test_parse_error(
         #[case] src: &str,
         #[case] expected: impl for<'a> FnOnce(Result<Expression<'a>, Error<'a>>),
