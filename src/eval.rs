@@ -125,6 +125,13 @@ mod tests {
     #[case::associativity("2 + 2 * 3", Value::Number(8.0))]
     #[case::associativity("2 + 2 - 3", Value::Number(1.0))]
     #[case::grouping("2 * (3 + 4)", Value::Number(14.0))]
+    #[case::negation(r#"!"""#, Value::Bool(false))]
+    #[case::negation(r#"!"abc""#, Value::Bool(false))]
+    #[case::negation("!nil", Value::Bool(true))]
+    #[case::negation("!0", Value::Bool(false))]
+    #[case::negation("!27", Value::Bool(false))]
+    #[case::negation("!true", Value::Bool(false))]
+    #[case::negation("!false", Value::Bool(true))]
     fn test_eval(#[case] src: &str, #[case] expected: Value) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
@@ -152,6 +159,24 @@ mod tests {
             lhs: Value::Number(42.0),
             op: BinOp { kind: BinOpKind::Plus, token: _ },
             rhs: Value::Nil,
+            at: _,
+        }),
+    )]
+    #[case::type_error_in_grouping(
+        "(nil - 2) + 27",
+        check_err!(TypeError::InvalidBinaryOp {
+            lhs: Value::Nil,
+            op: BinOp { kind: BinOpKind::Minus, token: _ },
+            rhs: Value::Number(2.0),
+            at: _,
+        }),
+    )]
+    #[case::type_error_in_grouping(
+        "42 + (nil * 2)",
+        check_err!(TypeError::InvalidBinaryOp {
+            lhs: Value::Nil,
+            op: BinOp { kind: BinOpKind::Times, token: _ },
+            rhs: Value::Number(2.0),
             at: _,
         }),
     )]
