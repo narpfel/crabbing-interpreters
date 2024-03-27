@@ -29,6 +29,8 @@ command = [
     "--color", "always", "--", "--color", "always",
 ]
 need_stdout = true
+env.RUSTFLAGS = ""
+env.CARGO_TARGET_DIR = "target"
 
 [jobs.doc]
 command = ["cargo", "doc", "--color", "always", "--no-deps"]
