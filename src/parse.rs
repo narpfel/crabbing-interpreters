@@ -376,12 +376,12 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use rstest::rstest;
 
     use super::*;
 
-    fn parse_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Expression<'a>, Error<'a>> {
+    pub(crate) fn parse_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Expression<'a>, Error<'a>> {
         let tokens = crate::lex(bump, "<test>", src).unwrap();
         parse(bump, tokens)
     }

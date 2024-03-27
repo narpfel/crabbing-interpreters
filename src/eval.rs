@@ -102,3 +102,64 @@ pub fn eval<'a>(expr: &Expression<'a>) -> Result<Value<'a>, TypeError<'a>> {
         Expression::Grouping(expr) => eval(expr)?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use bumpalo::Bump;
+    use rstest::rstest;
+
+    use super::*;
+
+    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, TypeError<'a>> {
+        let ast = crate::parse::tests::parse_str(bump, src).unwrap();
+        eval(&ast)
+    }
+
+    #[rstest]
+    #[case::bool("true", Value::Bool(true))]
+    #[case::bool("false", Value::Bool(false))]
+    #[case::divide_numbers("4 / 2", Value::Number(2.0))]
+    #[case::concat_strings(r#""a" + "b""#, Value::String(Cow::Borrowed("ab")))]
+    #[case::exponentiation("2 ** 2", Value::Number(4.0))]
+    #[case::exponentiation("2 ** 2 ** 3", Value::Number(2.0_f64.powi(8)))]
+    #[case::associativity("2 + 2 * 3", Value::Number(8.0))]
+    #[case::associativity("2 + 2 - 3", Value::Number(1.0))]
+    #[case::grouping("2 * (3 + 4)", Value::Number(14.0))]
+    fn test_eval(#[case] src: &str, #[case] expected: Value) {
+        let bump = &Bump::new();
+        pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
+    }
+
+    macro_rules! check {
+        ($body:expr) => {
+            for<'a> |result: Result<Value<'a>, TypeError<'a>>| -> () {
+                #[allow(clippy::redundant_closure_call)]
+                let () = $body(result);
+            }
+        };
+    }
+
+    macro_rules! check_err {
+        ($pattern:pat) => {
+            check!(|result| pretty_assertions::assert_matches!(result, Err($pattern)))
+        };
+    }
+
+    #[rstest]
+    #[case::add_nil(
+        "42 + nil",
+        check_err!(TypeError::InvalidBinaryOp {
+            lhs: Value::Number(42.0),
+            op: BinOp { kind: BinOpKind::Plus, token: _ },
+            rhs: Value::Nil,
+            at: _,
+        }),
+    )]
+    fn test_type_error(
+        #[case] src: &str,
+        #[case] expected: impl for<'a> FnOnce(Result<Value<'a>, TypeError<'a>>),
+    ) {
+        let bump = &Bump::new();
+        expected(eval_str(bump, src));
+    }
+}
