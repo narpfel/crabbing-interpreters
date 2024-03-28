@@ -17,5 +17,8 @@ jobs:
         with:
           toolchain: nightly-2024-03-23
           components: rustfmt
+      - name: Install `cargo-insta`
+        run: |
+          curl -LsSf https://insta.rs/install.sh | sh
       - name: pre-commit
         uses: pre-commit/action@v3.0.1
