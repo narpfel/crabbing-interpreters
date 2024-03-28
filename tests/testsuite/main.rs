@@ -7,3 +7,8 @@ use insta_cmd::get_cargo_bin;
 fn repl_evaluates_expression() {
     assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("1 + 2"))
 }
+
+#[test]
+fn repl_produces_error_message() {
+    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("nil * 2"))
+}
