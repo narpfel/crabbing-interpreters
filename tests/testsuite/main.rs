@@ -29,6 +29,10 @@ fn repl_produces_error_message() {
 #[case::bool_true("true;")]
 #[case::negative_nil("- nil;")]
 #[case::divide_by_string(r#"42 / "string";"#)]
+#[case::comment("// comment\n4 + 4;")]
+#[case::multiline_input("4\n**2;")]
+#[case::multiline_input("4<\n2;")]
+#[case::multiline_input("4\n>\n2;")]
 fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,
