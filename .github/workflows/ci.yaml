@@ -20,9 +20,12 @@ jobs:
         with:
           toolchain: nightly-2024-03-23
           components: clippy
+      - name: Install `cargo-insta`
+        run: |
+          curl -LsSf https://insta.rs/install.sh | sh
       - name: test
         run: |
-          cargo test
+          cargo insta test --unreferenced=reject
       - name: clippy
         run: |
           cargo clippy
