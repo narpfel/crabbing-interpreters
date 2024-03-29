@@ -33,6 +33,9 @@ fn repl_produces_error_message() {
 #[case::multiline_input("4\n**2;")]
 #[case::multiline_input("4<\n2;")]
 #[case::multiline_input("4\n>\n2;")]
+#[case::print_statement("print nil;")]
+#[case::print_statement("print 42 > 27;")]
+#[case::print_multiline("print  \n  \"string\";")]
 fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,

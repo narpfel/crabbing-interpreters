@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: "print  \n  \"string\";"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[0m.. [1m[0mstring
+[0mλ» [1m[0m
+----- stderr -----
