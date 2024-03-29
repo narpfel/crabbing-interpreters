@@ -1,0 +1,56 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: "42 / \"string\""
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[3mBinary {
+    lhs: Literal(
+        Literal {
+            kind: Number(
+                42.0,
+            ),
+            token: Token {
+                kind: Number,
+                loc: <input>:0..2,
+            },
+        },
+    ),
+    op: BinOp {
+        kind: Divide,
+        token: Token {
+            kind: Slash,
+            loc: <input>:3..4,
+        },
+    },
+    rhs: Literal(
+        Literal {
+            kind: String(
+                "string",
+            ),
+            token: Token {
+                kind: String,
+                loc: <input>:5..13,
+            },
+        },
+    ),
+}[0m
+Error: type error in binary operator `/`: lhs has type `Number`, but rhs has type `String`
+   ╭─[<input>:1:1]
+   │
+ 1 │ 42 / "string"
+   │ ─┬ ┬ ────┬───  
+   │  │ │     ╰───── this is of type `String`
+   │  │ │           
+   │  │ ╰─────────── the operator in question
+   │  │             
+   │  ╰───────────── this is of type `Number`
+   │ 
+   │ Help: operator `/` can only be applied to numbers
+───╯
+[0mλ» [1m[0m
+----- stderr -----

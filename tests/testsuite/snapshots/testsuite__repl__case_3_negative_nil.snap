@@ -1,0 +1,41 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: "- nil"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[3mUnary(
+    UnaryOp {
+        kind: Minus,
+        token: Token {
+            kind: Minus,
+            loc: <input>:0..1,
+        },
+    },
+    Literal(
+        Literal {
+            kind: Nil,
+            token: Token {
+                kind: Nil,
+                loc: <input>:2..5,
+            },
+        },
+    ),
+)[0m
+Error: type error in unary operator `-`: operand has type `Nil` but `-` requires type `Number`
+   ╭─[<input>:1:1]
+   │
+ 1 │ - nil
+   │ ┬ ─┬─  
+   │ │  ╰─── this is of type `Nil`
+   │ │      
+   │ ╰────── the operator in question
+   │ 
+   │ Help: operator `-` can only be applied to numbers
+───╯
+[0mλ» [1m[0m
+----- stderr -----
