@@ -47,6 +47,10 @@ fn repl_produces_error_message() {
 #[case::undefined_variable("x;")]
 #[case::undefined_variable("var x = 42; print x + y;")]
 #[case::long_undefined_variable_name("42 + long_variable_name;")]
+#[case::incomplete_statement("print")]
+#[case::unterminated_string_literal(r#""unterminated string literal"#)]
+#[case::unterminated_string_literal_doesnt_break_repl("\"unterminated string literal\n4 + 5;")]
+#[case::type_error_for_plus_mentions_strings("nil + 42;")]
 fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,

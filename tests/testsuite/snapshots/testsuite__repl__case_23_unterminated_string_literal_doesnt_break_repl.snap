@@ -1,0 +1,14 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: "\"unterminated string literal\n4 + 5;"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[0mλ» [1m[0m[38;2;170;034;255m[1m=> 9[0m
+[0mλ» [1m[0m
+----- stderr -----
+LexerError { at: <input>:0..29 }
