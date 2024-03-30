@@ -14,6 +14,7 @@ fn as_relative(path: &Path) -> &Path {
 fn tests(
     #[files("craftinginterpreters/test/*.lox")]
     #[files("craftinginterpreters/test/assignment/**/*.lox")]
+    #[files("craftinginterpreters/test/block/**/*.lox")]
     #[files("craftinginterpreters/test/bool/**/*.lox")]
     #[files("craftinginterpreters/test/comments/**/*.lox")]
     #[files("craftinginterpreters/test/nil/**/*.lox")]
