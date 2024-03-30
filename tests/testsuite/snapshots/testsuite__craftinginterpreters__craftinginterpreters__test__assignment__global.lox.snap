@@ -1,0 +1,16 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/global.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+before
+after
+arg
+arg
+
+----- stderr -----

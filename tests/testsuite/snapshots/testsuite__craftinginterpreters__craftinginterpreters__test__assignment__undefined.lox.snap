@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/undefined.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+NameError(Name(Token { kind: Identifier, loc: craftinginterpreters/test/assignment/undefined.lox:0..7 }))

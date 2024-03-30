@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/prefix_operator.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+InvalidAssignmentTarget(Unary(UnaryOp { kind: Not, token: Token { kind: Bang, loc: craftinginterpreters/test/assignment/prefix_operator.lox:13..14 } }, Ident(Name(Token { kind: Identifier, loc: craftinginterpreters/test/assignment/prefix_operator.lox:14..15 }))))

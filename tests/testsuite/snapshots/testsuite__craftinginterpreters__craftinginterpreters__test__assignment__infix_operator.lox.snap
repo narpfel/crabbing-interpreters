@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/infix_operator.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+AmbiguousPrecedences { left_op_token: Token { kind: Plus, loc: craftinginterpreters/test/assignment/infix_operator.lox:28..29 }, right_op: BinOp { kind: Assign, token: Token { kind: Equal, loc: craftinginterpreters/test/assignment/infix_operator.lox:32..33 } } }
