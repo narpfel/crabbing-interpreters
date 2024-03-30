@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/add_num_nil.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+InvalidBinaryOp { lhs: Number(1.0), op: BinOp { kind: Plus, token: Token { kind: Plus, loc: craftinginterpreters/test/operator/add_num_nil.lox:2..3 } }, rhs: Nil, at: Binary { lhs: Literal(Literal { kind: Number(1.0), token: Token { kind: Number, loc: craftinginterpreters/test/operator/add_num_nil.lox:0..1 } }), op: BinOp { kind: Plus, token: Token { kind: Plus, loc: craftinginterpreters/test/operator/add_num_nil.lox:2..3 } }, rhs: Literal(Literal { kind: Nil, token: Token { kind: Nil, loc: craftinginterpreters/test/operator/add_num_nil.lox:4..7 } }) } }

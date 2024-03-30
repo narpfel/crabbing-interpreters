@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/greater_nonnum_num.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+InvalidBinaryOp { lhs: String("1"), op: BinOp { kind: Greater, token: Token { kind: Greater, loc: craftinginterpreters/test/operator/greater_nonnum_num.lox:4..5 } }, rhs: Number(1.0), at: Binary { lhs: Literal(Literal { kind: String("1"), token: Token { kind: String, loc: craftinginterpreters/test/operator/greater_nonnum_num.lox:0..3 } }), op: BinOp { kind: Greater, token: Token { kind: Greater, loc: craftinginterpreters/test/operator/greater_nonnum_num.lox:4..5 } }, rhs: Literal(Literal { kind: Number(1.0), token: Token { kind: Number, loc: craftinginterpreters/test/operator/greater_nonnum_num.lox:6..7 } }) } }

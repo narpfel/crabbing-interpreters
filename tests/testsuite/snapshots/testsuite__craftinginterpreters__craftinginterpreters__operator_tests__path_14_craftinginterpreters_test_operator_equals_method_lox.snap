@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/equals_method.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Class, loc: craftinginterpreters/test/operator/equals_method.lox:41..46 } }

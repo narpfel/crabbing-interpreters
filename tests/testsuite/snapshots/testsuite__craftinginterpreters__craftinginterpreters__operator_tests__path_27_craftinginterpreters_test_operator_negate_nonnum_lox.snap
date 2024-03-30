@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/negate_nonnum.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+InvalidUnaryOp { op: UnaryOp { kind: Minus, token: Token { kind: Minus, loc: craftinginterpreters/test/operator/negate_nonnum.lox:0..1 } }, value: String("s"), at: Unary(UnaryOp { kind: Minus, token: Token { kind: Minus, loc: craftinginterpreters/test/operator/negate_nonnum.lox:0..1 } }, Literal(Literal { kind: String("s"), token: Token { kind: String, loc: craftinginterpreters/test/operator/negate_nonnum.lox:1..4 } })) }

@@ -5,6 +5,8 @@ use insta_cmd::get_cargo_bin;
 use rstest::fixture;
 use rstest::rstest;
 
+mod craftinginterpreters;
+
 #[fixture]
 fn testname() -> String {
     std::thread::current()

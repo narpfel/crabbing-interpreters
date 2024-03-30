@@ -1,0 +1,14 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/subtract.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+1
+0
+
+----- stderr -----

@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/divide_num_nonnum.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+InvalidBinaryOp { lhs: Number(1.0), op: BinOp { kind: Divide, token: Token { kind: Slash, loc: craftinginterpreters/test/operator/divide_num_nonnum.lox:2..3 } }, rhs: String("1"), at: Binary { lhs: Literal(Literal { kind: Number(1.0), token: Token { kind: Number, loc: craftinginterpreters/test/operator/divide_num_nonnum.lox:0..1 } }), op: BinOp { kind: Divide, token: Token { kind: Slash, loc: craftinginterpreters/test/operator/divide_num_nonnum.lox:2..3 } }, rhs: Literal(Literal { kind: String("1"), token: Token { kind: String, loc: craftinginterpreters/test/operator/divide_num_nonnum.lox:4..7 } }) } }
