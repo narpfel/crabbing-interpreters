@@ -11,7 +11,17 @@ fn as_relative(path: &Path) -> &Path {
 }
 
 #[rstest]
-fn tests(#[files("craftinginterpreters/test/operator/**/*.lox")] path: PathBuf) {
+fn tests(
+    #[files("craftinginterpreters/test/*.lox")]
+    #[files("craftinginterpreters/test/bool/**/*.lox")]
+    #[files("craftinginterpreters/test/comments/**/*.lox")]
+    #[files("craftinginterpreters/test/nil/**/*.lox")]
+    #[files("craftinginterpreters/test/number/**/*.lox")]
+    #[files("craftinginterpreters/test/operator/**/*.lox")]
+    #[files("craftinginterpreters/test/print/**/*.lox")]
+    #[files("craftinginterpreters/test/string/**/*.lox")]
+    path: PathBuf,
+) {
     let path = as_relative(&path);
     assert_cmd_snapshot!(
         path.display().to_string(),

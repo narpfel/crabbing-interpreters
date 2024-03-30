@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/number/decimal_point_at_eof.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+UnexpectedTokenMsg { expected: "a binary operator", actual: Token { kind: Dot, loc: craftinginterpreters/test/number/decimal_point_at_eof.lox:61..62 } }

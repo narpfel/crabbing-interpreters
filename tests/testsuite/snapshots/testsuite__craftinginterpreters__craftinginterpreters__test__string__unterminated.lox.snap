@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/string/unterminated.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+LexerError { at: craftinginterpreters/test/string/unterminated.lox:40..71 }

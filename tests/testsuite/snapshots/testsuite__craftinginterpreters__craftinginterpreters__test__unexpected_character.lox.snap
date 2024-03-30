@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/unexpected_character.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+LexerError { at: craftinginterpreters/test/unexpected_character.lox:106..107 }
