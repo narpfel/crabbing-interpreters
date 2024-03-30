@@ -17,6 +17,7 @@ fn tests(
     #[files("craftinginterpreters/test/block/**/*.lox")]
     #[files("craftinginterpreters/test/bool/**/*.lox")]
     #[files("craftinginterpreters/test/comments/**/*.lox")]
+    #[files("craftinginterpreters/test/if/**/*.lox")]
     #[files("craftinginterpreters/test/nil/**/*.lox")]
     #[files("craftinginterpreters/test/number/**/*.lox")]
     #[files("craftinginterpreters/test/operator/**/*.lox")]

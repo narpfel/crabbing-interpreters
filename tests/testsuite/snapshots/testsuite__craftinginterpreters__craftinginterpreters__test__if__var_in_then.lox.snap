@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/if/var_in_then.lox
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+UnexpectedToken { expected: [LParen, String, Number, True, False, Nil, Minus, Bang], actual: Token { kind: Var, loc: craftinginterpreters/test/if/var_in_then.lox:57..60 } }
