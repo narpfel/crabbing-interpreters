@@ -1,0 +1,19 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: x;
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0mError: cannot find name `x` in this scope
+   ╭─[<input>:1:1]
+   │
+ 1 │ x;
+   │ ─  
+   │     
+───╯
+[0mλ» [1m[0m
+----- stderr -----

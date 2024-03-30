@@ -36,6 +36,15 @@ fn repl_produces_error_message() {
 #[case::print_statement("print nil;")]
 #[case::print_statement("print 42 > 27;")]
 #[case::print_multiline("print  \n  \"string\";")]
+#[case::multiple_statements("print 42; print 27;")]
+#[case::print_print("print print 42;")]
+#[case::variable_declaration("var x = 42;")]
+#[case::use_variable("var x = 27; print x;")]
+#[case::multiple_variables("var x = 27; var y = x + 42; print y;")]
+#[case::multiple_variables("var x = 42; var y = 27; print x; print y; print x + y;")]
+#[case::undefined_variable("x;")]
+#[case::undefined_variable("var x = 42; print x + y;")]
+#[case::long_undefined_variable_name("42 + long_variable_name;")]
 fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,

@@ -1,0 +1,15 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: var x = 42; var y = 27; print x; print y; print x + y;
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m42
+27
+69
+[0mλ» [1m[0m
+----- stderr -----
