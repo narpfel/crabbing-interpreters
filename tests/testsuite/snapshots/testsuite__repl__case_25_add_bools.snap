@@ -1,0 +1,25 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: true + false;
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0mError: type error in binary operator `+`: lhs has type `Bool`, but rhs has type `Bool`
+   ╭─[<input>:1:1]
+   │
+ 1 │ true + false;
+   │ ──┬─ ┬ ──┬──  
+   │   │  │   ╰──── this is of type `Bool`
+   │   │  │        
+   │   │  ╰──────── the operator in question
+   │   │           
+   │   ╰─────────── this is of type `Bool`
+   │ 
+   │ Help: operator `+` can only be applied to numbers or strings
+───╯
+[0mλ» [1m[0m
+----- stderr -----
