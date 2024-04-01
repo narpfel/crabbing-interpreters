@@ -58,6 +58,7 @@ fn repl_produces_error_message() {
 #[case::unterminated_string_literal_doesnt_break_repl("\"unterminated string literal\n4 + 5;")]
 #[case::type_error_for_plus_mentions_strings("nil + 42;")]
 #[case::add_bools("true + false;")]
+#[case::var_statement_without_initialiser("var x; print x; print x == nil;")]
 fn repl(testname: String, #[case] src: &str) {
     assert_cmd_snapshot!(
         testname,
