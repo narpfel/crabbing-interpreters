@@ -22,7 +22,7 @@ pub enum Value<'a> {
     Bool(bool),
     Nil,
     Function(Function<'a>),
-    NativeFunction(fn(Vec<Value<'a>>) -> Result<Value<'a>, TypeError<'a>>),
+    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, TypeError<'b>>),
 }
 
 #[derive(Clone)]
@@ -390,8 +390,7 @@ mod tests {
     #[case::negation("!true", Value::Bool(false))]
     #[case::negation("!false", Value::Bool(true))]
     fn test_eval(#[case] src: &'static str, #[case] expected: Value) {
-        // FIXME: remove the leak
-        let bump = Box::leak(Box::new(Bump::new()));
+        let bump = &Bump::new();
         pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
     }
 
