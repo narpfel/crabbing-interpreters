@@ -15,7 +15,7 @@ fn testname() -> String {
         .name()
         .unwrap()
         .to_string()
-        .replace(":", "_")
+        .replace(':', "_")
 }
 
 fn as_relative(path: &Path) -> &Path {
