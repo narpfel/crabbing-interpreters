@@ -91,12 +91,6 @@ trait Sliced {
     fn slice(&self) -> impl Display + '_;
 }
 
-impl Sliced for String {
-    fn slice(&self) -> impl Display + '_ {
-        self.as_str()
-    }
-}
-
 impl Sliced for &str {
     fn slice(&self) -> impl Display + '_ {
         self
