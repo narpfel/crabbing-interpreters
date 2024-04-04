@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/invalid_for_loop_initialiser.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+[line ??] Error at '??': Invalid for loop initialiser
