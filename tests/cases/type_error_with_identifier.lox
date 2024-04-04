@@ -1,0 +1,2 @@
+var variable_name = nil;
+variable_name + 42;
