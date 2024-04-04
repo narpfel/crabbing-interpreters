@@ -5,6 +5,7 @@
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io;
 use std::io::stdin;
 use std::io::stdout;
 use std::io::Write;
@@ -53,16 +54,35 @@ where
     }
 }
 
-impl<T> Report for T
-where
-    T: std::error::Error,
-{
+impl Report for io::Error {
     fn print(&self) {
         eprintln!("{self:?}");
     }
 
     fn exit_code(&self) -> i32 {
-        42
+        74
+    }
+}
+
+struct IoError {
+    path: PathBuf,
+    io_error: io::Error,
+}
+
+impl Report for IoError {
+    fn print(&self) {
+        match self.io_error.kind() {
+            io::ErrorKind::NotFound => eprintln!("{}: `{}`", self.io_error, self.path.display()),
+            _ => eprintln!(
+                "{} while trying to read file `{}`",
+                self.io_error,
+                self.path.display(),
+            ),
+        }
+    }
+
+    fn exit_code(&self) -> i32 {
+        74
     }
 }
 
@@ -136,7 +156,10 @@ pub fn run<'a>(
         let tokens = lex(
             bump,
             bump.alloc_path(&filename),
-            bump.alloc_str(&std::fs::read_to_string(filename)?),
+            bump.alloc_str(
+                &std::fs::read_to_string(&filename)
+                    .map_err(|err| IoError { path: filename, io_error: err })?,
+            ),
         )?;
         let ast = parse(program, bump, tokens)?;
         let mut globals = Environment::new();

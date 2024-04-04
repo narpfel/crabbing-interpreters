@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - nonexistent_file
+---
+success: false
+exit_code: 74
+----- stdout -----
+
+----- stderr -----
+No such file or directory (os error 2): `nonexistent_file`

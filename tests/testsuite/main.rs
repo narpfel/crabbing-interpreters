@@ -74,3 +74,10 @@ fn interpreter(#[files("tests/cases/**/*.lox")] path: PathBuf) {
         Command::new(get_cargo_bin("crabbing-interpreters")).arg(path)
     )
 }
+
+#[test]
+fn nonexistent_file() {
+    assert_cmd_snapshot!(
+        Command::new(get_cargo_bin("crabbing-interpreters")).arg("nonexistent_file")
+    );
+}
