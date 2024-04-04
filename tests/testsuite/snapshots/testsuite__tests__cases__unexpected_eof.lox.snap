@@ -1,0 +1,13 @@
+---
+source: tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/unexpected_eof.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Unexpected end of file
