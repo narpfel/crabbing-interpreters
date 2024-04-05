@@ -18,6 +18,15 @@ fn testname() -> String {
         .replace(':', "_")
 }
 
+type PointerFilter = insta::internals::SettingsBindDropGuard;
+
+#[fixture]
+fn filter_pointers() -> PointerFilter {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter("0x[[:xdigit:]]{8,16}", "[POINTER]");
+    settings.bind_to_scope()
+}
+
 fn relative_to(path: &Path, target: impl AsRef<Path>) -> &Path {
     path.strip_prefix(target.as_ref()).unwrap()
 }
@@ -67,7 +76,7 @@ fn repl(testname: String, #[case] src: &str) {
 }
 
 #[rstest]
-fn interpreter(#[files("tests/cases/**/*.lox")] path: PathBuf) {
+fn interpreter(_filter_pointers: PointerFilter, #[files("tests/cases/**/*.lox")] path: PathBuf) {
     let path = relative_to(&path, env!("CARGO_MANIFEST_DIR"));
     assert_cmd_snapshot!(
         path.display().to_string(),

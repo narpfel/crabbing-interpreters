@@ -180,6 +180,7 @@ dependencies = [
  "bumpalo",
  "clap",
  "crabbing-interpreters-derive-report",
+ "insta",
  "insta-cmd",
  "logos",
  "pretty_assertions",
@@ -273,6 +274,7 @@ dependencies = [
  "console",
  "lazy_static",
  "linked-hash-map",
+ "regex",
  "serde",
  "similar",
 ]

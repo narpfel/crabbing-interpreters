@@ -6,10 +6,13 @@ use insta_cmd::assert_cmd_snapshot;
 use insta_cmd::get_cargo_bin;
 use rstest::rstest;
 
+use crate::filter_pointers;
 use crate::relative_to;
+use crate::PointerFilter;
 
 #[rstest]
 fn tests(
+    _filter_pointers: PointerFilter,
     #[files("../craftinginterpreters/test/*.lox")]
     #[files("../craftinginterpreters/test/assignment/**/*.lox")]
     #[files("../craftinginterpreters/test/block/**/*.lox")]
