@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/missing_arguments.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: arity error: `<function f at [POINTER]>` expects 2 args but 1 args were passed
+   ╭─[craftinginterpreters/test/function/missing_arguments.lox:3:1]
+   │
+ 3 │ f(1); // expect runtime error: Expected 2 arguments but got 1.
+   │ ┬  
+   │ ╰── expects 2 arguments
+───╯

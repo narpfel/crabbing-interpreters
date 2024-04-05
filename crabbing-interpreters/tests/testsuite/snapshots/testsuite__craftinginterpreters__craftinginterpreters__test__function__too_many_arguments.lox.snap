@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/too_many_arguments.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: arity error: `<function foo at [POINTER]>` expects 0 args but 256 args were passed
+   ╭─[craftinginterpreters/test/function/too_many_arguments.lox:4:3]
+   │
+ 4 │   foo(
+   │   ─┬─  
+   │    ╰─── expects 0 arguments
+───╯
