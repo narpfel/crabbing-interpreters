@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use proc_macro2::Ident;
 use proc_macro2::Literal;
 use proc_macro2::Span;
@@ -15,16 +16,20 @@ use syn::parse::Parse;
 use syn::parse_macro_input;
 use syn::parse_quote;
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+use syn::visit::Visit;
 use syn::Attribute;
 use syn::Data;
 use syn::DeriveInput;
 use syn::Error;
 use syn::Expr;
+use syn::Lifetime;
 use syn::LitStr;
 use syn::Member;
 use syn::Pat;
 use syn::Result;
 use syn::Token;
+use syn::Type;
 
 #[derive(Default)]
 struct Args(Punctuated<Assign, Token![,]>);
@@ -114,10 +119,10 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
         return Err(Error::new_spanned(name, "must be an enum"));
     };
 
-    let cases = type_
+    let (report_printers, cases): (Vec<_>, Vec<_>) = type_
         .variants
         .iter()
-        .map(|variant| {
+        .map(|variant| -> Result<_> {
             let at = variant
                 .fields
                 .iter()
@@ -149,15 +154,21 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                 })
                 .collect();
 
-            let fields = variant
+            let (fields, field_types): (Vec<_>, Vec<_>) = variant
                 .fields
                 .iter()
-                .map(|field| {
-                    field.ident.clone().ok_or_else(|| {
-                        Error::new_spanned(field, "tuple-like variants not supported")
-                    })
+                .map(|field| -> Result<_> {
+                    Ok((
+                        field.ident.clone().ok_or_else(|| {
+                            Error::new_spanned(field, "tuple-like variants not supported")
+                        })?,
+                        field.ty.clone(),
+                    ))
                 })
-                .collect::<Result<Vec<_>>>()?;
+                .process_results(|iter| iter.unzip())?;
+
+            let lifetimes = find_lifetimes(&field_types);
+
             // TODO: this is slightly too magical; require that `at` is a struct with named
             // fields
             fields.iter().enumerate().for_each(|(i, field)| {
@@ -191,7 +202,7 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
             let extras = extras
                 .0
                 .iter()
-                .map(|Assign(_, name, value)| quote::quote!(let #name = #value;));
+                .map(|Assign(_, name, value)| quote::quote!(let #name = (|| #value)();));
 
             let length = diagnostics.0.len();
             let (loc, msg, colour, order): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
@@ -200,7 +211,7 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                         .get("label")
                         .map(|msg| gen_format(&colours, parse_quote!(#msg)))
                         .into_iter();
-                    let msg = quote!(#(.with_message(#msg))*);
+                    let msg = quote!(#(.with_message((#msg)()))*);
                     let colour = args.get("colour").into_iter();
                     let colour = quote!(#(.with_color(#colour))*);
                     (
@@ -212,10 +223,13 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                 }));
 
             let name = &variant.ident;
-            Ok(quote::quote!(
-                Self::#name { #(#fields,)* } => {
+            let print_report = quote_spanned!(name.span() =>
+                #[allow(clippy::needless_lifetimes)]
+                #[allow(non_snake_case)]
+                fn #name<#(#lifetimes,)*>(#(#fields: &#field_types,)*) {
                     #(#extras)*
 
+                    #[allow(clippy::useless_format)]
                     let labels = [
                         #(
                             ::ariadne::Label::new(#loc)
@@ -225,34 +239,61 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                         )*
                     ];
 
+                    #[allow(clippy::double_parens)]
+                    #[allow(clippy::redundant_closure_call)]
                     at.loc()
                         .report(::ariadne::ReportKind::Error)
-                        .with_message(#error_msg)
+                        .with_message((#error_msg)())
                         .with_labels(labels)
-                        #(.with_help(#help_msg))*
+                        #(.with_help((#help_msg)()))*
                         .finish()
                         .eprint(at.loc().cache())
                         .unwrap();
                 }
+            );
+            Ok((
+                print_report,
+                quote!(Self::#name { #(#fields,)* } => #name(#(#fields,)*)),
             ))
         })
-        .collect::<Result<Vec<_>>>()?;
+        .process_results(|iter| iter.unzip())?;
+
+    let exit_code = quote_spanned!(exit_code.span() =>
+        fn exit_code(&self) -> i32 {
+            #exit_code
+        }
+    );
 
     let expanded = quote::quote!(
         impl #impl_generics crate::Report for #name #ty_generics #where_clause {
             fn print(&self) {
+                #(#report_printers)*
+
                 match self {
                     #(#cases,)*
                 }
             }
 
-            fn exit_code(&self) -> i32 {
-                #exit_code
-            }
+            #exit_code
         }
     );
 
     Ok(expanded)
+}
+
+fn find_lifetimes(field_types: &[Type]) -> impl Iterator<Item = Lifetime> {
+    struct CollectLifetimes(HashSet<Lifetime>);
+    impl Visit<'_> for CollectLifetimes {
+        fn visit_lifetime(&mut self, lifetime: &syn::Lifetime) {
+            self.0.insert(lifetime.clone());
+        }
+    }
+
+    let mut visitor = CollectLifetimes(HashSet::default());
+    for ty in field_types {
+        visitor.visit_type(ty);
+    }
+    visitor.0.into_iter()
 }
 
 fn gen_format(colours: &IndexMap<String, Cow<Expr>>, format_string: LitStr) -> impl ToTokens {
@@ -267,7 +308,7 @@ fn gen_format(colours: &IndexMap<String, Cow<Expr>>, format_string: LitStr) -> i
         };
         quote::quote!(#name = #value)
     });
-    quote_spanned!(format_string.span() => format!(#format_string, #(#format_args,)*))
+    quote_spanned!(format_string.span() => (|| format!(#format_string, #(#format_args,)*)))
 }
 
 fn parse_format_string(s: &str) -> HashSet<&str> {
