@@ -212,7 +212,7 @@ pub enum TokenKind {
     Identifier,
     #[regex(r#""[^"]*""#)]
     String,
-    #[regex(r"\d+(\.\d+)?")]
+    #[regex(r"[0-9]+(\.[0-9]+)?")]
     Number,
 
     #[token("and")]
@@ -307,4 +307,41 @@ pub fn lex<'a>(
         .collect::<Result<Vec<_>, Error>>()?;
 
     Ok(bump.alloc_slice_copy(&tokens))
+}
+
+#[cfg(test)]
+mod test {
+    use rstest::rstest;
+
+    use super::*;
+
+    macro_rules! check {
+        ($body:expr) => {
+            for<'a> |result: Result<&'a [Token<'a>], Error<'a>>| -> () {
+                #[allow(clippy::redundant_closure_call)]
+                let () = $body(result);
+            }
+        };
+    }
+
+    macro_rules! check_err {
+        ($pattern:pat) => {
+            check!(|result| pretty_assertions::assert_matches!(result, Err($pattern)))
+        };
+    }
+
+    const FULLWIDTH_NUMBER_4_LEN: usize = '４'.len_utf8();
+
+    #[rstest]
+    #[case::unicode_number(
+        "４２",
+        check_err!(Error { at: Loc { span: Span { start: 0, end: FULLWIDTH_NUMBER_4_LEN }, .. } }),
+    )]
+    fn test_lex_error(
+        #[case] src: &str,
+        #[case] expected: impl for<'a> FnOnce(Result<&'a [Token<'a>], Error<'a>>),
+    ) {
+        let bump = &Bump::new();
+        expected(lex(bump, "<src>", src));
+    }
 }
