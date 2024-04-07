@@ -469,6 +469,10 @@ mod tests {
     #[case::negation("!27", Value::Bool(false))]
     #[case::negation("!true", Value::Bool(false))]
     #[case::negation("!false", Value::Bool(true))]
+    #[case::precedence_of_negation_and_addition("-3 + 5", Value::Number(2.0))]
+    #[case::precedence_of_addition_and_negation("3 + -5", Value::Number(-2.0))]
+    #[case::precedence_of_negation_and_power("-2 ** 2", Value::Number(-4.0))]
+    #[case::precedence_of_power_and_negation("2 ** -2", Value::Number(0.25))]
     fn test_eval(#[case] src: &'static str, #[case] expected: Value) {
         let bump = &Bump::new();
         pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
