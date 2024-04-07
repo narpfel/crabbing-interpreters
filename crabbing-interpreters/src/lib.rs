@@ -17,6 +17,7 @@ use std::time::Instant;
 
 use bumpalo::Bump;
 use clap::Parser;
+use clap::ValueEnum;
 use scope::resolve_names;
 
 use crate::eval::execute;
@@ -128,6 +129,13 @@ struct Args {
     scopes: bool,
     #[arg(short, long)]
     times: bool,
+    #[arg(long)]
+    stop_at: Option<StopAt>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum StopAt {
+    Scopes,
 }
 
 fn repl() -> Result<(), Box<dyn Report>> {
@@ -221,6 +229,9 @@ pub fn run<'a>(
                 write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
             }
             println!("{})", sexpr.trim_end());
+            if args.stop_at == Some(StopAt::Scopes) {
+                return Ok(());
+            }
         }
         let mut stack = time("stk", args.times, Environment::new);
         time("exe", args.times, || execute(&mut stack, 0, scoped_ast))?;
