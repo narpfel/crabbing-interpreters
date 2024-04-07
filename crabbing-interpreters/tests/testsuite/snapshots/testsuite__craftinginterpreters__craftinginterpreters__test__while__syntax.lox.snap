@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/while/syntax.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+1
+2
+3
+0
+1
+2
+
+----- stderr -----

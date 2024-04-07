@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/while/fun_in_body.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+[line 2] Error at 'fun': Expect expression.

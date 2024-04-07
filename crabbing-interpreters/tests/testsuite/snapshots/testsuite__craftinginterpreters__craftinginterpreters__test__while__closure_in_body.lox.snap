@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/while/closure_in_body.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+3
+3
+3
+
+----- stderr -----
