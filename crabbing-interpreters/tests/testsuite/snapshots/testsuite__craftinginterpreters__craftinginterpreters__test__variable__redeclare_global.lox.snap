@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/redeclare_global.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+nil
+
+----- stderr -----

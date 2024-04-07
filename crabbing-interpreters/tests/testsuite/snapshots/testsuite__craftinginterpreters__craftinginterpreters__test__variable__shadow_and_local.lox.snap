@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/shadow_and_local.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+outer
+inner
+
+----- stderr -----

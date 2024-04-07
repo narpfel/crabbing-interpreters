@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/local_from_method.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+[line 3] Error at 'class': Expect expression.

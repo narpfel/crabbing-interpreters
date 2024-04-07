@@ -26,6 +26,7 @@ fn tests(
     #[files("../craftinginterpreters/test/operator/**/*.lox")]
     #[files("../craftinginterpreters/test/print/**/*.lox")]
     #[files("../craftinginterpreters/test/string/**/*.lox")]
+    #[files("../craftinginterpreters/test/variable/**/*.lox")]
     path: PathBuf,
 ) {
     let path = relative_to(

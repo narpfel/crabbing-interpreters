@@ -1,0 +1,12 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/collide_with_parameter.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----

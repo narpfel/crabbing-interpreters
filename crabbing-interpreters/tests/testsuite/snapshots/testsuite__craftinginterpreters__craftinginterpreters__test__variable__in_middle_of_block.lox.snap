@@ -1,0 +1,16 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/in_middle_of_block.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+a
+a b
+a c
+a b d
+
+----- stderr -----

@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/undefined_global.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `notDefined`.
+   ╭─[craftinginterpreters/test/variable/undefined_global.lox:1:7]
+   │
+ 1 │ print notDefined;  // expect runtime error: Undefined variable 'notDefined'.
+   │       ──────────  
+   │                    
+───╯

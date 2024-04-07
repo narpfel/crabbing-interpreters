@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/use_false_as_var.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+[line 2] Error at 'false': Expect variable name.
