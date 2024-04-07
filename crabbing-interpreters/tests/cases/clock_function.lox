@@ -1,0 +1,3 @@
+print clock;
+print clock() >= 0;
+print clock < 0;

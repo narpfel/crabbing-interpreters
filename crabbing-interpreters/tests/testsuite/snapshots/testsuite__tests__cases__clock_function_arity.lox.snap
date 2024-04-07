@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/clock_function_arity.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: arity error: `<native fn>` expects 0 args but 1 args were passed
+   ╭─[tests/cases/clock_function_arity.lox:1:7]
+   │
+ 1 │ print clock(42);
+   │       ──┬──  
+   │         ╰──── expects 0 arguments
+───╯

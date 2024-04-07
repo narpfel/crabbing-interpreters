@@ -1,0 +1,4 @@
+fun f() {}
+fun g() {}
+
+print f < g;

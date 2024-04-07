@@ -1,0 +1,6 @@
+fun f(a, b) {
+    print b;
+    print a;
+}
+
+f(42, 27);

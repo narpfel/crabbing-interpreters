@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/function_name_not_identifier.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+[line 1] Error at '42': Expect variable name.

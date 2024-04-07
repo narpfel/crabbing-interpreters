@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/function_call_parameters.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+27
+42
+
+----- stderr -----

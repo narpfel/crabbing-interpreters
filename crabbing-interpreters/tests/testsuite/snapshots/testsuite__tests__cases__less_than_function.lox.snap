@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/less_than_function.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in binary operator `<`: lhs has type `Function`, but rhs has type `Function`
+   ╭─[tests/cases/less_than_function.lox:4:7]
+   │
+ 4 │ print f < g;
+   │       ┬ ┬ ┬  
+   │       │ │ ╰── this is of type `Function`
+   │       │ │    
+   │       │ ╰──── the operator in question
+   │       │      
+   │       ╰────── this is of type `Function`
+   │ 
+   │ Help: operator `<` can only be applied to numbers
+───╯

@@ -1,0 +1,11 @@
+fun function() {}
+var f = function;
+
+fun function() {}
+var g = function;
+
+print f;
+print g;
+print f == f;
+print g == g;
+print f == g;
