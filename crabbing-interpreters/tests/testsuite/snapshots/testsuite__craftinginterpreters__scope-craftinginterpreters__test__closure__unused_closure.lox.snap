@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a @1 a)
+      (var a @1 "a")
       (if
          false
          (block
@@ -20,6 +20,6 @@ exit_code: 0
                (block
                   (expr (global a @1)))))
          ∅))
-   (print ok))
+   (print "ok"))
 
 ----- stderr -----

@@ -13,8 +13,8 @@ exit_code: 0
 (program
    (fun f @1 []
       (block
-         (var a @0 a)
-         (var b @0 b)
+         (var a @0 "a")
+         (var b @0 "b")
          (fun g @0 []
             (block
                (print (name-error b))

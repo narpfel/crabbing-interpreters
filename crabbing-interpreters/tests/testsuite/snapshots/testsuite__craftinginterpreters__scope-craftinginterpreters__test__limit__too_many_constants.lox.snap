@@ -269,6 +269,6 @@ exit_code: 0
          (expr 253.0)
          (expr 254.0)
          (expr 255.0)
-         (expr oops))))
+         (expr "oops"))))
 
 ----- stderr -----

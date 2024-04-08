@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (print (+ (+ ( ) )))
-   (print a string)
-   (print A~¶Þॐஃ))
+   (print (+ (+ "(" "") ")"))
+   (print "a string")
+   (print "A~¶Þॐஃ"))
 
 ----- stderr -----

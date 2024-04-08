@@ -20,6 +20,6 @@ exit_code: 0
       false
       (block)
       (block))
-   (print ok))
+   (print "ok"))
 
 ----- stderr -----

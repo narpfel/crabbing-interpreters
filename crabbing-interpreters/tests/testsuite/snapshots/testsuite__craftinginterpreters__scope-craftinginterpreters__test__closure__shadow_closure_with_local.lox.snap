@@ -12,12 +12,12 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var foo @1 closure)
+      (var foo @1 "closure")
       (fun f @2 []
          (block
             (block
                (print (global foo @1))
-               (var foo @0 shadow)
+               (var foo @0 "shadow")
                (print (local foo @0)))
             (print (global foo @1))))
       (expr (call +3 (local f @2)))))

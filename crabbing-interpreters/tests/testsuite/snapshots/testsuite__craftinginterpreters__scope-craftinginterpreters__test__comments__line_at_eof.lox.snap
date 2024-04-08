@@ -11,6 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (print ok))
+   (print "ok"))
 
 ----- stderr -----

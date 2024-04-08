@@ -11,10 +11,10 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (print (or false ok))
-   (print (or nil ok))
-   (print (or true ok))
-   (print (or 0.0 ok))
-   (print (or s ok)))
+   (print (or false "ok"))
+   (print (or nil "ok"))
+   (print (or true "ok"))
+   (print (or 0.0 "ok"))
+   (print (or "s" "ok")))
 
 ----- stderr -----

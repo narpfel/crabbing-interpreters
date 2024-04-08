@@ -13,12 +13,12 @@ exit_code: 0
 (program
    (if
       false
-      (print bad)
-      (print false))
+      (print "bad")
+      (print "false"))
    (if
       nil
-      (print bad)
-      (print nil))
+      (print "bad")
+      (print "nil"))
    (if
       true
       (print true)
@@ -28,8 +28,8 @@ exit_code: 0
       (print 0.0)
       ∅)
    (if
-      
-      (print empty)
+      ""
+      (print "empty")
       ∅))
 
 ----- stderr -----

@@ -17,11 +17,11 @@ exit_code: 0
          (print (== (local g @0) nil))))
    (fun callCaller @2 []
       (block
-         (var capturedVar @0 before)
-         (var a @0 a)
+         (var capturedVar @0 "before")
+         (var a @0 "a")
          (fun f @0 []
             (block
-               (expr (=-name-error capturedVar after))))
+               (expr (=-name-error capturedVar "after"))))
          (expr (call +1 (global caller @1) (local f @0)))))
    (expr (call +3 (local callCaller @2))))
 

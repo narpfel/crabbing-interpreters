@@ -18,7 +18,7 @@ exit_code: 0
             (block
                (print (name-error param))))
          (expr (= f (global 1) (local f_ @1)))))
-   (expr (call +3 (local foo @2) param))
+   (expr (call +3 (local foo @2) "param"))
    (expr (call +3 (local f @1))))
 
 ----- stderr -----

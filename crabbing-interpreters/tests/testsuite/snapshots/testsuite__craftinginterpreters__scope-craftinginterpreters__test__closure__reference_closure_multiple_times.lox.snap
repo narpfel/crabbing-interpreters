@@ -13,7 +13,7 @@ exit_code: 0
 (program
    (var f @1 ∅)
    (block
-      (var a @2 a)
+      (var a @2 "a")
       (fun f_ @3 []
          (block
             (print (global a @2))

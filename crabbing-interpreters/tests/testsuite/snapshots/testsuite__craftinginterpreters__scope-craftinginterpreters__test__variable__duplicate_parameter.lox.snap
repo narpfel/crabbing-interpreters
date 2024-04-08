@@ -13,6 +13,6 @@ exit_code: 0
 (program
    (fun foo @1 [arg arg]
       (block
-         (expr body))))
+         (expr "body"))))
 
 ----- stderr -----

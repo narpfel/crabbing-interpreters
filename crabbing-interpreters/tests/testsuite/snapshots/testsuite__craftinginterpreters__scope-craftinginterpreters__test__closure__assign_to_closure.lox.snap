@@ -14,17 +14,17 @@ exit_code: 0
    (var f @1 ∅)
    (var g @2 ∅)
    (block
-      (var local @3 local)
+      (var local @3 "local")
       (fun f_ @4 []
          (block
             (print (global local @3))
-            (expr (= local (global 3) after f))
+            (expr (= local (global 3) "after f"))
             (print (global local @3))))
       (expr (= f (local 1) (local f_ @4)))
       (fun g_ @5 []
          (block
             (print (global local @3))
-            (expr (= local (global 3) after g))
+            (expr (= local (global 3) "after g"))
             (print (global local @3))))
       (expr (= g (local 2) (local g_ @5))))
    (expr (call +3 (local f @1)))

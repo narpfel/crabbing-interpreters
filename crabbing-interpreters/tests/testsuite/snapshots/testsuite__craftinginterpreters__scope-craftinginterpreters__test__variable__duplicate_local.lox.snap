@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a @1 value)
-      (var a @1 other)))
+      (var a @1 "value")
+      (var a @1 "other")))
 
 ----- stderr -----

@@ -16,6 +16,6 @@ exit_code: 0
       (block
          (print (name-error notDefined)))
       ∅)
-   (print ok))
+   (print "ok"))
 
 ----- stderr -----

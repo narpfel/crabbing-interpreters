@@ -16,10 +16,10 @@ exit_code: 0
    (print (== true false))
    (print (== 1.0 1.0))
    (print (== 1.0 2.0))
-   (print (== str str))
-   (print (== str ing))
+   (print (== "str" "str"))
+   (print (== "str" "ing"))
    (print (== nil false))
    (print (== false 0.0))
-   (print (== 0.0 0)))
+   (print (== 0.0 "0")))
 
 ----- stderr -----

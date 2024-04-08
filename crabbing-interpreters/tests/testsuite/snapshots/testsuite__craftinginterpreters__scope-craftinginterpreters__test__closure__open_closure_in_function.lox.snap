@@ -12,7 +12,7 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var local @1 local)
+      (var local @1 "local")
       (fun f @2 []
          (block
             (print (global local @1))))

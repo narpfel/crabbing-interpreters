@@ -14,13 +14,13 @@ exit_code: 0
    (var f @1 ∅)
    (fun f1 @2 []
       (block
-         (var a @0 a)
+         (var a @0 "a")
          (fun f2 @0 []
             (block
-               (var b @0 b)
+               (var b @0 "b")
                (fun f3 @0 []
                   (block
-                     (var c @0 c)
+                     (var c @0 "c")
                      (fun f4 @0 []
                         (block
                            (print (name-error a))

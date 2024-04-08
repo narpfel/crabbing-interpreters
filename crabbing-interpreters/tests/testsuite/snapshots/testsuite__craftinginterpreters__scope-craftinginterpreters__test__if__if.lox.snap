@@ -13,16 +13,16 @@ exit_code: 0
 (program
    (if
       true
-      (print good)
+      (print "good")
       ∅)
    (if
       false
-      (print bad)
+      (print "bad")
       ∅)
    (if
       true
       (block
-         (print block))
+         (print "block"))
       ∅)
    (var a @1 false)
    (if

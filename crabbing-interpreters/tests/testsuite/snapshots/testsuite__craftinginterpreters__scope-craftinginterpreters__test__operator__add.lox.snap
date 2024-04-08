@@ -12,6 +12,6 @@ exit_code: 0
 ----- stdout -----
 (program
    (print (+ 123.0 456.0))
-   (print (+ str ing)))
+   (print (+ "str" "ing")))
 
 ----- stderr -----

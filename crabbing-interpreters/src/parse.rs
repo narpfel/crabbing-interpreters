@@ -229,7 +229,7 @@ impl LiteralKind<'_> {
     pub(crate) fn value_string(self) -> String {
         match self {
             LiteralKind::Number(x) => format!("{x:?}"),
-            LiteralKind::String(s) => s.to_owned(),
+            LiteralKind::String(s) => format!("{s:?}"),
             LiteralKind::True => "true".to_owned(),
             LiteralKind::False => "false".to_owned(),
             LiteralKind::Nil => "nil".to_owned(),
@@ -847,7 +847,7 @@ pub(crate) mod tests {
     #[case::plus_eq("1 + 2 == 3", "(== (+ 1.0 2.0) 3.0)")]
     #[case::eq_plus("1 == 2 + 3", "(== 1.0 (+ 2.0 3.0))")]
     #[case::minus_unary_minus("1--1", "(- 1.0 (- 1.0))")]
-    #[case::string_concat(r#""a" + "b""#, "(+ a b)")]
+    #[case::string_concat(r#""a" + "b""#, r#"(+ "a" "b")"#)]
     #[case::bool_conjunction("true < false", "(< true false)")]
     #[case::nil("nil", "nil")]
     #[case::comparison_of_parenthesised_gt(

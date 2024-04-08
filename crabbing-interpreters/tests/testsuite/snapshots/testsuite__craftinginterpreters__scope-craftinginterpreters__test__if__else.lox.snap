@@ -13,16 +13,16 @@ exit_code: 0
 (program
    (if
       true
-      (print good)
-      (print bad))
+      (print "good")
+      (print "bad"))
    (if
       false
-      (print bad)
-      (print good))
+      (print "bad")
+      (print "good"))
    (if
       false
       (expr nil)
       (block
-         (print block))))
+         (print "block"))))
 
 ----- stderr -----

@@ -11,9 +11,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var a @1 outer)
+   (var a @1 "outer")
    (block
-      (var a @2 inner)
+      (var a @2 "inner")
       (print (local a @2)))
    (print (local a @1)))
 

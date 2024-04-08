@@ -13,6 +13,6 @@ exit_code: 0
 (program
    (fun f @1 []
       (block))
-   (expr (+ (call +2 (local f @1)) f())))
+   (expr (+ (call +2 (local f @1)) "f()")))
 
 ----- stderr -----

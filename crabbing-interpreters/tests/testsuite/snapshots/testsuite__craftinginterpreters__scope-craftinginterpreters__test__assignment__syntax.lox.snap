@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var a @1 before)
-   (var c @2 (= a (local 1) var))
+   (var a @1 "before")
+   (var c @2 (= a (local 1) "var"))
    (print (local a @1))
    (print (local c @2)))
 

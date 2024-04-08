@@ -15,15 +15,15 @@ exit_code: 0
       true
       (if
          false
-         (print bad)
-         (print good))
+         (print "bad")
+         (print "good"))
       ∅)
    (if
       false
       (if
          true
-         (print bad)
-         (print bad))
+         (print "bad")
+         (print "bad"))
       ∅))
 
 ----- stderr -----
