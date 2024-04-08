@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/close_over_function_parameter.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var f @1 ∅)
+   (fun foo @2 [param]
+      (block
+         (fun f_ @1 []
+            (block
+               (print (name-error param))))
+         (expr (= f (global 1) (local f_ @1)))))
+   (expr (call +3 (local foo @2) param))
+   (expr (call +3 (local f @1))))
+
+----- stderr -----

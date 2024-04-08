@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/less_than_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f @1 []
+      (block))
+   (fun g @2 []
+      (block))
+   (print (< (local f @1) (local g @2))))
+
+----- stderr -----

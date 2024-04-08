@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/collide_with_parameter.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun foo @1 [a]
+      (block
+         (var a @0 ∅))))
+
+----- stderr -----

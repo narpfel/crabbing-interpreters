@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/logical_operator/or.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (or 1.0 true))
+   (print (or false 1.0))
+   (print (or false (or false true)))
+   (print (or false false))
+   (print (or false (or false false)))
+   (var a @1 before)
+   (var b @2 before)
+   (expr (or (group (= a (local 1) false)) (or (group (= b (local 2) true)) (group (= a (local 1) bad)))))
+   (print (local a @1))
+   (print (local b @2)))
+
+----- stderr -----

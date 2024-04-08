@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/assign_to_shadowed_later.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var a @1 global)
+   (block
+      (fun assign @2 []
+         (block
+            (expr (= a (global 1) assigned))))
+      (var a @3 inner)
+      (expr (call +4 (local assign @2)))
+      (print (local a @3)))
+   (print (local a @1)))
+
+----- stderr -----

@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/syntax.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var a @1 before)
+   (var c @2 (= a (local 1) var))
+   (print (local a @1))
+   (print (local c @2)))
+
+----- stderr -----

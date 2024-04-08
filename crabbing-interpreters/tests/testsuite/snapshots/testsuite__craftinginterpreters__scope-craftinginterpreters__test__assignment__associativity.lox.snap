@@ -1,0 +1,22 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/associativity.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var a @1 a)
+   (var b @2 b)
+   (var c @3 c)
+   (expr (= a (local 1) (= b (local 2) (local c @3))))
+   (print (local a @1))
+   (print (local b @2))
+   (print (local c @3)))
+
+----- stderr -----

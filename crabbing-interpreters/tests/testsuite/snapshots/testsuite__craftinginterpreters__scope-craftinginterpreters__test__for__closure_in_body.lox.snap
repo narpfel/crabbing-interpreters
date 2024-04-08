@@ -1,0 +1,38 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/for/closure_in_body.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var f1 @1 ∅)
+   (var f2 @2 ∅)
+   (var f3 @3 ∅)
+   (for
+      (var i @4 1.0)
+      (< (local i @4) 4.0)
+      (= i (local 4) (+ (local i @4) 1.0))
+      (block
+         (var j @5 (local i @4))
+         (fun f @6 []
+            (block
+               (print (global i @4))
+               (print (global j @5))))
+         (if
+            (== (local j @5) 1.0)
+            (expr (= f1 (local 1) (local f @6)))
+            (if
+               (== (local j @5) 2.0)
+               (expr (= f2 (local 2) (local f @6)))
+               (expr (= f3 (local 3) (local f @6)))))))
+   (expr (call +4 (local f1 @1)))
+   (expr (call +4 (local f2 @2)))
+   (expr (call +4 (local f3 @3))))
+
+----- stderr -----

@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/clock_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (local clock @0))
+   (print (>= (call +1 (local clock @0)) 0.0))
+   (print (< (local clock @0) 0.0)))
+
+----- stderr -----

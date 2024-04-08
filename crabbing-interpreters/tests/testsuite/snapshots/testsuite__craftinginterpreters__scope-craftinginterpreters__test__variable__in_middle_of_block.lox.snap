@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/in_middle_of_block.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (block
+      (var a @1 a)
+      (print (local a @1))
+      (var b @2 (+ (local a @1)  b))
+      (print (local b @2))
+      (var c @3 (+ (local a @1)  c))
+      (print (local c @3))
+      (var d @4 (+ (local b @2)  d))
+      (print (local d @4))))
+
+----- stderr -----

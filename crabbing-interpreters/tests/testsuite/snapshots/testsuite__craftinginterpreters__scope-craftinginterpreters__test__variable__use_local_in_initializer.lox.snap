@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/use_local_in_initializer.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var a @1 outer)
+   (block
+      (var a @2 (local a @2))))
+
+----- stderr -----

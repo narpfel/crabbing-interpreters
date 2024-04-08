@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/subtract.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (- 4.0 3.0))
+   (print (- 1.2 1.2)))
+
+----- stderr -----

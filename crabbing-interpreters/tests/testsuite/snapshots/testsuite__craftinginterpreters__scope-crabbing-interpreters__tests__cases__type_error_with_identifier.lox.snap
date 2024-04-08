@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/type_error_with_identifier.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var variable_name @1 nil)
+   (expr (+ (local variable_name @1) 42.0)))
+
+----- stderr -----

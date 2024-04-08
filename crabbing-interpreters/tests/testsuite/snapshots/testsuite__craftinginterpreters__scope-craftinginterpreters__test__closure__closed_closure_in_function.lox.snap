@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/closed_closure_in_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var f @1 ∅)
+   (block
+      (var local @2 local)
+      (fun f_ @3 []
+         (block
+            (print (global local @2))))
+      (expr (= f (local 1) (local f_ @3))))
+   (expr (call +2 (local f @1))))
+
+----- stderr -----

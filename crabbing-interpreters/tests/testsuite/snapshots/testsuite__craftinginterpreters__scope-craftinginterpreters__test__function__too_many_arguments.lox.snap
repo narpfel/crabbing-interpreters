@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/too_many_arguments.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun foo @1 []
+      (block))
+   (block
+      (var a @2 1.0)
+      (expr (call +3 (local foo @1) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2) (local a @2)))))
+
+----- stderr -----

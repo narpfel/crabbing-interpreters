@@ -1,0 +1,35 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/comparison.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (< 1.0 2.0))
+   (print (< 2.0 2.0))
+   (print (< 2.0 1.0))
+   (print (<= 1.0 2.0))
+   (print (<= 2.0 2.0))
+   (print (<= 2.0 1.0))
+   (print (> 1.0 2.0))
+   (print (> 2.0 2.0))
+   (print (> 2.0 1.0))
+   (print (>= 1.0 2.0))
+   (print (>= 2.0 2.0))
+   (print (>= 2.0 1.0))
+   (print (< 0.0 (- 0.0)))
+   (print (< (- 0.0) 0.0))
+   (print (> 0.0 (- 0.0)))
+   (print (> (- 0.0) 0.0))
+   (print (<= 0.0 (- 0.0)))
+   (print (<= (- 0.0) 0.0))
+   (print (>= 0.0 (- 0.0)))
+   (print (>= (- 0.0) 0.0)))
+
+----- stderr -----

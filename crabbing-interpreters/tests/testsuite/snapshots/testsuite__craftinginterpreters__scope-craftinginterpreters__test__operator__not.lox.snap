@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/not.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (! true))
+   (print (! false))
+   (print (! (! true)))
+   (print (! 123.0))
+   (print (! 0.0))
+   (print (! nil))
+   (print (! ))
+   (fun foo @1 []
+      (block))
+   (print (! (local foo @1))))
+
+----- stderr -----

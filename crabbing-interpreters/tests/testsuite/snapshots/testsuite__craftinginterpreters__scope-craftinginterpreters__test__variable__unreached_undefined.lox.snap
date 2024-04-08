@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/unreached_undefined.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (if
+      false
+      (block
+         (print (name-error notDefined)))
+      ∅)
+   (print ok))
+
+----- stderr -----

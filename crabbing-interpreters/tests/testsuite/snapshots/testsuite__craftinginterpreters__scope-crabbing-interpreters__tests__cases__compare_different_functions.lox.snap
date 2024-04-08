@@ -1,0 +1,26 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/compare_different_functions.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun function @1 []
+      (block))
+   (var f @2 (local function @1))
+   (fun function @1 []
+      (block))
+   (var g @3 (local function @1))
+   (print (local f @2))
+   (print (local g @3))
+   (print (== (local f @2) (local f @2)))
+   (print (== (local g @3) (local g @3)))
+   (print (== (local f @2) (local g @3))))
+
+----- stderr -----
