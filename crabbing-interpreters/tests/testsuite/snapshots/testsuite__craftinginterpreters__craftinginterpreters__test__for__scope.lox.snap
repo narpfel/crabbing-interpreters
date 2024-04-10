@@ -1,0 +1,16 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/for/scope.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+0
+-1
+after
+0
+
+----- stderr -----

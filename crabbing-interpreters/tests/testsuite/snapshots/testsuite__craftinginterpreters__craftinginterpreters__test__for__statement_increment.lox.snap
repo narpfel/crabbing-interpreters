@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/for/statement_increment.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Expect expression.
+   ╭─[craftinginterpreters/test/for/statement_increment.lox:2:24]
+   │
+ 2 │ for (var a = 1; a < 2; {}) {}
+   │                        ─  
+   │                            
+───╯

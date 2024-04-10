@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/for/var_in_body.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Expect expression.
+   ╭─[craftinginterpreters/test/for/var_in_body.lox:2:10]
+   │
+ 2 │ for (;;) var foo;
+   │          ───  
+   │                
+───╯
