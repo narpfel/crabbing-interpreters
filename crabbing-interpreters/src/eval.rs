@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -64,6 +65,13 @@ impl Value<'_> {
             Bool(b) => *b,
             Nil => false,
             _ => true,
+        }
+    }
+
+    fn lox_debug(&self) -> String {
+        match self {
+            Value::String(s) => format!("{:?}", s.deref()),
+            _ => self.to_string(),
         }
     }
 }
@@ -159,8 +167,9 @@ pub enum Error<'a> {
         at: Name<'a>,
     },
 
-    #[error("not callable: `{callee}` is of type `{callee_type}`")]
+    #[error("not callable: `{callee_repr}` is of type `{callee_type}`")]
     #[with(
+        callee_repr = callee.lox_debug(),
         callee_type = callee.typ(),
     )]
     Uncallable {

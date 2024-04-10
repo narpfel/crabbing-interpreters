@@ -105,6 +105,12 @@ impl Sliced for &str {
     }
 }
 
+impl Sliced for String {
+    fn slice(&self) -> impl Display + '_ {
+        self
+    }
+}
+
 impl Sliced for usize {
     fn slice(&self) -> impl Display + '_ {
         *self
