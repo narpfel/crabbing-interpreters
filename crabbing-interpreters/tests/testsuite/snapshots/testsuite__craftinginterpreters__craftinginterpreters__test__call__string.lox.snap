@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/call/string.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: not callable: `str` is of type `String`
+   ╭─[craftinginterpreters/test/call/string.lox:1:1]
+   │
+ 1 │ "str"(); // expect runtime error: Can only call functions and classes.
+   │ ──┬──  
+   │   ╰──── this expression is of type `String`
+───╯

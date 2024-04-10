@@ -18,6 +18,7 @@ fn tests(
     #[files("../craftinginterpreters/test/assignment/**/*.lox")]
     #[files("../craftinginterpreters/test/block/**/*.lox")]
     #[files("../craftinginterpreters/test/bool/**/*.lox")]
+    #[files("../craftinginterpreters/test/call/**/*.lox")]
     #[files("../craftinginterpreters/test/comments/**/*.lox")]
     #[files("../craftinginterpreters/test/for/**/*.lox")]
     #[files("../craftinginterpreters/test/function/**/*.lox")]

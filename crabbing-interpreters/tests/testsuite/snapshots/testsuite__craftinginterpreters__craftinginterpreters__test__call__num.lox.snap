@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/call/num.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: not callable: `123` is of type `Number`
+   ╭─[craftinginterpreters/test/call/num.lox:1:1]
+   │
+ 1 │ 123(); // expect runtime error: Can only call functions and classes.
+   │ ─┬─  
+   │  ╰─── this expression is of type `Number`
+───╯

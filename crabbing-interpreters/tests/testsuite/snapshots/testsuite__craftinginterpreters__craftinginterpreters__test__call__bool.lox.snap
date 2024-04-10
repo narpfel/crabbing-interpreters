@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/call/bool.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: not callable: `true` is of type `Bool`
+   ╭─[craftinginterpreters/test/call/bool.lox:1:1]
+   │
+ 1 │ true(); // expect runtime error: Can only call functions and classes.
+   │ ──┬─  
+   │   ╰─── this expression is of type `Bool`
+───╯
