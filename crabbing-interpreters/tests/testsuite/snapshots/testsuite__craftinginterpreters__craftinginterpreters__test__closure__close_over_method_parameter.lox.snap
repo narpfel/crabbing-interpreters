@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/close_over_method_parameter.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Expect expression.
+   ╭─[craftinginterpreters/test/closure/close_over_method_parameter.lox:3:1]
+   │
+ 3 │ class Foo {
+   │ ─────  
+   │         
+───╯

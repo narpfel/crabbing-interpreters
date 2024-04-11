@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/close_over_later_variable.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+b
+a
+
+----- stderr -----

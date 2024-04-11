@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/closed_closure_in_function.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+local
+
+----- stderr -----
