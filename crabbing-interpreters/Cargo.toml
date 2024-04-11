@@ -16,7 +16,7 @@ variant-types-derive = { path = "../variant-types-derive" }
 
 [dev-dependencies]
 insta = { version = "1.38.0", features = ["filters"] }
-insta-cmd = { git = "https://github.com/narpfel/insta-cmd", branch = "target-dir-slow" }
+insta-cmd = "0.6.0"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 
 [dev-dependencies.rstest]
