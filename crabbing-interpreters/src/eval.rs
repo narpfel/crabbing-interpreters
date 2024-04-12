@@ -330,12 +330,11 @@ pub fn eval<'a>(
         }
         Expression::Assign { target: variable, value, .. } => {
             let value = eval(env, cell_vars, offset, value)?;
-            let target = variable.target();
-            if let Target::GlobalByName = target {
+            if let Target::GlobalByName = variable.target() {
                 let slot = env.get_global_slot_by_name(variable.name)?;
                 variable.set_target(Target::GlobalBySlot(slot));
             }
-            env.set(cell_vars, offset, target, value.clone())?;
+            env.set(cell_vars, offset, variable.target(), value.clone())?;
             return Ok(value);
         }
         Expression::Binary { lhs, op, rhs } => {
