@@ -8,6 +8,27 @@ members = [
     "variant-types-derive",
 ]
 
+[workspace.dependencies]
+ariadne = { version = "0.3.0", features = ["auto-color"] }
+bumpalo = "3.13.0"
+clap = { version = "4.3.4", features = ["derive"] }
+indexmap = "2.2.6"
+itertools = "0.11.0"
+logos = "0.13.0"
+proc-macro2 = "1.0.66"
+quote = "1.0.32"
+regex = "1.9.1"
+syn = { version = "2.0.28", features = ["fold", "visit"] }
+
+insta = { version = "1.38.0", features = ["filters"] }
+insta-cmd = "0.6.0"
+pretty_assertions = { version = "1.4.0", features = ["unstable"] }
+
+[workspace.dependencies.rstest]
+git = "https://github.com/narpfel/rstest"
+branch = "by-reference-fixture"
+default-features = false
+
 [profile.dev.package."*"]
 opt-level = "z"
 

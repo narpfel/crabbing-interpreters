@@ -4,14 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ariadne = { version = "0.3.0", features = ["auto-color"] }
-bumpalo = "3.13.0"
-logos = "0.13.0"
+ariadne = { workspace = true }
+bumpalo = { workspace = true }
+logos = { workspace = true }
 
 [dev-dependencies]
-pretty_assertions = { version = "1.4.0", features = ["unstable"] }
-
-[dev-dependencies.rstest]
-git = "https://github.com/narpfel/rstest"
-branch = "by-reference-fixture"
-default-features = false
+pretty_assertions = { workspace = true }
+rstest = { workspace = true }
