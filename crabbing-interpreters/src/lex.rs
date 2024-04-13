@@ -4,8 +4,6 @@ use std::path::Path;
 use bumpalo::Bump;
 use logos::Logos;
 
-use crate::AllocPath;
-
 #[derive(Clone, Copy)]
 pub struct Token<'a> {
     pub kind: TokenKind,
@@ -308,8 +306,7 @@ impl<'a> Error<'a> {
 
 pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, crate::lex::Error<'a>>>;
 
-pub fn lex<'a>(bump: &'a Bump, filename: &Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
-    let filename = bump.alloc_path(filename);
+pub fn lex<'a>(bump: &'a Bump, filename: &'a Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
     let src = bump.alloc_str(src);
     let source_file = &*bump.alloc(SourceFile { file: filename, src });
     let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
