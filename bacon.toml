@@ -19,6 +19,7 @@ need_stdout = false
 [jobs.test]
 command = [
     "cargo", "test", "--color", "always",
+    "--profile=clif",
     "--", "--color", "always", # see https://github.com/Canop/bacon/issues/124
 ]
 need_stdout = true
@@ -32,8 +33,6 @@ need_stdout = true
 on_success = "back"
 allow_warnings = true
 env.RUSTFLAGS = ""
-env.CARGO_TARGET_DIR = "target/llvm-cov-target"
-env.CARGO_LLVM_COV_TARGET_DIR = "target/llvm-cov-target"
 
 [jobs.doc]
 command = ["cargo", "doc", "--color", "always", "--no-deps"]
