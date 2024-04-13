@@ -180,11 +180,11 @@ dependencies = [
  "bumpalo",
  "clap",
  "crabbing-interpreters-derive-report",
+ "crabbing-interpreters-lex",
  "indexmap",
  "insta",
  "insta-cmd",
  "itertools",
- "logos",
  "pretty_assertions",
  "rstest",
  "variant-types",
@@ -201,6 +201,17 @@ dependencies = [
  "quote",
  "regex",
  "syn",
+]
+
+[[package]]
+name = "crabbing-interpreters-lex"
+version = "0.1.0"
+dependencies = [
+ "ariadne",
+ "bumpalo",
+ "logos",
+ "pretty_assertions",
+ "rstest",
 ]
 
 [[package]]

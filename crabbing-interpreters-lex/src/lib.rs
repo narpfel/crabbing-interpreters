@@ -1,3 +1,6 @@
+#![feature(type_alias_impl_trait)]
+#![feature(closure_lifetime_binder)]
+
 use std::ops::Range;
 use std::path::Path;
 
@@ -11,7 +14,7 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    pub(crate) fn loc(&self) -> Loc<'a> {
+    pub fn loc(&self) -> Loc<'a> {
         self.loc
     }
 
@@ -31,7 +34,7 @@ impl<'a> Token<'a> {
         }
     }
 
-    pub(crate) fn debug_token(bump: &'a Bump, kind: TokenKind, src: &'a str) -> Self {
+    pub fn debug_token(bump: &'a Bump, kind: TokenKind, src: &'a str) -> Self {
         Token { kind, loc: Loc::debug_loc(bump, src) }
     }
 }
@@ -94,7 +97,7 @@ impl std::fmt::Debug for Loc<'_> {
 }
 
 impl<'a> Loc<'a> {
-    pub(crate) fn loc(&self) -> Self {
+    pub fn loc(&self) -> Self {
         *self
     }
 
@@ -114,11 +117,11 @@ impl<'a> Loc<'a> {
         self.span.start..self.span.end
     }
 
-    pub(crate) fn slice(&self) -> &'a str {
+    pub fn slice(&self) -> &'a str {
         &self.src()[self.span()]
     }
 
-    pub(crate) fn until(self, other: Self) -> Self {
+    pub fn until(self, other: Self) -> Self {
         assert_eq!(self.file(), other.file());
         assert_eq!(self.src(), other.src());
         assert!(self.span.end <= other.span.start);
@@ -131,11 +134,11 @@ impl<'a> Loc<'a> {
         }
     }
 
-    pub(crate) fn report(&self, kind: ariadne::ReportKind<'a>) -> ariadne::ReportBuilder<'a, Self> {
+    pub fn report(&self, kind: ariadne::ReportKind<'a>) -> ariadne::ReportBuilder<'a, Self> {
         ariadne::Report::build(kind, self.file(), self.start())
     }
 
-    pub(crate) fn cache(&self) -> impl ariadne::Cache<Path> + 'a {
+    pub fn cache(&self) -> impl ariadne::Cache<Path> + 'a {
         struct Cache<'b>(&'b Path, ariadne::Source);
         impl ariadne::Cache<Path> for Cache<'_> {
             fn fetch(
@@ -295,7 +298,7 @@ impl TokenKind {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Error<'a> {
-    pub(crate) at: crate::lex::Loc<'a>,
+    pub at: Loc<'a>,
 }
 
 impl<'a> Error<'a> {
@@ -304,7 +307,7 @@ impl<'a> Error<'a> {
     }
 }
 
-pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, crate::lex::Error<'a>>>;
+pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, Error<'a>>>;
 
 pub fn lex<'a>(bump: &'a Bump, filename: &'a Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
     let src = bump.alloc_str(src);

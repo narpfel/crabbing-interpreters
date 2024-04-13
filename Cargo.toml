@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crabbing-interpreters",
     "crabbing-interpreters-derive-report",
+    "crabbing-interpreters-lex",
     "variant-types",
     "variant-types-derive",
 ]

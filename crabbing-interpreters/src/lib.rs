@@ -1,4 +1,3 @@
-#![feature(type_alias_impl_trait)]
 #![feature(closure_lifetime_binder)]
 #![feature(error_generic_member_access)]
 #![feature(lint_reasons)]
@@ -21,14 +20,15 @@ use std::time::Instant;
 use bumpalo::Bump;
 use clap::Parser;
 use clap::ValueEnum;
+pub(crate) use crabbing_interpreters_lex as lex;
+pub use crabbing_interpreters_lex::lex;
+use crabbing_interpreters_lex::Token;
+use crabbing_interpreters_lex::TokenKind;
 
 use crate::eval::execute;
 use crate::eval::ControlFlow;
 use crate::eval::Environment;
 use crate::eval::Value;
-pub use crate::lex::lex;
-use crate::lex::Token;
-use crate::lex::TokenKind;
 use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
@@ -36,7 +36,6 @@ use crate::scope::resolve_names;
 
 mod clone_from_cell;
 mod eval;
-mod lex;
 mod nonempty;
 mod parse;
 mod rc_str;
