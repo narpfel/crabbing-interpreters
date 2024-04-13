@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/error_in_lhs_of_binary_or.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in unary operator `-`: operand has type `Nil` but `-` requires type `Number`
+   ╭─[tests/cases/error_in_lhs_of_binary_or.lox:1:1]
+   │
+ 1 │ -nil or nil;
+   │ ┬─┬─  
+   │ │ ╰─── this is of type `Nil`
+   │ │     
+   │ ╰───── the operator in question
+   │ 
+   │ Help: operator `-` can only be applied to numbers
+───╯

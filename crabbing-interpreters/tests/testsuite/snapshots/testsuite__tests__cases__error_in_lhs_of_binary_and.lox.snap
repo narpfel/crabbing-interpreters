@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/error_in_lhs_of_binary_and.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in binary operator `+`: lhs has type `Number`, but rhs has type `Nil`
+   ╭─[tests/cases/error_in_lhs_of_binary_and.lox:1:2]
+   │
+ 1 │ (42 + nil) and 27;
+   │  ─┬ ┬ ─┬─  
+   │   │ │  ╰─── this is of type `Nil`
+   │   │ │      
+   │   │ ╰────── the operator in question
+   │   │        
+   │   ╰──────── this is of type `Number`
+   │ 
+   │ Help: operator `+` can only be applied to two numbers or two strings
+───╯

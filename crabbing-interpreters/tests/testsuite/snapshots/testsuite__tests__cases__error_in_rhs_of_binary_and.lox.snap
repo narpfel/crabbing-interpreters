@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/error_in_rhs_of_binary_and.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in unary operator `-`: operand has type `Bool` but `-` requires type `Number`
+   ╭─[tests/cases/error_in_rhs_of_binary_and.lox:1:10]
+   │
+ 1 │ true and -true;
+   │          ┬──┬─  
+   │          │  ╰─── this is of type `Bool`
+   │          │      
+   │          ╰────── the operator in question
+   │ 
+   │ Help: operator `-` can only be applied to numbers
+───╯
