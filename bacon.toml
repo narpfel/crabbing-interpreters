@@ -24,6 +24,7 @@ command = [
     "--tests",
     "--profile=clif",
     "--", "--color", "always", # see https://github.com/Canop/bacon/issues/124
+    "--quiet",
 ]
 need_stdout = true
 
