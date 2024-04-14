@@ -19,6 +19,9 @@ need_stdout = false
 [jobs.test]
 command = [
     "cargo", "test", "--color", "always",
+    "--package", "crabbing-interpreters",
+    "--package", "crabbing-interpreters-lex",
+    "--tests",
     "--profile=clif",
     "--", "--color", "always", # see https://github.com/Canop/bacon/issues/124
 ]
