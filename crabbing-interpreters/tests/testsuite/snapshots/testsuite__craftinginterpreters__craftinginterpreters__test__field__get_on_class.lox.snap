@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/get_on_class.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only instances have properties, but `<class Foo at [POINTER]>` is of type `Class`
+   ╭─[craftinginterpreters/test/field/get_on_class.lox:2:1]
+   │
+ 2 │ Foo.bar; // expect runtime error: Only instances have properties.
+   │ ───  
+   │       
+───╯

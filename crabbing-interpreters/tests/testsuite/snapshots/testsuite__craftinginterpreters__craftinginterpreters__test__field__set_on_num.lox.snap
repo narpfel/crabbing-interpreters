@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/set_on_num.lox
+---
+success: false
+exit_code: 101
+----- stdout -----
+
+----- stderr -----
+thread 'main' panicked at crabbing-interpreters/src/eval.rs:433:30:
+explicit panic
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

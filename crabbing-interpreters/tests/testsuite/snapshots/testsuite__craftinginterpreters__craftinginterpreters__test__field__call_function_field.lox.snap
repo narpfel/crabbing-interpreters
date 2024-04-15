@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/call_function_field.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+bar
+1
+2
+
+----- stderr -----
