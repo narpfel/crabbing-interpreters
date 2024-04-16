@@ -1,5 +1,4 @@
 #![feature(closure_lifetime_binder)]
-#![feature(error_generic_member_access)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
 
