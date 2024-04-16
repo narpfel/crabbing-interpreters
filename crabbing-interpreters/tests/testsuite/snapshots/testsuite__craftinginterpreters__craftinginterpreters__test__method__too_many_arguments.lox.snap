@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/method/too_many_arguments.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only instances have properties, but `true` is of type `Bool`
+   ╭─[craftinginterpreters/test/method/too_many_arguments.lox:3:3]
+   │
+ 3 │   true.method(
+   │   ────  
+   │          
+───╯

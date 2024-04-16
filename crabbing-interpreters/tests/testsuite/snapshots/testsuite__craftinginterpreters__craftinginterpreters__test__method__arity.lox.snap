@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/method/arity.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+no args
+1
+3
+6
+10
+15
+21
+28
+36
+
+----- stderr -----
