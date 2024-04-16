@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/this/nested_closure.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+Foo
+
+----- stderr -----
