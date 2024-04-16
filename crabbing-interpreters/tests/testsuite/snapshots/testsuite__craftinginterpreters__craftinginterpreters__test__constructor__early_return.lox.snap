@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/constructor/early_return.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+init
+<Foo instance at [POINTER]>
+
+----- stderr -----

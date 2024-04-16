@@ -21,6 +21,7 @@ fn tests(
     #[files("../craftinginterpreters/test/call/**/*.lox")]
     #[files("../craftinginterpreters/test/closure/**/*.lox")]
     #[files("../craftinginterpreters/test/comments/**/*.lox")]
+    #[files("../craftinginterpreters/test/constructor/**/*.lox")]
     #[files("../craftinginterpreters/test/field/**/*.lox")]
     #[files("../craftinginterpreters/test/for/**/*.lox")]
     #[files("../craftinginterpreters/test/function/**/*.lox")]

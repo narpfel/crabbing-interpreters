@@ -1,0 +1,16 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/constructor/call_init_explicitly.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+Foo.init(one)
+Foo.init(two)
+nil
+init
+
+----- stderr -----
