@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/class/inherit_self.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only classes can be inherited from, but `nil` is of type `Nil`
+   ╭─[craftinginterpreters/test/class/inherit_self.lox:1:13]
+   │
+ 1 │ class Foo < Foo {} // Error at 'Foo': A class can't inherit from itself.
+   │             ───  
+   │                   
+───╯

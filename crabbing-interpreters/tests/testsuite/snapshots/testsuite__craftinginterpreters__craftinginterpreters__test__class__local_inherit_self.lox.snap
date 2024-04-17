@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/class/local_inherit_self.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `Foo`.
+   ╭─[craftinginterpreters/test/class/local_inherit_self.lox:2:15]
+   │
+ 2 │   class Foo < Foo {} // Error at 'Foo': A class can't inherit from itself.
+   │               ───  
+   │                     
+───╯

@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/class/local_inherit_other.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+<class B at [POINTER]>
+
+----- stderr -----
