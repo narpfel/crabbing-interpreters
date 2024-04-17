@@ -27,6 +27,7 @@ fn tests(
     #[files("../craftinginterpreters/test/for/**/*.lox")]
     #[files("../craftinginterpreters/test/function/**/*.lox")]
     #[files("../craftinginterpreters/test/if/**/*.lox")]
+    #[files("../craftinginterpreters/test/inheritance/**/*.lox")]
     #[files("../craftinginterpreters/test/logical_operator/**/*.lox")]
     #[files("../craftinginterpreters/test/method/**/*.lox")]
     #[files("../craftinginterpreters/test/nil/**/*.lox")]

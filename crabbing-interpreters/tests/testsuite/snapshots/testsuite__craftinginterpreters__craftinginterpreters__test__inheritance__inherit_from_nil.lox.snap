@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/inheritance/inherit_from_nil.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only classes can be inherited from, but `nil` is of type `Nil`
+   ╭─[craftinginterpreters/test/inheritance/inherit_from_nil.lox:2:13]
+   │
+ 2 │ class Foo < Nil {} // expect runtime error: Superclass must be a class.
+   │             ───  
+   │                   
+───╯
