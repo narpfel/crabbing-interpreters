@@ -1,0 +1,3 @@
+var x = y;
+print x;
+var y = 42;

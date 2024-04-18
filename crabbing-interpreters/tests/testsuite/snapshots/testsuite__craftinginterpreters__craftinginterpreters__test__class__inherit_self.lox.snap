@@ -10,7 +10,7 @@ exit_code: 70
 ----- stdout -----
 
 ----- stderr -----
-Error: only classes can be inherited from, but `nil` is of type `Nil`
+Error: Undefined variable `Foo`.
    ╭─[craftinginterpreters/test/class/inherit_self.lox:1:13]
    │
  1 │ class Foo < Foo {} // Error at 'Foo': A class can't inherit from itself.

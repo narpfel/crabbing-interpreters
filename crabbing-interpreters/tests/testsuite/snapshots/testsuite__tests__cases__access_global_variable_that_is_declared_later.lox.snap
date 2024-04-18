@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/access_global_variable_that_is_declared_later.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `y`.
+   ╭─[tests/cases/access_global_variable_that_is_declared_later.lox:1:9]
+   │
+ 1 │ var x = y;
+   │         ─  
+   │             
+───╯

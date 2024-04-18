@@ -334,6 +334,7 @@ const ENV_SIZE: usize = 100_000;
 pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,
     globals: HashMap<InternedString, usize>,
+    is_global_defined: Box<[bool]>,
 }
 
 impl<'a> Environment<'a> {
@@ -342,6 +343,7 @@ impl<'a> Environment<'a> {
             .into_boxed_slice()
             .try_into()
             .unwrap();
+        let mut is_global_defined = vec![false; globals.len()].into_boxed_slice();
         if let Some(&slot) = globals.get(&interned::CLOCK) {
             stack[slot] = Value::NativeFunction(|arguments| {
                 if !arguments.is_empty() {
@@ -352,8 +354,9 @@ impl<'a> Environment<'a> {
                     START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
                 ))
             });
+            is_global_defined[slot] = true;
         }
-        Self { stack, globals }
+        Self { stack, globals, is_global_defined }
     }
 
     fn get(
@@ -371,10 +374,10 @@ impl<'a> Environment<'a> {
     }
 
     fn get_global_slot_by_name(&self, name: &'a Name<'a>) -> Result<usize, Box<Error<'a>>> {
-        self.globals
-            .get(&name.id())
-            .copied()
-            .ok_or_else(|| Box::new(Error::UndefinedName { at: *name }))
+        match self.globals.get(&name.id()).copied() {
+            Some(slot) if self.is_global_defined[slot] => Ok(slot),
+            _ => Err(Box::new(Error::UndefinedName { at: *name })),
+        }
     }
 
     fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Box<Error<'a>>> {
@@ -393,7 +396,13 @@ impl<'a> Environment<'a> {
         let index = match target {
             Target::Local(slot) => offset + slot,
             Target::GlobalByName => unreachable!(),
-            Target::GlobalBySlot(slot) => slot,
+            Target::GlobalBySlot(slot) => {
+                // FIXME: this is only necessary when called from `define`, not `set`.
+                if let Some(is_defined) = self.is_global_defined.get_mut(slot) {
+                    *is_defined = true;
+                }
+                slot
+            }
             Target::Cell(slot) => {
                 set_cell(&cell_vars[slot], value);
                 return Ok(());
