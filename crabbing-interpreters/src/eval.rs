@@ -342,15 +342,17 @@ impl<'a> Environment<'a> {
             .into_boxed_slice()
             .try_into()
             .unwrap();
-        stack[0] = Value::NativeFunction(|arguments| {
-            if !arguments.is_empty() {
-                return Err(NativeError::ArityMismatch { expected: 0 });
-            }
-            static START_TIME: OnceLock<Instant> = OnceLock::new();
-            Ok(Value::Number(
-                START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
-            ))
-        });
+        if let Some(&slot) = globals.get(&interned::CLOCK) {
+            stack[slot] = Value::NativeFunction(|arguments| {
+                if !arguments.is_empty() {
+                    return Err(NativeError::ArityMismatch { expected: 0 });
+                }
+                static START_TIME: OnceLock<Instant> = OnceLock::new();
+                Ok(Value::Number(
+                    START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
+                ))
+            });
+        }
         Self { stack, globals }
     }
 
