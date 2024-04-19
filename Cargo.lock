@@ -458,7 +458,7 @@ checksum = "e898588f33fdd5b9420719948f9f2a32c922a246964576f71ba7f24f80610fbc"
 [[package]]
 name = "rstest"
 version = "0.20.0"
-source = "git+https://github.com/narpfel/rstest?branch=by-reference-fixture#1b1a1c47cfc452dfc54e4d08039d0d720646d7f1"
+source = "git+https://github.com/narpfel/rstest?branch=by-reference-fixture#6ec61ed585275af6a9127d2494bfa640ef15e55f"
 dependencies = [
  "rstest_macros",
  "rustc_version",
@@ -467,7 +467,7 @@ dependencies = [
 [[package]]
 name = "rstest_macros"
 version = "0.20.0"
-source = "git+https://github.com/narpfel/rstest?branch=by-reference-fixture#1b1a1c47cfc452dfc54e4d08039d0d720646d7f1"
+source = "git+https://github.com/narpfel/rstest?branch=by-reference-fixture#6ec61ed585275af6a9127d2494bfa640ef15e55f"
 dependencies = [
  "cfg-if",
  "glob",
