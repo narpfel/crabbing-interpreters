@@ -606,7 +606,7 @@ pub fn eval<'a>(
                     env,
                     func,
                     // FIXME: clippy issue 11761
-                    #[allow(clippy::iter_skip_zero)]
+                    #[expect(clippy::iter_skip_zero)]
                     func.0.parameters.iter().skip(0),
                 )?,
                 Value::NativeFunction(func) => {
