@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/super_without_name.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: at `;`: expected Identifier
+   ╭─[craftinginterpreters/test/super/super_without_name.lox:5:11]
+   │
+ 5 │     super.; // Error at ';': Expect superclass method name.
+   │           ─  
+   │               
+───╯

@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/call_other_method.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+Derived.bar()
+Base.foo()
+
+----- stderr -----

@@ -37,6 +37,7 @@ fn tests(
     #[files("../craftinginterpreters/test/regression/**/*.lox")]
     #[files("../craftinginterpreters/test/return/**/*.lox")]
     #[files("../craftinginterpreters/test/string/**/*.lox")]
+    #[files("../craftinginterpreters/test/super/**/*.lox")]
     #[files("../craftinginterpreters/test/this/**/*.lox")]
     #[files("../craftinginterpreters/test/variable/**/*.lox")]
     #[files("../craftinginterpreters/test/while/**/*.lox")]

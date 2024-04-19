@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/no_superclass_call.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Can’t use `super` in a class with no bases.
+   ╭─[craftinginterpreters/test/super/no_superclass_call.lox:3:5]
+   │
+ 3 │     super.doesNotExist(1); // Error at 'super': Can't use 'super' in a class with no superclass.
+   │     ─────  
+   │             
+───╯
