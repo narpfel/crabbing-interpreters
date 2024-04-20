@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - tests/cases/runtime_error_in_native_function_argument.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in unary operator `-`: operand has type `Nil` but `-` requires type `Number`
+   ╭─[tests/cases/runtime_error_in_native_function_argument.lox:1:7]
+   │
+ 1 │ clock(-nil);
+   │       ┬─┬─  
+   │       │ ╰─── this is of type `Nil`
+   │       │     
+   │       ╰───── the operator in question
+   │ 
+   │ Help: operator `-` can only be applied to numbers
+───╯
