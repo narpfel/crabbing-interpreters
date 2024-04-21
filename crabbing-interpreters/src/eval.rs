@@ -363,7 +363,7 @@ impl<'a> Environment<'a> {
         target: Target,
         value: Value<'a>,
         set_cell: impl FnOnce(&Cell<Rc<Cell<Value<'a>>>>, Value<'a>),
-    ) -> Result<(), Box<Error<'a>>> {
+    ) {
         let index = match target {
             Target::Local(slot) => offset + slot,
             Target::GlobalByName => unreachable!(),
@@ -376,11 +376,10 @@ impl<'a> Environment<'a> {
             }
             Target::Cell(slot) => {
                 set_cell(&cell_vars[slot], value);
-                return Ok(());
+                return;
             }
         };
         self.stack[index] = value;
-        Ok(())
     }
 
     fn define(
@@ -389,7 +388,7 @@ impl<'a> Environment<'a> {
         offset: usize,
         target: Target,
         value: Value<'a>,
-    ) -> Result<(), Box<Error<'a>>> {
+    ) {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
             cell.set(Rc::new(Cell::new(value)))
         })
@@ -401,7 +400,7 @@ impl<'a> Environment<'a> {
         offset: usize,
         target: Target,
         value: Value<'a>,
-    ) -> Result<(), Box<Error<'a>>> {
+    ) {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
             cell.get_clone().set(value)
         })
@@ -442,7 +441,7 @@ pub fn eval<'a>(
                         let slot = env.get_global_slot_by_name(variable.name)?;
                         variable.set_target(Target::GlobalBySlot(slot));
                     }
-                    env.set(cell_vars, offset, variable.target(), value.clone())?;
+                    env.set(cell_vars, offset, variable.target(), value.clone());
                 }
                 AssignmentTarget::Attribute { lhs, attribute } => {
                     let target_value = eval(env, cell_vars, offset, lhs)?;
@@ -534,14 +533,15 @@ pub fn eval<'a>(
                         at: expr.into_variant(),
                     })?;
                 }
-                zip(*arguments, parameters).try_for_each(|(arg, param)| {
+                zip(*arguments, parameters).try_for_each(|(arg, param)| -> Result<(), Box<_>> {
                     let arg = eval(env, cell_vars, offset, arg)?;
                     env.define(
                         &function.cells,
                         offset + stack_size_at_callsite,
                         param.target(),
                         arg,
-                    )
+                    );
+                    Ok(())
                 })?;
                 match execute(
                     env,
@@ -566,7 +566,7 @@ pub fn eval<'a>(
                     offset + stack_size_at_callsite,
                     method.parameters[0].target(),
                     instance,
-                )?;
+                );
                 let parameters = method.parameters.iter().skip(1);
                 eval_call(env, method, parameters)
             };
@@ -701,7 +701,7 @@ pub fn execute<'a>(
                 else {
                     Value::Nil
                 };
-                env.define(cell_vars, offset, variable.target(), value)?;
+                env.define(cell_vars, offset, variable.target(), value);
                 Value::Nil
             }
             Statement::Block(block) => execute(env, offset, block, cell_vars)?,
@@ -742,9 +742,9 @@ pub fn execute<'a>(
             Statement::Function { target, function } => {
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
-                env.define(cell_vars, offset, target.target(), Value::Nil)?;
+                env.define(cell_vars, offset, target.target(), Value::Nil);
                 let function = eval_function(cell_vars, function);
-                env.set(cell_vars, offset, target.target(), function)?;
+                env.set(cell_vars, offset, target.target(), function);
                 Value::Nil
             }
             Statement::Return(expr) => {
@@ -761,7 +761,7 @@ pub fn execute<'a>(
                         value => Err(Error::InvalidBase { base: value, at: base.into_variant() })?,
                     })
                     .transpose()?;
-                env.define(cell_vars, offset, target.target(), Value::Nil)?;
+                env.define(cell_vars, offset, target.target(), Value::Nil);
                 let methods: HashMap<_, _> = methods
                     .iter()
                     .map(|method| (method.name.id(), eval_function(cell_vars, method)))
@@ -772,7 +772,7 @@ pub fn execute<'a>(
                     offset,
                     target.target(),
                     Value::Class(class.clone()),
-                )?;
+                );
                 if let Some(ref base) = class.base {
                     let base = Value::Class(base.clone());
                     class.methods.values().for_each(|method| {
