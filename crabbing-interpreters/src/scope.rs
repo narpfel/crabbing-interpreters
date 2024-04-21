@@ -322,24 +322,16 @@ impl<'a> Scopes<'a> {
         Ok(result)
     }
 
-    #[allow(clippy::type_complexity)]
     fn with_function(
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<(&'a [Variable<'a>], &'a [Statement<'a>]), Error<'a>>,
-    ) -> Result<
-        (
-            &'a [Variable<'a>],
-            &'a [Statement<'a>],
-            IndexMap<Variable<'a>, CellRef<'a>>,
-        ),
-        Error<'a>,
-    > {
+    ) -> Result<FunctionScope<'a>, Error<'a>> {
         self.push();
         let old_offset = std::mem::take(&mut self.offset);
         let (parameters, body) = f(self)?;
         let scope = self.pop();
         self.offset = old_offset;
-        Ok((parameters, body, scope.cells))
+        Ok(FunctionScope { parameters, body, cells: scope.cells })
     }
 
     fn current_stack_size(&self) -> usize {
@@ -373,6 +365,12 @@ impl<'a> Scopes<'a> {
     fn is_in_function(&self) -> bool {
         self.scopes.len() != 1
     }
+}
+
+struct FunctionScope<'a> {
+    parameters: &'a [Variable<'a>],
+    body: &'a [Statement<'a>],
+    cells: IndexMap<Variable<'a>, CellRef<'a>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -993,7 +991,7 @@ fn resolve_function<'a>(
     else {
         unreachable!()
     };
-    let (parameters, body, nonlocal_names) = scopes.with_function(|scopes| {
+    let FunctionScope { parameters, body, cells } = scopes.with_function(|scopes| {
         let this = match kind {
             FunctionKindWithBase::Function => Either::Left(iter::empty()),
             FunctionKindWithBase::Method(has_base) => {
@@ -1031,7 +1029,7 @@ fn resolve_function<'a>(
             ),
         ))
     })?;
-    let cells = cell_slots(bump, scopes, &nonlocal_names);
+    let cells = cell_slots(bump, scopes, &cells);
     Ok(Function { name: *name, parameters, body, cells })
 }
 
