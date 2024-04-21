@@ -755,20 +755,17 @@ impl<'a> AssignmentTarget<'a> {
     }
 }
 
-// FIXME: Use a struct as return type
-#[allow(clippy::type_complexity)]
+pub(crate) struct Program<'a> {
+    pub(crate) stmts: &'a [Statement<'a>],
+    pub(crate) global_name_offsets: HashMap<InternedString, Variable<'a>>,
+    pub(crate) global_cell_count: usize,
+}
+
 pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
     global_names: &'a [Name<'a>],
     program: &'a [crate::parse::Statement<'a>],
-) -> Result<
-    (
-        &'a [Statement<'a>],
-        HashMap<InternedString, Variable<'a>>,
-        usize,
-    ),
-    Error<'a>,
-> {
+) -> Result<Program<'a>, Error<'a>> {
     let mut scopes = Scopes::new(bump, global_names);
     let stmts = &*bump.alloc_slice_copy(
         &program
@@ -783,11 +780,11 @@ pub(crate) fn resolve_names<'a>(
         .cells
         .values()
         .all(|cell_ref| matches!(cell_ref, CellRef::Local(_))));
-    Ok((
+    Ok(Program {
         stmts,
-        scopes.scopes.first().locals.0.first().clone(),
-        scopes.scopes.first().cells.len(),
-    ))
+        global_name_offsets: scopes.scopes.first().locals.0.first().clone(),
+        global_cell_count: scopes.scopes.first().cells.len(),
+    })
 }
 
 fn resolve_stmt<'a>(

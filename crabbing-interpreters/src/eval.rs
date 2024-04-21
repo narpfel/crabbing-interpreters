@@ -821,6 +821,7 @@ mod tests {
     use super::*;
     use crate::parse;
     use crate::scope;
+    use crate::scope::Program;
 
     #[fixture]
     fn bump() -> Bump {
@@ -836,11 +837,11 @@ mod tests {
         let ast = crate::parse::tests::parse_str(bump, src).unwrap();
         let program =
             std::slice::from_ref(bump.alloc(parse::Statement::Expression { expr: ast, semi }));
-        let Ok((
-            [scope::Statement::Expression(scoped_ast)],
+        let Ok(Program {
+            stmts: [scope::Statement::Expression(scoped_ast)],
             global_name_offsets,
-            _global_cell_count @ 0,
-        )) = scope::resolve_names(bump, &[], program)
+            global_cell_count: 0,
+        }) = scope::resolve_names(bump, &[], program)
         else {
             unreachable!()
         };

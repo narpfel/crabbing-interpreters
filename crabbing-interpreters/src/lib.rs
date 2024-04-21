@@ -209,17 +209,17 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 }
             };
         };
-        let (stmts, _, global_cell_count) = match resolve_names(bump, globals_names, stmts) {
-            Ok(stmts) => stmts,
+        let program = match resolve_names(bump, globals_names, stmts) {
+            Ok(program) => program,
             Err(err) => {
                 err.print();
                 continue 'repl;
             }
         };
-        let global_cells: Vec<_> = (0..global_cell_count)
+        let global_cells: Vec<_> = (0..program.global_cell_count)
             .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
             .collect();
-        let result = execute(&mut globals, 0, stmts, &global_cells);
+        let result = execute(&mut globals, 0, program.stmts, &global_cells);
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
@@ -263,17 +263,16 @@ pub fn run<'a>(
             interner.intern("clock"),
             bump.alloc(Loc::debug_loc(bump, "clock")),
         )]);
-        let (scoped_ast, global_name_offsets, global_cell_count) =
-            time("scp", args.times, move || {
-                scope::resolve_names(bump, globals, ast)
-            })?;
+        let program = time("scp", args.times, move || {
+            scope::resolve_names(bump, globals, ast)
+        })?;
         if args.scopes {
             print!("(program");
-            if !scoped_ast.is_empty() {
+            if !program.stmts.is_empty() {
                 println!();
             }
             let mut sexpr = String::new();
-            for stmt in scoped_ast {
+            for stmt in program.stmts {
                 write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
             }
             println!("{})", sexpr.trim_end());
@@ -281,7 +280,8 @@ pub fn run<'a>(
                 return Ok(());
             }
         }
-        let global_name_offsets = global_name_offsets
+        let global_name_offsets = program
+            .global_name_offsets
             .iter()
             .map(|(&name, v)| match v.target() {
                 scope::Target::GlobalBySlot(slot) => (name, slot),
@@ -289,11 +289,11 @@ pub fn run<'a>(
             })
             .collect();
         let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
-        let global_cells: Vec<_> = (0..global_cell_count)
+        let global_cells: Vec<_> = (0..program.global_cell_count)
             .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
             .collect();
         match time("exe", args.times, || {
-            execute(&mut stack, 0, scoped_ast, &global_cells)
+            execute(&mut stack, 0, program.stmts, &global_cells)
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,
