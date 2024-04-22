@@ -1,16 +1,17 @@
 default_job = "check"
 
 [jobs.check]
-command = ["cargo", "check", "--color", "always"]
+command = ["cargo", "check", "--profile=clif", "--color", "always"]
 need_stdout = false
 
 [jobs.check-all]
-command = ["cargo", "check", "--all-targets", "--color", "always"]
+command = ["cargo", "check", "--profile=clif", "--all-targets", "--color", "always"]
 need_stdout = false
 
 [jobs.clippy]
 command = [
     "cargo", "clippy",
+    "--profile=clif",
     "--all-targets",
     "--color", "always",
 ]
@@ -19,10 +20,10 @@ need_stdout = false
 [jobs.test]
 command = [
     "cargo", "test", "--color", "always",
+    "--profile=clif",
     "--package", "crabbing-interpreters",
     "--package", "crabbing-interpreters-lex",
     "--tests",
-    "--profile=clif",
     "--", "--color", "always", # see https://github.com/Canop/bacon/issues/124
     "--quiet",
 ]
@@ -39,17 +40,18 @@ allow_warnings = true
 env.RUSTFLAGS = ""
 
 [jobs.doc]
-command = ["cargo", "doc", "--color", "always", "--no-deps"]
+command = ["cargo", "doc", "--profile=clif", "--color", "always", "--no-deps"]
 need_stdout = false
 
 [jobs.doc-open]
-command = ["cargo", "doc", "--color", "always", "--no-deps", "--open"]
+command = ["cargo", "doc", "--profile=clif", "--color", "always", "--no-deps", "--open"]
 need_stdout = false
 on_success = "back"
 
 [jobs.run]
 command = [
     "cargo", "run",
+    "--profile=clif",
     "--color", "always",
 ]
 need_stdout = true
