@@ -25,9 +25,9 @@ pub use crabbing_interpreters_lex::lex;
 
 use crate::closure_compiler::compile_block;
 use crate::closure_compiler::State;
+use crate::environment::Environment;
 use crate::eval::execute;
 use crate::eval::ControlFlow;
-use crate::eval::Environment;
 use crate::interner::Interner;
 use crate::lex::Loc;
 use crate::parse::parse;
@@ -38,6 +38,7 @@ use crate::value::Value;
 
 mod clone_from_cell;
 mod closure_compiler;
+mod environment;
 mod eval;
 mod interner;
 mod nonempty;

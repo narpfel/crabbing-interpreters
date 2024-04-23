@@ -9,9 +9,9 @@ use bumpalo::Bump;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant as _;
 
+use crate::environment::Environment;
 use crate::eval::eval_function;
 use crate::eval::ControlFlow;
-use crate::eval::Environment;
 use crate::eval::Error;
 use crate::interner::interned;
 use crate::parse::BinOp;
