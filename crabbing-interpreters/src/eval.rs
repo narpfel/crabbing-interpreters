@@ -20,6 +20,7 @@ use variant_types::IntoVariant;
 
 use crate::clone_from_cell::CloneInCellSafe;
 use crate::clone_from_cell::GetClone;
+use crate::closure_compiler::Execute;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::BinOp;
@@ -70,7 +71,7 @@ impl Value<'_> {
         }
     }
 
-    fn is_truthy(&self) -> bool {
+    pub(crate) fn is_truthy(&self) -> bool {
         use Value::*;
         match self {
             Bool(b) => *b,
@@ -111,9 +112,10 @@ pub type Function<'a> = RcValue<FunctionInner<'a>>;
 
 pub struct FunctionInner<'a> {
     name: &'a str,
-    parameters: &'a [Variable<'a>],
+    pub(crate) parameters: &'a [Variable<'a>],
     code: &'a [Statement<'a>],
-    cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
+    pub(crate) cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
+    pub(crate) compiled_body: &'a Execute<'a>,
 }
 
 impl Debug for Function<'_> {
@@ -125,9 +127,9 @@ impl Debug for Function<'_> {
 pub type Class<'a> = RcValue<ClassInner<'a>>;
 
 pub struct ClassInner<'a> {
-    name: &'a str,
-    base: Option<Class<'a>>,
-    methods: HashMap<InternedString, Value<'a>>,
+    pub(crate) name: &'a str,
+    pub(crate) base: Option<Class<'a>>,
+    pub(crate) methods: HashMap<InternedString, Value<'a>>,
 }
 
 impl<'a> ClassInner<'a> {
@@ -137,7 +139,7 @@ impl<'a> ClassInner<'a> {
         })
     }
 
-    fn lookup_method(&self, name: InternedString) -> Option<&Value<'a>> {
+    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<&Value<'a>> {
         self.mro().find_map(|class| class.methods.get(&name))
     }
 }
@@ -151,8 +153,8 @@ impl Debug for Class<'_> {
 pub type Instance<'a> = RcValue<InstanceInner<'a>>;
 
 pub struct InstanceInner<'a> {
-    class: Class<'a>,
-    attributes: RefCell<HashMap<InternedString, Value<'a>>>,
+    pub(crate) class: Class<'a>,
+    pub(crate) attributes: RefCell<HashMap<InternedString, Value<'a>>>,
 }
 
 impl Debug for Instance<'_> {
@@ -330,7 +332,7 @@ impl<'a> Environment<'a> {
         Self { stack, globals, is_global_defined }
     }
 
-    fn get(
+    pub(crate) fn get(
         &self,
         cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
         offset: usize,
@@ -344,14 +346,20 @@ impl<'a> Environment<'a> {
         Ok(self.stack[index].clone())
     }
 
-    fn get_global_slot_by_name(&self, name: &'a Name<'a>) -> Result<usize, Box<Error<'a>>> {
+    pub(crate) fn get_global_slot_by_name(
+        &self,
+        name: &'a Name<'a>,
+    ) -> Result<usize, Box<Error<'a>>> {
         match self.globals.get(&name.id()).copied() {
             Some(slot) if self.is_global_defined[slot] => Ok(slot),
             _ => Err(Box::new(Error::UndefinedName { at: *name })),
         }
     }
 
-    fn get_global_by_name(&self, name: &'a Name<'a>) -> Result<(usize, Value<'a>), Box<Error<'a>>> {
+    pub(crate) fn get_global_by_name(
+        &self,
+        name: &'a Name<'a>,
+    ) -> Result<(usize, Value<'a>), Box<Error<'a>>> {
         let slot = self.get_global_slot_by_name(name)?;
         Ok((slot, self.stack[slot].clone()))
     }
@@ -382,7 +390,7 @@ impl<'a> Environment<'a> {
         self.stack[index] = value;
     }
 
-    fn define(
+    pub(crate) fn define(
         &mut self,
         cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
         offset: usize,
@@ -394,7 +402,7 @@ impl<'a> Environment<'a> {
         })
     }
 
-    fn set(
+    pub(crate) fn set(
         &mut self,
         cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
         offset: usize,
@@ -790,11 +798,17 @@ pub fn execute<'a>(
     Ok(last_value)
 }
 
-fn eval_function<'a>(
+pub(crate) fn eval_function<'a>(
     cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
     function: &crate::scope::Function<'a>,
 ) -> Value<'a> {
-    let crate::scope::Function { name, parameters, body, cells } = function;
+    let crate::scope::Function {
+        name,
+        parameters,
+        body,
+        cells,
+        compiled_body,
+    } = function;
     let cells = cells
         .iter()
         .map(|cell| match cell {
@@ -807,6 +821,7 @@ fn eval_function<'a>(
         parameters,
         code: body,
         cells,
+        compiled_body: *compiled_body,
     }))
 }
 

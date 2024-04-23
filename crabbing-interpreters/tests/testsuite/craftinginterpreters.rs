@@ -63,3 +63,25 @@ fn scope(
         assert_cmd_snapshot!(format!("scope-{}", path.display()), command());
     }
 }
+
+#[rstest]
+fn closure_compiler(
+    _filter_pointers: PointerFilter,
+    #[files("../craftinginterpreters/test/**/*.lox")]
+    #[exclude("/scanning/")]
+    #[exclude("/expressions/")]
+    #[exclude("/benchmark/")]
+    path: PathBuf,
+) {
+    let path = relative_to(
+        &path,
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
+    );
+    assert_cmd_snapshot!(
+        path.display().to_string(),
+        Command::new(get_cargo_bin("crabbing-interpreters"))
+            .current_dir("..")
+            .arg("--loop=closures")
+            .arg(path),
+    );
+}

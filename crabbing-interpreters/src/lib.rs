@@ -23,6 +23,8 @@ use clap::ValueEnum;
 pub(crate) use crabbing_interpreters_lex as lex;
 pub use crabbing_interpreters_lex::lex;
 
+use crate::closure_compiler::compile_block;
+use crate::closure_compiler::State;
 use crate::eval::execute;
 use crate::eval::ControlFlow;
 use crate::eval::Environment;
@@ -35,6 +37,7 @@ use crate::parse::Name;
 use crate::scope::resolve_names;
 
 mod clone_from_cell;
+mod closure_compiler;
 mod eval;
 mod interner;
 mod nonempty;
@@ -161,11 +164,20 @@ struct Args {
     times: bool,
     #[arg(long)]
     stop_at: Option<StopAt>,
+    #[arg(short, long, value_enum, default_value_t)]
+    r#loop: Loop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum StopAt {
     Scopes,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum Loop {
+    #[default]
+    Ast,
+    Closures,
 }
 
 fn repl() -> Result<(), Box<dyn Report>> {
@@ -292,8 +304,14 @@ pub fn run<'a>(
         let global_cells: Vec<_> = (0..program.global_cell_count)
             .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
             .collect();
-        match time("exe", args.times, || {
-            execute(&mut stack, 0, program.stmts, &global_cells)
+        let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
+        match time("exe", args.times, || match args.r#loop {
+            Loop::Ast => execute(&mut stack, 0, program.stmts, &global_cells),
+            Loop::Closures => execute_closures(&mut State {
+                env: &mut stack,
+                offset: 0,
+                cell_vars: &global_cells,
+            }),
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,

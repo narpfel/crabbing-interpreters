@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter;
 use std::primitive::usize;
@@ -13,6 +14,8 @@ use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types_derive::derive_variant_types;
 
+use crate::closure_compiler::compile_block;
+use crate::closure_compiler::Execute;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::lex::Loc;
@@ -373,17 +376,35 @@ struct FunctionScope<'a> {
     cells: IndexMap<Variable<'a>, CellRef<'a>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Function<'a> {
     pub(crate) name: Name<'a>,
     pub(crate) parameters: &'a [Variable<'a>],
     pub(crate) body: &'a [Statement<'a>],
     pub(crate) cells: &'a [Option<usize>],
+    pub(crate) compiled_body: &'a Execute<'a>,
+}
+
+impl Debug for Function<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Function")
+            .field("name", &self.name)
+            .field("parameters", &self.parameters)
+            .field("body", &self.body)
+            .field("cells", &self.cells)
+            .finish()
+    }
 }
 
 impl Function<'_> {
     fn as_sexpr(&self, indent: usize, kind: FunctionKind, target: Option<Variable>) -> String {
-        let Self { name, parameters, body, cells } = self;
+        let Self {
+            name,
+            parameters,
+            body,
+            cells,
+            compiled_body: _,
+        } = self;
         let kind = match kind {
             FunctionKind::Function => "fun",
             FunctionKind::Method => "method",
@@ -1030,7 +1051,13 @@ fn resolve_function<'a>(
         ))
     })?;
     let cells = cell_slots(bump, scopes, &cells);
-    Ok(Function { name: *name, parameters, body, cells })
+    Ok(Function {
+        name: *name,
+        parameters,
+        body,
+        cells,
+        compiled_body: compile_block(bump, body),
+    })
 }
 
 fn cell_slots<'a>(
