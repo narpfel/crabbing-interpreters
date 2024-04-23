@@ -2,10 +2,8 @@ use core::slice;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::fmt::Display;
 use std::iter::zip;
 use std::iter::Skip;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -18,9 +16,7 @@ use crabbing_interpreters_derive_report::Report;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant;
 
-use crate::clone_from_cell::CloneInCellSafe;
-use crate::clone_from_cell::GetClone;
-use crate::closure_compiler::Execute;
+use crate::clone_from_cell::GetClone as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::BinOp;
@@ -39,134 +35,13 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::Class;
+use crate::value::ClassInner;
+use crate::value::FunctionInner;
+use crate::value::InstanceInner;
+use crate::value::NativeError;
+use crate::value::Value;
 use crate::Sliced;
-
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Value<'a> {
-    Number(f64),
-    String(RcStr<'a>),
-    Bool(bool),
-    Nil,
-    Function(Function<'a>),
-    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
-    Class(Class<'a>),
-    Instance(Instance<'a>),
-    BoundMethod(Function<'a>, Instance<'a>),
-}
-
-unsafe impl CloneInCellSafe for Value<'_> {}
-
-impl Value<'_> {
-    pub fn typ(&self) -> &'static str {
-        match self {
-            Value::Number(_) => "Number",
-            Value::String(_) => "String",
-            Value::Bool(_) => "Bool",
-            Value::Nil => "Nil",
-            Value::Function(_) => "Function",
-            Value::NativeFunction(_) => "NativeFunction",
-            Value::Class(_) => "Class",
-            Value::Instance(_) => "Instance",
-            Value::BoundMethod(_, _) => "BoundMethod",
-        }
-    }
-
-    pub(crate) fn is_truthy(&self) -> bool {
-        use Value::*;
-        match self {
-            Bool(b) => *b,
-            Nil => false,
-            _ => true,
-        }
-    }
-
-    fn lox_debug(&self) -> String {
-        match self {
-            Value::String(s) => format!("{:?}", s.deref()),
-            _ => self.to_string(),
-        }
-    }
-}
-
-impl Display for Value<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Number(x) => write!(f, "{x}"),
-            Value::String(s) => write!(f, "{s}"),
-            Value::Bool(b) => write!(f, "{b}"),
-            Value::Nil => write!(f, "nil"),
-            Value::Function(func) => write!(f, "{func:?}"),
-            Value::NativeFunction(_) => write!(f, "<native fn>"),
-            Value::Class(class) => write!(f, "{class:?}"),
-            Value::Instance(instance) => write!(f, "{instance:?}"),
-            Value::BoundMethod(method, instance) => write!(
-                f,
-                "<bound method {name} of {instance:?}>",
-                name = method.name,
-            ),
-        }
-    }
-}
-
-pub type Function<'a> = RcValue<FunctionInner<'a>>;
-
-pub struct FunctionInner<'a> {
-    name: &'a str,
-    pub(crate) parameters: &'a [Variable<'a>],
-    code: &'a [Statement<'a>],
-    pub(crate) cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
-    pub(crate) compiled_body: &'a Execute<'a>,
-}
-
-impl Debug for Function<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<function {} at {:p}>", self.name, Self::as_ptr(self))
-    }
-}
-
-pub type Class<'a> = RcValue<ClassInner<'a>>;
-
-pub struct ClassInner<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) base: Option<Class<'a>>,
-    pub(crate) methods: HashMap<InternedString, Value<'a>>,
-}
-
-impl<'a> ClassInner<'a> {
-    fn mro(&self) -> impl Iterator<Item = &Self> {
-        itertools::unfold(Some(self), |class| {
-            std::mem::replace(class, class.and_then(|class| class.base.as_deref()))
-        })
-    }
-
-    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<&Value<'a>> {
-        self.mro().find_map(|class| class.methods.get(&name))
-    }
-}
-
-impl Debug for Class<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<class {} at {:p}>", self.name, Self::as_ptr(self))
-    }
-}
-
-pub type Instance<'a> = RcValue<InstanceInner<'a>>;
-
-pub struct InstanceInner<'a> {
-    pub(crate) class: Class<'a>,
-    pub(crate) attributes: RefCell<HashMap<InternedString, Value<'a>>>,
-}
-
-impl Debug for Instance<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "<{} instance at {:p}>",
-            self.class.name,
-            Self::as_ptr(self),
-        )
-    }
-}
 
 #[derive(Debug)]
 pub enum ControlFlow<T, E> {
@@ -295,11 +170,6 @@ pub enum Error<'a> {
         #[diagnostics(0(colour = Red))]
         at: ExpressionTypes::Name<'a>,
     },
-}
-
-pub enum NativeError<'a> {
-    Error(Error<'a>),
-    ArityMismatch { expected: usize },
 }
 
 const ENV_SIZE: usize = 100_000;
@@ -531,7 +401,7 @@ pub fn eval<'a>(
 
             let eval_call = #[inline(always)]
             |env: &mut Environment<'a>,
-                             function: &self::Function<'a>,
+                             function: &crate::value::Function<'a>,
                              parameters: Skip<slice::Iter<Variable<'a>>>|
              -> Result<Value<'a>, Box<Error<'a>>> {
                 if arguments.len() != parameters.len() {
@@ -566,7 +436,7 @@ pub fn eval<'a>(
 
             let eval_method_call = #[inline(always)]
             |env: &mut Environment<'a>,
-                                    method: &self::Function<'a>,
+                                    method: &crate::value::Function<'a>,
                                     instance: Value<'a>|
              -> Result<Value<'a>, Box<Error<'a>>> {
                 env.define(

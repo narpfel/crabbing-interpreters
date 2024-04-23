@@ -10,14 +10,9 @@ use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant as _;
 
 use crate::eval::eval_function;
-use crate::eval::ClassInner;
 use crate::eval::ControlFlow;
 use crate::eval::Environment;
 use crate::eval::Error;
-use crate::eval::Function;
-use crate::eval::InstanceInner;
-use crate::eval::NativeError;
-use crate::eval::Value;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -31,6 +26,11 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::ClassInner;
+use crate::value::Function;
+use crate::value::InstanceInner;
+use crate::value::NativeError;
+use crate::value::Value;
 
 pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,

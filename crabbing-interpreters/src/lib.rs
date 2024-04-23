@@ -28,13 +28,13 @@ use crate::closure_compiler::State;
 use crate::eval::execute;
 use crate::eval::ControlFlow;
 use crate::eval::Environment;
-use crate::eval::Value;
 use crate::interner::Interner;
 use crate::lex::Loc;
 use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
 use crate::scope::resolve_names;
+use crate::value::Value;
 
 mod clone_from_cell;
 mod closure_compiler;
@@ -45,6 +45,7 @@ mod parse;
 mod rc_str;
 mod rc_value;
 mod scope;
+mod value;
 
 pub trait AllocPath {
     fn alloc_path(&self, path: impl AsRef<Path>) -> &Path;
