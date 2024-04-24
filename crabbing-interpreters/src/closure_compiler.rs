@@ -183,7 +183,7 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
             let base_expr = base;
             let base = base.as_ref().map(|base| compile_expr(bump, base));
             let methods = *methods;
-            bump.alloc_with(|| {
+            bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
                     let base = match base {
                         Some(base) => Some(base(state)?),
@@ -223,8 +223,8 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                         });
                     }
                     Ok(Value::Nil)
-                }
-            })
+                },
+            )
         }
     }
 }
