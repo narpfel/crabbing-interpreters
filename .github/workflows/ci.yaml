@@ -26,6 +26,3 @@ jobs:
       - name: test
         run: |
           cargo insta test --unreferenced=reject
-      - name: clippy
-        run: |
-          cargo clippy

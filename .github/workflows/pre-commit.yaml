@@ -22,3 +22,5 @@ jobs:
           curl -LsSf https://insta.rs/install.sh | sh
       - name: pre-commit
         uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: "--hook-stage=manual"
