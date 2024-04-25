@@ -1,10 +1,10 @@
-use core::slice;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::iter::zip;
 use std::iter::Skip;
 use std::rc::Rc;
+use std::slice;
 
 use ariadne::Color::Blue;
 use ariadne::Color::Green;
@@ -470,23 +470,23 @@ pub fn execute<'a>(
             Statement::Block(block) => execute(env, offset, block, cell_vars)?,
             Statement::If { condition, then, or_else } =>
                 if eval(env, cell_vars, offset, condition)?.is_truthy() {
-                    execute(env, offset, std::slice::from_ref(then), cell_vars)?
+                    execute(env, offset, slice::from_ref(then), cell_vars)?
                 }
                 else {
                     match or_else {
-                        Some(stmt) => execute(env, offset, std::slice::from_ref(stmt), cell_vars)?,
+                        Some(stmt) => execute(env, offset, slice::from_ref(stmt), cell_vars)?,
                         None => Value::Nil,
                     }
                 },
             Statement::While { condition, body } => {
                 while eval(env, cell_vars, offset, condition)?.is_truthy() {
-                    execute(env, offset, std::slice::from_ref(body), cell_vars)?;
+                    execute(env, offset, slice::from_ref(body), cell_vars)?;
                 }
                 Value::Nil
             }
             Statement::For { init, condition, update, body } => {
                 if let Some(init) = init {
-                    execute(env, offset, std::slice::from_ref(init), cell_vars)?;
+                    execute(env, offset, slice::from_ref(init), cell_vars)?;
                 }
                 while condition
                     .as_ref()
@@ -495,7 +495,7 @@ pub fn execute<'a>(
                     })?
                     .is_truthy()
                 {
-                    execute(env, offset, std::slice::from_ref(body), cell_vars)?;
+                    execute(env, offset, slice::from_ref(body), cell_vars)?;
                     if let Some(update) = update {
                         eval(env, cell_vars, offset, update)?;
                     }
