@@ -275,9 +275,9 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             let rhs = *rhs;
             match op.kind {
                 BinOpKind::EqualEqual =>
-                    any_binop(bump, lhs, rhs, |lhs, rhs| Value::Bool(lhs == rhs)),
+                    any_binop(bump, lhs, rhs, |lhs, rhs| Ok(Value::Bool(lhs == rhs))),
                 BinOpKind::NotEqual =>
-                    any_binop(bump, lhs, rhs, |lhs, rhs| Value::Bool(lhs != rhs)),
+                    any_binop(bump, lhs, rhs, |lhs, rhs| Ok(Value::Bool(lhs != rhs))),
                 BinOpKind::Less =>
                     number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| Value::Bool(lhs < rhs)),
                 BinOpKind::LessEqual =>
@@ -286,28 +286,17 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| Value::Bool(lhs > rhs)),
                 BinOpKind::GreaterEqual =>
                     number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| Value::Bool(lhs >= rhs)),
-                BinOpKind::Plus => {
-                    let lhs = compile_expr(bump, lhs);
-                    let rhs = compile_expr(bump, rhs);
-                    bump.alloc(
-                        for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                            let lhs = lhs(state)?;
-                            let rhs = rhs(state)?;
-                            match (&lhs, &rhs) {
-                                (Value::Number(lhs), Value::Number(rhs)) =>
-                                    Ok(Value::Number(lhs + rhs)),
-                                (Value::String(lhs), Value::String(rhs)) =>
-                                    Ok(Value::String(RcStr::Owned(Rc::from(format!("{lhs}{rhs}"))))),
-                                _ => Err(Error::InvalidBinaryOp {
-                                    lhs,
-                                    op: *op,
-                                    rhs,
-                                    at: expr.into_variant(),
-                                })?,
-                            }
-                        }
-                    )
-                }
+                BinOpKind::Plus => any_binop(bump, lhs, rhs, |lhs, rhs| match (&lhs, &rhs) {
+                    (Value::Number(lhs), Value::Number(rhs)) => Ok(Value::Number(lhs + rhs)),
+                    (Value::String(lhs), Value::String(rhs)) =>
+                        Ok(Value::String(RcStr::Owned(Rc::from(format!("{lhs}{rhs}"))))),
+                    _ => Err(Error::InvalidBinaryOp {
+                        lhs,
+                        op: *op,
+                        rhs,
+                        at: expr.into_variant(),
+                    })?,
+                }),
                 BinOpKind::Minus => number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| {
                     Value::Number(lhs - rhs)
                 }),
@@ -621,7 +610,7 @@ fn any_binop<'a>(
     bump: &'a Bump,
     lhs: &'a Expression<'a>,
     rhs: &'a Expression<'a>,
-    op: impl Fn(Value<'a>, Value<'a>) -> Value<'a> + 'a,
+    op: impl Fn(Value<'a>, Value<'a>) -> EvalResult<'a> + 'a,
 ) -> &'a Evaluate<'a> {
     let lhs = compile_expr(bump, lhs);
     let rhs = compile_expr(bump, rhs);
@@ -629,7 +618,7 @@ fn any_binop<'a>(
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
             let lhs = lhs(state)?;
             let rhs = rhs(state)?;
-            Ok(op(lhs, rhs))
+            op(lhs, rhs)
         },
     )
 }
