@@ -15,5 +15,4 @@ Error: only instances have properties, but `<function foo at [POINTER]>` is of t
    │
  3 │ foo.bar; // expect runtime error: Only instances have properties.
    │ ───  
-   │       
 ───╯

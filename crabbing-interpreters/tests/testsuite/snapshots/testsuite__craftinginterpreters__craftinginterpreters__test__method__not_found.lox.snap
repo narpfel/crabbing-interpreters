@@ -15,7 +15,4 @@ Error: undefined property `unknown` of value `<Foo instance at [POINTER]>`
    │
  3 │ Foo().unknown(); // expect runtime error: Undefined property 'unknown'.
    │ ───── ───────  
-   │                 
-   │                
-   │                 
 ───╯

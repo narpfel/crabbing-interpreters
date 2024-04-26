@@ -15,5 +15,4 @@ Error: unterminated string literal
    │
  2 │ "this string has no close quote
    │ ───────────────────────────────  
-   │                                   
 ───╯

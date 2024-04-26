@@ -15,5 +15,4 @@ Error: Already a variable with this name in this scope: `a`
    │
  3 │   var a = "other"; // Error at 'a': Already a variable with this name in this scope.
    │       ─  
-   │           
 ───╯

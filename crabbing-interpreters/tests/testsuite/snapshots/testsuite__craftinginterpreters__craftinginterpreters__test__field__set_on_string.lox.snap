@@ -15,7 +15,4 @@ Error: only instances have fields, but `str` is of type `String`
    │
  1 │ "str".foo = "value"; // expect runtime error: Only instances have fields.
    │ ───── ───  
-   │             
-   │            
-   │             
 ───╯

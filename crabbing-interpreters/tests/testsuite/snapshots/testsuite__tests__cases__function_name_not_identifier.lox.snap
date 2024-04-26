@@ -15,5 +15,4 @@ Error: at `42`: expected Identifier
    │
  1 │ fun 42() {}
    │     ──  
-   │          
 ───╯

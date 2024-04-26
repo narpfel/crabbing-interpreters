@@ -15,5 +15,4 @@ Error: only instances have properties, but `<class Foo at [POINTER]>` is of type
    │
  2 │ Foo.bar; // expect runtime error: Only instances have properties.
    │ ───  
-   │       
 ───╯

@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -15,5 +15,4 @@ Error: Undefined variable `err`.
    │
  7 │ err; // // expect runtime error: Undefined variable 'err'.
    │ ───  
-   │       
 ───╯

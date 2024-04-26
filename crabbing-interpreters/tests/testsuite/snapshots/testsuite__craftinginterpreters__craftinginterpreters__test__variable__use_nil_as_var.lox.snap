@@ -15,5 +15,4 @@ Error: at `nil`: expected Identifier
    │
  2 │ var nil = "value";
    │     ───  
-   │           
 ───╯

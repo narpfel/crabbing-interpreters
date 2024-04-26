@@ -15,5 +15,4 @@ Error: only instances have properties, but `true` is of type `Bool`
    │
  3 │   true.method(
    │   ────  
-   │          
 ───╯

@@ -15,5 +15,4 @@ Error: Undefined variable `y`.
    │
  1 │ var x = y;
    │         ─  
-   │             
 ───╯

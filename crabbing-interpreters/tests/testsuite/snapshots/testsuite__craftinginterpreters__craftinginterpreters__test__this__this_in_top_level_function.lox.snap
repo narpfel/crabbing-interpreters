@@ -15,5 +15,4 @@ Error: Can’t use `this` outside of class.
    │
  2 │   this; // Error at 'this': Can't use 'this' outside of a class.
    │   ────  
-   │          
 ───╯

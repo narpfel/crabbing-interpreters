@@ -15,7 +15,4 @@ Error: undefined super property `doesNotExist` of value `<Derived instance at [P
    │
  5 │     super.doesNotExist(1); // expect runtime error: Undefined property 'doesNotExist'.
    │     ───── ────────────  
-   │                          
-   │                         
-   │                          
 ───╯

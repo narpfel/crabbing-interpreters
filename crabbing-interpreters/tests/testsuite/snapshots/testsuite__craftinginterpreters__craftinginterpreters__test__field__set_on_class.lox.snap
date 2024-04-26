@@ -15,7 +15,4 @@ Error: only instances have fields, but `<class Foo at [POINTER]>` is of type `Cl
    │
  2 │ Foo.bar = "value"; // expect runtime error: Only instances have fields.
    │ ─── ───  
-   │           
-   │          
-   │           
 ───╯

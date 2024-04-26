@@ -15,5 +15,4 @@ Error: Expect expression.
    │
  2 │ for (;;) fun foo() {}
    │          ───  
-   │                
 ───╯

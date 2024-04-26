@@ -15,7 +15,4 @@ Error: only instances have fields, but `<function foo at [POINTER]>` is of type 
    │
  3 │ foo.bar = "value"; // expect runtime error: Only instances have fields.
    │ ─── ───  
-   │           
-   │          
-   │           
 ───╯

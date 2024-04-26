@@ -15,7 +15,4 @@ Error: ambiguous precedences between operators `==` and `<`
     │
  14 │ print false == 2 < 1; // expect: true
     │             ──   ─  
-    │                      
-    │                     
-    │                      
 ────╯

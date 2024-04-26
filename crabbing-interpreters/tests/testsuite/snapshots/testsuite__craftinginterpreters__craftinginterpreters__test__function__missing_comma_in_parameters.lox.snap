@@ -15,5 +15,4 @@ Error: at `c`: expected RParen
    │
  3 │ fun foo(a, b c, d, e, f) {}
    │              ─  
-   │                  
 ───╯

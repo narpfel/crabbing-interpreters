@@ -16,6 +16,4 @@ Error: invalid `for` loop initialiser: block statement
  3 │ for ({}; a < 2; a = a + 1) {}
    │ ───  ─┬  
    │       ╰── only expression statements and variable declarations are allowed here
-   │          
-   │           
 ───╯

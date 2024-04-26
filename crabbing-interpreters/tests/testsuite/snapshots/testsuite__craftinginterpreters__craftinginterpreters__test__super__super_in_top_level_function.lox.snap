@@ -15,5 +15,4 @@ Error: Can’t use `super` outside of class.
    │
  1 │   super.bar(); // Error at 'super': Can't use 'super' outside of a class.
    │   ─────  
-   │           
 ───╯

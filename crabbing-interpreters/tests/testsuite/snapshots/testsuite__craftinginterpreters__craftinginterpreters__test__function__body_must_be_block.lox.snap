@@ -15,5 +15,4 @@ Error: at `123`: expected LBrace
    │
  3 │ fun f() 123;
    │         ───  
-   │               
 ───╯

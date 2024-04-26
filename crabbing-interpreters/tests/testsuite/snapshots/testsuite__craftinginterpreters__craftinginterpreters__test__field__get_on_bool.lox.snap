@@ -15,5 +15,4 @@ Error: only instances have properties, but `true` is of type `Bool`
    │
  1 │ true.foo; // expect runtime error: Only instances have properties.
    │ ────  
-   │        
 ───╯

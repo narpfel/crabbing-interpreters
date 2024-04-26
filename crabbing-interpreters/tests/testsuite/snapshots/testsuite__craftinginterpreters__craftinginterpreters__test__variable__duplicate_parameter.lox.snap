@@ -15,5 +15,4 @@ Error: Already a variable with this name in this scope: `arg`
    │
  2 │         arg) { // Error at 'arg': Already a variable with this name in this scope.
    │         ───  
-   │               
 ───╯

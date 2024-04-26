@@ -15,5 +15,4 @@ Error: Can’t return from top-level code.
    │
  1 │ return "wat"; // Error at 'return': Can't return from top-level code.
    │ ──────  
-   │          
 ───╯

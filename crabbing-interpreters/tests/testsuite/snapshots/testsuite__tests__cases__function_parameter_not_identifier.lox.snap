@@ -15,5 +15,4 @@ Error: at `42`: expected RParen
    │
  1 │ fun f(42) {}
    │       ──  
-   │            
 ───╯

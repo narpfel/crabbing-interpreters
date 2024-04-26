@@ -15,5 +15,4 @@ Error: Expect expression.
    │
  2 │ if (true) "ok"; else class Foo {}
    │                      ─────  
-   │                              
 ───╯

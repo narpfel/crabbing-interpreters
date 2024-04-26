@@ -16,6 +16,4 @@ Error: invalid `for` loop initialiser: print statement
  1 │ for (print 42; false;) {}
    │ ───  ────┬────  
    │          ╰────── only expression statements and variable declarations are allowed here
-   │                 
-   │                  
 ───╯

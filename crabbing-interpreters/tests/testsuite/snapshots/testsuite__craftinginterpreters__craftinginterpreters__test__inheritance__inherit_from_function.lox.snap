@@ -15,5 +15,4 @@ Error: only classes can be inherited from, but `<function foo at [POINTER]>` is 
    │
  3 │ class Subclass < foo {} // expect runtime error: Superclass must be a class.
    │                  ───  
-   │                        
 ───╯

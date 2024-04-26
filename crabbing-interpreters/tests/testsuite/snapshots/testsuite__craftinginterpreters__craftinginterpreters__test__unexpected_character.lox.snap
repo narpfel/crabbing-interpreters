@@ -15,5 +15,4 @@ Error: unterminated string literal
    │
  3 │ foo(a | b);
    │       ─  
-   │           
 ───╯

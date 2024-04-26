@@ -15,7 +15,4 @@ Error: undefined property `bar` of value `<Foo instance at [POINTER]>`
    │
  4 │ foo.bar; // expect runtime error: Undefined property 'bar'.
    │ ─── ───  
-   │           
-   │          
-   │           
 ───╯

@@ -15,5 +15,4 @@ Error: at `(`: expected Identifier
    │
  4 │ class Bar < (Foo) {}
    │             ─  
-   │                 
 ───╯

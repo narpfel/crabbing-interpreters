@@ -15,5 +15,4 @@ Error: only instances have properties, but `nil` is of type `Nil`
    │
  1 │ nil.foo; // expect runtime error: Only instances have properties.
    │ ───  
-   │       
 ───╯

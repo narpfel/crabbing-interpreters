@@ -15,5 +15,4 @@ Error: only classes can be inherited from, but `nil` is of type `Nil`
    │
  2 │ class Foo < Nil {} // expect runtime error: Superclass must be a class.
    │             ───  
-   │                   
 ───╯

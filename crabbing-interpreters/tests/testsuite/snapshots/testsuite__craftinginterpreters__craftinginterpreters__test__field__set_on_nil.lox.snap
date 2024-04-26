@@ -15,7 +15,4 @@ Error: only instances have fields, but `nil` is of type `Nil`
    │
  1 │ nil.foo = "value"; // expect runtime error: Only instances have fields.
    │ ─── ───  
-   │           
-   │          
-   │           
 ───╯

@@ -15,5 +15,4 @@ Error: Expect expression.
    │
  3 │ for (var a = 1; {}; a = a + 1) {}
    │                 ─  
-   │                     
 ───╯

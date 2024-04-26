@@ -15,5 +15,4 @@ Error: at `)`: expected Dot
    │
  8 │     (super).method();
    │           ─  
-   │               
 ───╯

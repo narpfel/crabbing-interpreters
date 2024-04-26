@@ -15,7 +15,4 @@ Error: ambiguous precedences between operators `+` and `=`
    │
  3 │ a + b = "value"; // Error at '=': Invalid assignment target.
    │   ─   ─  
-   │           
-   │          
-   │           
 ───╯

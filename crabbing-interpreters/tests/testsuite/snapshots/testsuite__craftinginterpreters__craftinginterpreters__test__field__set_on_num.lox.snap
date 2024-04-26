@@ -15,7 +15,4 @@ Error: only instances have fields, but `123` is of type `Number`
    │
  1 │ 123.foo = "value"; // expect runtime error: Only instances have fields.
    │ ─── ───  
-   │           
-   │          
-   │           
 ───╯

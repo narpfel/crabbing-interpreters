@@ -1,5 +1,5 @@
 ---
-source: tests/testsuite/craftinginterpreters.rs
+source: crabbing-interpreters/tests/testsuite/craftinginterpreters.rs
 info:
   program: crabbing-interpreters
   args:
@@ -15,5 +15,4 @@ Error: Undefined variable `unknown`.
    │
  1 │ unknown = "what"; // expect runtime error: Undefined variable 'unknown'.
    │ ───────  
-   │           
 ───╯

@@ -15,5 +15,4 @@ Error: Expect expression.
    │
  1 │ print print 42;
    │       ─────  
-   │               
 ───╯

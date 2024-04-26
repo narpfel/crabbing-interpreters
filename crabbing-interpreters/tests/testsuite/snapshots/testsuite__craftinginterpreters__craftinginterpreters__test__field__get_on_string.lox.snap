@@ -15,5 +15,4 @@ Error: only instances have properties, but `str` is of type `String`
    │
  1 │ "str".foo; // expect runtime error: Only instances have properties.
    │ ─────  
-   │         
 ───╯

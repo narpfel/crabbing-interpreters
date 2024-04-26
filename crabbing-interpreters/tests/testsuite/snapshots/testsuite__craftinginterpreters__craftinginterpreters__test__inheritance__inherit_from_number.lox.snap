@@ -15,5 +15,4 @@ Error: only classes can be inherited from, but `123` is of type `Number`
    │
  2 │ class Foo < Number {} // expect runtime error: Superclass must be a class.
    │             ──────  
-   │                      
 ───╯

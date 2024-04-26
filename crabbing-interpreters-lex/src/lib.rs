@@ -135,12 +135,14 @@ impl<'a> Loc<'a> {
     }
 
     pub fn cache(&self) -> impl ariadne::Cache<Path> + 'a {
-        struct Cache<'b>(&'b Path, ariadne::Source);
-        impl ariadne::Cache<Path> for Cache<'_> {
+        struct Cache<'b>(&'b Path, ariadne::Source<&'b str>);
+        impl<'b> ariadne::Cache<Path> for Cache<'b> {
+            type Storage = &'b str;
+
             fn fetch(
                 &mut self,
                 id: &Path,
-            ) -> Result<&ariadne::Source, Box<dyn std::fmt::Debug + '_>> {
+            ) -> Result<&ariadne::Source<&'b str>, Box<dyn std::fmt::Debug + '_>> {
                 if self.0 == id {
                     Ok(&self.1)
                 }

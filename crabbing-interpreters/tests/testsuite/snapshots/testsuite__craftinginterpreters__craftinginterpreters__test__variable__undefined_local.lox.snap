@@ -15,5 +15,4 @@ Error: Undefined variable `notDefined`.
    │
  2 │   print notDefined;  // expect runtime error: Undefined variable 'notDefined'.
    │         ──────────  
-   │                      
 ───╯
