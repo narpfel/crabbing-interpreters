@@ -11,16 +11,16 @@ members = [
 ]
 
 [workspace.dependencies]
-bumpalo = "3.13.0"
-clap = { version = "4.3.4", features = ["derive"] }
+bumpalo = "3.16.0"
+clap = { version = "4.5.4", features = ["derive"] }
 indexmap = "2.2.6"
-itertools = "0.11.0"
-logos = "0.13.0"
-proc-macro2 = "1.0.66"
-quote = "1.0.32"
-regex = "1.9.1"
+itertools = "0.12.1"
+logos = "0.14.0"
+proc-macro2 = "1.0.81"
+quote = "1.0.36"
+regex = "1.10.4"
 rustc-hash = "1.1.0"
-syn = { version = "2.0.28", features = ["fold", "visit"] }
+syn = { version = "2.0.60", features = ["fold", "visit"] }
 
 insta = { version = "1.38.0", features = ["filters"] }
 insta-cmd = "0.6.0"
