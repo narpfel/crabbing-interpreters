@@ -139,6 +139,7 @@ impl<'a> Loc<'a> {
 
     pub fn cache(&self) -> impl ariadne::Cache<Path> + 'a {
         struct Cache<'b>(&'b Path, ariadne::Source<&'b str>);
+
         impl<'b> ariadne::Cache<Path> for Cache<'b> {
             type Storage = &'b str;
 
@@ -161,6 +162,7 @@ impl<'a> Loc<'a> {
                 Some(Box::new(id.display()))
             }
         }
+
         Cache(self.file(), ariadne::Source::from(self.src()))
     }
 }
