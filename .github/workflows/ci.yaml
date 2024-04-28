@@ -25,4 +25,10 @@ jobs:
           curl -LsSf https://insta.rs/install.sh | sh
       - name: test
         run: |
-          cargo insta test --unreferenced=reject
+          # ignore unreferenced snapshots here because miri snapshots would be
+          # rejected here
+          cargo insta test --unreferenced=ignore
+      - name: miri tests
+        run: |
+          cargo miri test --lib
+          cargo insta test --features=miri_tests --unreferenced=reject
