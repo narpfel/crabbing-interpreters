@@ -316,7 +316,6 @@ impl<'a> Expression<'a> {
             Expression::Literal(lit) => lit.kind.value_string(),
             Expression::Unary(operator, operand) =>
                 format!("({} {})", operator.token.slice(), operand.as_sexpr()),
-
             Expression::Binary { lhs, op, rhs } => format!(
                 "({} {} {})",
                 op.token.slice(),
