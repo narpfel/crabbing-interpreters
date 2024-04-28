@@ -139,6 +139,7 @@ fn scope(
 fn closure_compiler(
     _filter_pointers: PointerFilter,
     #[files("../craftinginterpreters/test/**/*.lox")]
+    #[files("tests/cases/**/*.lox")]
     #[exclude("/scanning/")]
     #[exclude("/expressions/")]
     #[exclude("/benchmark/")]
