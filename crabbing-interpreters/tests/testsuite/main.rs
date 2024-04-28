@@ -21,6 +21,8 @@ fn test_cases(
     #[exclude("/scanning/")]
     #[exclude("/expressions/")]
     #[exclude("/benchmark/")]
+    // FIXME: output is different in miri as the interpreter hard crashes
+    #[cfg_attr(feature = "miri_tests", exclude("/limit/stack_overflow.lox"))]
     path: PathBuf,
 ) {
 }
