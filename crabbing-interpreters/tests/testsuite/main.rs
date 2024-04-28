@@ -7,6 +7,22 @@ use insta_cmd::assert_cmd_snapshot;
 use insta_cmd::get_cargo_bin;
 use rstest::fixture;
 use rstest::rstest;
+// FIXME: rstest PR 244
+#[allow(clippy::single_component_path_imports)]
+use rstest_reuse;
+use rstest_reuse::apply;
+use rstest_reuse::template;
+
+#[template]
+fn test_cases(
+    #[files("../craftinginterpreters/test/**/*.lox")]
+    #[files("tests/cases/**/*.lox")]
+    #[exclude("/scanning/")]
+    #[exclude("/expressions/")]
+    #[exclude("/benchmark/")]
+    path: PathBuf,
+) {
+}
 
 #[fixture]
 fn testname() -> String {
@@ -74,16 +90,9 @@ fn repl(testname: String, #[case] src: &str) {
     )
 }
 
+#[apply(test_cases)]
 #[rstest]
-fn interpreter(
-    _filter_pointers: PointerFilter,
-    #[files("../craftinginterpreters/test/**/*.lox")]
-    #[files("tests/cases/**/*.lox")]
-    #[exclude("/scanning/")]
-    #[exclude("/expressions/")]
-    #[exclude("/benchmark/")]
-    path: PathBuf,
-) {
+fn interpreter(_filter_pointers: PointerFilter, path: PathBuf) {
     let path = relative_to(
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
@@ -103,14 +112,9 @@ fn nonexistent_file() {
     );
 }
 
+#[apply(test_cases)]
 #[rstest]
-fn scope(
-    #[files("../craftinginterpreters/test/**/*.lox")]
-    #[files("tests/cases/**/*.lox")]
-    #[exclude("/benchmark/")]
-    #[exclude("loop_too_large\\.lox$")]
-    path: PathBuf,
-) {
+fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
     let path = relative_to(
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
@@ -135,16 +139,9 @@ fn scope(
     }
 }
 
+#[apply(test_cases)]
 #[rstest]
-fn closure_compiler(
-    _filter_pointers: PointerFilter,
-    #[files("../craftinginterpreters/test/**/*.lox")]
-    #[files("tests/cases/**/*.lox")]
-    #[exclude("/scanning/")]
-    #[exclude("/expressions/")]
-    #[exclude("/benchmark/")]
-    path: PathBuf,
-) {
+fn closure_compiler(_filter_pointers: PointerFilter, path: PathBuf) {
     let path = relative_to(
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),

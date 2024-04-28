@@ -36,6 +36,10 @@ git = "https://github.com/narpfel/rstest"
 branch = "by-reference-fixture"
 default-features = false
 
+[workspace.dependencies.rstest_reuse]
+git = "https://github.com/narpfel/rstest"
+branch = "by-reference-fixture"
+
 [profile.dev.package."*"]
 opt-level = "z"
 

@@ -20,3 +20,4 @@ insta = { workspace = true }
 insta-cmd = { workspace = true }
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
+rstest_reuse = { workspace = true }
