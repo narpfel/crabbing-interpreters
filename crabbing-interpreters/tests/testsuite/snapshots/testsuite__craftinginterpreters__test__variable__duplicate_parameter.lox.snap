@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/duplicate_parameter.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Already a variable with this name in this scope: `arg`
+   ╭─[craftinginterpreters/test/variable/duplicate_parameter.lox:2:9]
+   │
+ 2 │         arg) { // Error at 'arg': Already a variable with this name in this scope.
+   │         ───  
+───╯

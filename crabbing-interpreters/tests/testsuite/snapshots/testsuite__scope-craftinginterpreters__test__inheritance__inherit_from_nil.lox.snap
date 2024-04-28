@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/inheritance/inherit_from_nil.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var Nil (global @1) nil)
+   (class Foo (global @2) (global Nil @1)))
+
+----- stderr -----

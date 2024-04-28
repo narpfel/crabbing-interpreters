@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/divide.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+4
+1
+
+----- stderr -----

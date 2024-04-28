@@ -1,0 +1,27 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/clock_function.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+<native fn>
+true
+
+----- stderr -----
+Error: type error in binary operator `<`: lhs has type `NativeFunction`, but rhs has type `Number`
+   ╭─[crabbing-interpreters/tests/cases/clock_function.lox:3:7]
+   │
+ 3 │ print clock < 0;
+   │       ──┬── ┬ ┬  
+   │         │   │ ╰── this is of type `Number`
+   │         │   │    
+   │         │   ╰──── the operator in question
+   │         │        
+   │         ╰──────── this is of type `NativeFunction`
+   │ 
+   │ Help: operator `<` can only be applied to numbers
+───╯

@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/super_in_inherited_method.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+A
+
+----- stderr -----

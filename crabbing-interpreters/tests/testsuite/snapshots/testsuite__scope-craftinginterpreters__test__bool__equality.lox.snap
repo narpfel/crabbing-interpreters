@@ -1,0 +1,33 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/bool/equality.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (== true true))
+   (print (== true false))
+   (print (== false true))
+   (print (== false false))
+   (print (== true 1.0))
+   (print (== false 0.0))
+   (print (== true "true"))
+   (print (== false "false"))
+   (print (== false ""))
+   (print (!= true true))
+   (print (!= true false))
+   (print (!= false true))
+   (print (!= false false))
+   (print (!= true 1.0))
+   (print (!= false 0.0))
+   (print (!= true "true"))
+   (print (!= false "false"))
+   (print (!= false "")))
+
+----- stderr -----

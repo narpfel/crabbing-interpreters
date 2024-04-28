@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/inheritance/inherit_from_function.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only classes can be inherited from, but `<function foo at [POINTER]>` is of type `Function`
+   ╭─[craftinginterpreters/test/inheritance/inherit_from_function.lox:3:18]
+   │
+ 3 │ class Subclass < foo {} // expect runtime error: Superclass must be a class.
+   │                  ───  
+───╯

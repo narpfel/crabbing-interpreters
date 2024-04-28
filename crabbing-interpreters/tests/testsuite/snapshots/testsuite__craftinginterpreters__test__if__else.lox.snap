@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/if/else.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+good
+good
+block
+
+----- stderr -----

@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/get_on_class.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1) ∅)
+   (expr (attr (global Foo @1) bar)))
+
+----- stderr -----

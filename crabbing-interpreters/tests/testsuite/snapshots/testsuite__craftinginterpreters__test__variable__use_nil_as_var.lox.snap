@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/use_nil_as_var.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: at `nil`: expected Identifier
+   ╭─[craftinginterpreters/test/variable/use_nil_as_var.lox:2:5]
+   │
+ 2 │ var nil = "value";
+   │     ───  
+───╯

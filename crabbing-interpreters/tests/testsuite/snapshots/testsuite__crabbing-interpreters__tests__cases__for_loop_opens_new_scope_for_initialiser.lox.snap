@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/for_loop_opens_new_scope_for_initialiser.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+0
+1
+42
+
+----- stderr -----

@@ -1,0 +1,26 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/indirectly_inherited.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class A (global @1) ∅
+      (method foo [(local this @0)] []
+         (block
+            (print "A.foo()"))))
+   (class B (global @2) (global A @1))
+   (class C (global @3) (global B @2)
+      (method foo [(local this @0)] [None]
+         (block
+            (print "C.foo()")
+            (expr (call +1 (super (cell super @0) (local super @0) foo))))))
+   (expr (call +4 (attr (call +4 (global C @3)) foo))))
+
+----- stderr -----

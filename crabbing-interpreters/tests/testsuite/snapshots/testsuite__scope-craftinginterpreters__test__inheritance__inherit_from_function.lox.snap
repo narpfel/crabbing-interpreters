@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/inheritance/inherit_from_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun foo (global @1) [] []
+      (block))
+   (class Subclass (global @2) (global foo @1)))
+
+----- stderr -----

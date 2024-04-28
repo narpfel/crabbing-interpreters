@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/use_local_in_initialiser_of_shadowing_variable.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+42
+42
+
+----- stderr -----

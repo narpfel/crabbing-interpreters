@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/mutual_recursion.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+true
+true
+
+----- stderr -----

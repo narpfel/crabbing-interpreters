@@ -1,0 +1,32 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/comparison.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+true
+false
+false
+true
+true
+false
+false
+false
+true
+false
+true
+true
+false
+false
+false
+false
+true
+true
+true
+true
+
+----- stderr -----

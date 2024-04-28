@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/missing_arguments.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: arity error: `<bound method foo of <Derived instance at [POINTER]>>` expects 2 args but 1 args were passed
+   ╭─[craftinginterpreters/test/super/missing_arguments.lox:9:5]
+   │
+ 9 │     super.foo(1); // expect runtime error: Expected 2 arguments but got 1.
+   │     ────┬────  
+   │         ╰────── expects 2 arguments
+───╯

@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/get_on_num.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only instances have properties, but `123` is of type `Number`
+   ╭─[craftinginterpreters/test/field/get_on_num.lox:1:1]
+   │
+ 1 │ 123.foo; // expect runtime error: Only instances have properties.
+   │ ───  
+───╯

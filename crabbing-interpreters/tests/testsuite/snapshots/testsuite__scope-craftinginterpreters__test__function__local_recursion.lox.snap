@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/local_recursion.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (block
+      (fun fib (cell @0) [(local n @0)] [Some(0)]
+         (block
+            (if
+               (< (local n @0) 2.0)
+               (return (local n @0))
+               ∅)
+            (return (+ (call +1 (cell fib @0) (- (local n @0) 1.0)) (call +1 (cell fib @0) (- (local n @0) 2.0))))))
+      (print (call +1 (cell fib @0) 8.0))))
+
+----- stderr -----

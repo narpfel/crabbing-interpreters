@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/string/error_after_multiline.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `err`.
+   ╭─[craftinginterpreters/test/string/error_after_multiline.lox:7:1]
+   │
+ 7 │ err; // // expect runtime error: Undefined variable 'err'.
+   │ ───  
+───╯

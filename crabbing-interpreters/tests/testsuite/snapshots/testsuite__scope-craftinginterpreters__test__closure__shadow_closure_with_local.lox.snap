@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/shadow_closure_with_local.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (block
+      (var foo (cell @0) "closure")
+      (fun f (local @2) [] [Some(0)]
+         (block
+            (block
+               (print (cell foo @0))
+               (var foo (local @0) "shadow")
+               (print (local foo @0)))
+            (print (cell foo @0))))
+      (expr (call +3 (local f @2)))))
+
+----- stderr -----

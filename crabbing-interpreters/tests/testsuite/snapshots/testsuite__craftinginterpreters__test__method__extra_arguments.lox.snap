@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/method/extra_arguments.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: arity error: `<bound method method of <Foo instance at [POINTER]>>` expects 2 args but 4 args were passed
+   ╭─[craftinginterpreters/test/method/extra_arguments.lox:8:1]
+   │
+ 8 │ Foo().method(1, 2, 3, 4); // expect runtime error: Expected 2 arguments but got 4.
+   │ ──────┬─────  
+   │       ╰─────── expects 2 arguments
+───╯

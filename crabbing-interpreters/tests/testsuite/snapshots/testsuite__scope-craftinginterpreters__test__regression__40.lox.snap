@@ -1,0 +1,28 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/regression/40.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun caller (global @1) [(local g @0)] []
+      (block
+         (expr (call +1 (local g @0)))
+         (print (== (local g @0) nil))))
+   (fun callCaller (global @2) [] [None]
+      (block
+         (var capturedVar (cell @0) "before")
+         (var a (local @1) "a")
+         (fun f (local @2) [] [Some(0)]
+            (block
+               (expr (= (cell capturedVar @0) "after"))))
+         (expr (call +3 (global caller @1) (local f @2)))))
+   (expr (call +3 (global callCaller @2))))
+
+----- stderr -----

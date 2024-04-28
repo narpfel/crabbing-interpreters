@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/missing_arguments.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Base (global @1) ∅
+      (method foo [(local this @0) (local a @1) (local b @2)] []
+         (block
+            (print (+ (+ (+ (+ "Base.foo(" (local a @1)) ", ") (local b @2)) ")")))))
+   (class Derived (global @2) (global Base @1)
+      (method foo [(local this @0)] [None]
+         (block
+            (expr (call +1 (super (cell super @0) (local super @0) foo) 1.0)))))
+   (expr (call +3 (attr (call +3 (global Derived @2)) foo))))
+
+----- stderr -----

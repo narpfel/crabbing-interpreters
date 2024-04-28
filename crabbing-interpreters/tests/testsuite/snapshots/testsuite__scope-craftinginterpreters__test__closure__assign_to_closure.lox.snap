@@ -1,0 +1,33 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/assign_to_closure.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var f (global @1) ∅)
+   (var g (global @2) ∅)
+   (block
+      (var local (cell @0) "local")
+      (fun f_ (local @4) [] [Some(0)]
+         (block
+            (print (cell local @0))
+            (expr (= (cell local @0) "after f"))
+            (print (cell local @0))))
+      (expr (= (global f @1) (local f_ @4)))
+      (fun g_ (local @5) [] [Some(0)]
+         (block
+            (print (cell local @0))
+            (expr (= (cell local @0) "after g"))
+            (print (cell local @0))))
+      (expr (= (global g @2) (local g_ @5))))
+   (expr (call +3 (global f @1)))
+   (expr (call +3 (global g @2))))
+
+----- stderr -----

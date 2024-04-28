@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/access_global_variable_that_is_declared_later.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var x (global @1) (global-by-name y))
+   (print (global x @1))
+   (var y (global @2) 42.0))
+
+----- stderr -----

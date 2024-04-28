@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/set_on_string.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: only instances have fields, but `str` is of type `String`
+   ╭─[craftinginterpreters/test/field/set_on_string.lox:1:1]
+   │
+ 1 │ "str".foo = "value"; // expect runtime error: Only instances have fields.
+   │ ───── ───  
+───╯

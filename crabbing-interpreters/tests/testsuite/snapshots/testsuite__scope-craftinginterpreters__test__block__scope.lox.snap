@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/block/scope.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var a (global @1) "outer")
+   (block
+      (var a (local @2) "inner")
+      (print (local a @2)))
+   (print (global a @1)))
+
+----- stderr -----

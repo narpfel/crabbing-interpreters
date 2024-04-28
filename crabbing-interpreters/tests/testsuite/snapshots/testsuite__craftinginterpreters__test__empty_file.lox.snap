@@ -1,0 +1,12 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/empty_file.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----

@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/parameters.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+0
+1
+3
+6
+10
+15
+21
+28
+36
+
+----- stderr -----

@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/while/return_inside.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+i
+
+----- stderr -----

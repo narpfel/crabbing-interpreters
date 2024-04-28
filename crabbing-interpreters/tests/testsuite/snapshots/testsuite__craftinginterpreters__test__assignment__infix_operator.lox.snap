@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/infix_operator.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: ambiguous precedences between operators `+` and `=`
+   ╭─[craftinginterpreters/test/assignment/infix_operator.lox:3:3]
+   │
+ 3 │ a + b = "value"; // Error at '=': Invalid assignment target.
+   │   ─   ─  
+───╯

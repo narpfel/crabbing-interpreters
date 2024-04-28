@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/function_parameter_not_identifier.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: at `42`: expected RParen
+   ╭─[crabbing-interpreters/tests/cases/function_parameter_not_identifier.lox:1:7]
+   │
+ 1 │ fun f(42) {}
+   │       ──  
+───╯

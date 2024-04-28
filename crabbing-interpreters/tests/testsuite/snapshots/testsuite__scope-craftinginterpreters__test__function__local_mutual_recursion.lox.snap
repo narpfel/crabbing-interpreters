@@ -1,0 +1,31 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/local_mutual_recursion.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (block
+      (fun isEven (cell @0) [(local n @0)] []
+         (block
+            (if
+               (== (local n @0) 0.0)
+               (return true)
+               ∅)
+            (return (call +1 (global-by-name isOdd) (- (local n @0) 1.0)))))
+      (fun isOdd (local @2) [(local n @0)] [Some(0)]
+         (block
+            (if
+               (== (local n @0) 0.0)
+               (return false)
+               ∅)
+            (return (call +1 (cell isEven @0) (- (local n @0) 1.0)))))
+      (expr (call +3 (cell isEven @0) 4.0))))
+
+----- stderr -----

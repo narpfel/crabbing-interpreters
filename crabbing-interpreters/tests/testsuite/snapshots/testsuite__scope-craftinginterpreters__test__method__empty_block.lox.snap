@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/method/empty_block.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1) ∅
+      (method bar [(local this @0)] []
+         (block)))
+   (print (call +2 (attr (call +2 (global Foo @1)) bar))))
+
+----- stderr -----

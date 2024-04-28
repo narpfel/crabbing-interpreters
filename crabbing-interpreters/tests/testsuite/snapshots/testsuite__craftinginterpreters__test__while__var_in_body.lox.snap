@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/while/var_in_body.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Expect expression.
+   ╭─[craftinginterpreters/test/while/var_in_body.lox:2:14]
+   │
+ 2 │ while (true) var foo;
+   │              ───  
+───╯

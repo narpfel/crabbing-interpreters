@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/if/dangling_else.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+good
+
+----- stderr -----

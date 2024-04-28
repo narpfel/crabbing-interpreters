@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/number/leading_dot.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Expect expression.
+   ╭─[craftinginterpreters/test/number/leading_dot.lox:2:1]
+   │
+ 2 │ .123;
+   │ ─  
+───╯

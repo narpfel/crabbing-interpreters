@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/in_nested_block.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+outer
+
+----- stderr -----

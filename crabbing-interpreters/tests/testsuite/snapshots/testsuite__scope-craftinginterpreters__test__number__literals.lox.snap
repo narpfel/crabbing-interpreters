@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/number/literals.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print 123.0)
+   (print 987654.0)
+   (print 0.0)
+   (print (- 0.0))
+   (print 123.456)
+   (print (- 0.001)))
+
+----- stderr -----

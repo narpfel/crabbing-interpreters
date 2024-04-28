@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/logical_operator/and.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+false
+1
+false
+true
+3
+true
+false
+
+----- stderr -----

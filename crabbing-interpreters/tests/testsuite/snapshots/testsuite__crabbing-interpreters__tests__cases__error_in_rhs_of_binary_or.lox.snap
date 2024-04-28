@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/error_in_rhs_of_binary_or.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `undefined`.
+   ╭─[crabbing-interpreters/tests/cases/error_in_rhs_of_binary_or.lox:1:8]
+   │
+ 1 │ nil or undefined;
+   │        ─────────  
+───╯

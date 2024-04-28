@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/reference_closure_multiple_times.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var f (global @1) ∅)
+   (block
+      (var a (cell @0) "a")
+      (fun f_ (local @3) [] [Some(0)]
+         (block
+            (print (cell a @0))
+            (print (cell a @0))))
+      (expr (= (global f @1) (local f_ @3))))
+   (expr (call +2 (global f @1))))
+
+----- stderr -----

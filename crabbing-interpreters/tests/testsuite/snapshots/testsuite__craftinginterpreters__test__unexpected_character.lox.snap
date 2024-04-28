@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/unexpected_character.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: unterminated string literal
+   ╭─[craftinginterpreters/test/unexpected_character.lox:3:7]
+   │
+ 3 │ foo(a | b);
+   │       ─  
+───╯

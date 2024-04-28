@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/prefix_operator.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: invalid assignment target: `!a`
+   ╭─[craftinginterpreters/test/assignment/prefix_operator.lox:2:4]
+   │
+ 2 │ !a = "value"; // Error at '=': Invalid assignment target.
+   │ ─┬ ─  
+   │  ╰──── only names can be assigned to, not unary operations
+───╯

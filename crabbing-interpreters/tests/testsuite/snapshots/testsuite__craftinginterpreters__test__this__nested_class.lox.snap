@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/this/nested_class.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+<Outer instance at [POINTER]>
+<Outer instance at [POINTER]>
+<Inner instance at [POINTER]>
+
+----- stderr -----

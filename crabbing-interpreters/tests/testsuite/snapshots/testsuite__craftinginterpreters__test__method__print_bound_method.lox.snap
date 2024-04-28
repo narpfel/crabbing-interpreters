@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/method/print_bound_method.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+<bound method method of <Foo instance at [POINTER]>>
+
+----- stderr -----

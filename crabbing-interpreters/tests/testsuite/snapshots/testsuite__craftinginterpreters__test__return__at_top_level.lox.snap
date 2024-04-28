@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/return/at_top_level.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: Can’t return from top-level code.
+   ╭─[craftinginterpreters/test/return/at_top_level.lox:1:1]
+   │
+ 1 │ return "wat"; // Error at 'return': Can't return from top-level code.
+   │ ──────  
+───╯

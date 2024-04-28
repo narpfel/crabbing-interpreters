@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/constructor/init_not_method.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1) ∅
+      (method init [(local this @0) (local arg @1)] []
+         (block
+            (print (+ (+ "Foo.init(" (local arg @1)) ")"))
+            (expr (= (setattr (local this @0) field) "init")))))
+   (fun init (global @2) [] []
+      (block
+         (print "not initializer")))
+   (expr (call +3 (global init @2))))
+
+----- stderr -----

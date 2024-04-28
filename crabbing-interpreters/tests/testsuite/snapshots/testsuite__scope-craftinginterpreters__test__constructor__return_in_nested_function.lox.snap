@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/constructor/return_in_nested_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1) ∅
+      (method init [(local this @0)] []
+         (block
+            (fun init (local @1) [] []
+               (block
+                  (return "bar")))
+            (print (call +2 (local init @1))))))
+   (print (call +2 (global Foo @1))))
+
+----- stderr -----

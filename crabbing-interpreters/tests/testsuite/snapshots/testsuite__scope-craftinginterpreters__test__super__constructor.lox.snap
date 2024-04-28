@@ -1,0 +1,25 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/constructor.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Base (global @1) ∅
+      (method init [(local this @0) (local a @1) (local b @2)] []
+         (block
+            (print (+ (+ (+ (+ "Base.init(" (local a @1)) ", ") (local b @2)) ")")))))
+   (class Derived (global @2) (global Base @1)
+      (method init [(local this @0)] [None]
+         (block
+            (print "Derived.init()")
+            (expr (call +1 (super (cell super @0) (local super @0) init) "a" "b")))))
+   (expr (call +3 (global Derived @2))))
+
+----- stderr -----

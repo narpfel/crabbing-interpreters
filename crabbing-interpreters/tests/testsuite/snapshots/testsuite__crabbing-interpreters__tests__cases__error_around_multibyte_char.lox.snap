@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/error_around_multibyte_char.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `ündėfınēð`.
+   ╭─[crabbing-interpreters/tests/cases/error_around_multibyte_char.lox:1:9]
+   │
+ 1 │ var x = ündėfınēð + 42;
+   │         ─────────  
+───╯

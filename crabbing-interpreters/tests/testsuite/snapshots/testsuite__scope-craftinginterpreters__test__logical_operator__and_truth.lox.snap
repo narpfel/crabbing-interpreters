@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/logical_operator/and_truth.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (and false "bad"))
+   (print (and nil "bad"))
+   (print (and true "ok"))
+   (print (and 0.0 "ok"))
+   (print (and "" "ok")))
+
+----- stderr -----

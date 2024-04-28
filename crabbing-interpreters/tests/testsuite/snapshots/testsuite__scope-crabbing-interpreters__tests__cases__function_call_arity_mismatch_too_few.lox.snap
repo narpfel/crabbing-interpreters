@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/function_call_arity_mismatch_too_few.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun function_name (global @1) [(local param @0)] []
+      (block))
+   (expr (call +2 (global function_name @1))))
+
+----- stderr -----

@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/field/call_nonfunction_field.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: not callable: `"not fn"` is of type `String`
+   ╭─[craftinginterpreters/test/field/call_nonfunction_field.lox:6:1]
+   │
+ 6 │ foo.bar(); // expect runtime error: Can only call functions and classes.
+   │ ───┬───  
+   │    ╰───── this expression is of type `String`
+───╯

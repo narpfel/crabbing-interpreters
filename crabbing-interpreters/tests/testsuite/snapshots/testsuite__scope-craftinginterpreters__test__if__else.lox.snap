@@ -1,0 +1,28 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/if/else.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (if
+      true
+      (print "good")
+      (print "bad"))
+   (if
+      false
+      (print "bad")
+      (print "good"))
+   (if
+      false
+      (expr nil)
+      (block
+         (print "block"))))
+
+----- stderr -----

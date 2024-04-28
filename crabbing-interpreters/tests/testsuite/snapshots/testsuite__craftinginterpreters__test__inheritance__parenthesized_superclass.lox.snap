@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/inheritance/parenthesized_superclass.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: at `(`: expected Identifier
+   ╭─[craftinginterpreters/test/inheritance/parenthesized_superclass.lox:4:13]
+   │
+ 4 │ class Bar < (Foo) {}
+   │             ─  
+───╯

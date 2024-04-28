@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/function/local_mutual_recursion.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `isOdd`.
+   ╭─[craftinginterpreters/test/function/local_mutual_recursion.lox:4:12]
+   │
+ 4 │     return isOdd(n - 1); // expect runtime error: Undefined variable 'isOdd'.
+   │            ─────  
+───╯

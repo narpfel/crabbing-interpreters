@@ -1,0 +1,30 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/bool/equality.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+true
+false
+false
+true
+false
+false
+false
+false
+false
+false
+true
+true
+false
+true
+true
+true
+true
+true
+
+----- stderr -----

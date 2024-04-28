@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/closure/reference_closure_multiple_times.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+a
+a
+
+----- stderr -----

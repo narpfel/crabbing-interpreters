@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/local_variables.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+<function f at [POINTER]>
+42
+27
+
+----- stderr -----

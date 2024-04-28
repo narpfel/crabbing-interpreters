@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/variable/scope_reuse_in_different_blocks.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (block
+      (var a (local @1) "first")
+      (print (local a @1)))
+   (block
+      (var a (local @1) "second")
+      (print (local a @1))))
+
+----- stderr -----

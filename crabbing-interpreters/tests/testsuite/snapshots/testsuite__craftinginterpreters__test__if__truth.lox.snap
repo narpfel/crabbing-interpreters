@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/if/truth.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+false
+nil
+true
+0
+empty
+
+----- stderr -----

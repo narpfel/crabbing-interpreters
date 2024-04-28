@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/assign_to_global_variable_in_function_defined_after_function.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+27
+nil
+42
+
+----- stderr -----

@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/invalid_for_loop_initialiser.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: invalid `for` loop initialiser: print statement
+   ╭─[crabbing-interpreters/tests/cases/invalid_for_loop_initialiser.lox:1:1]
+   │
+ 1 │ for (print 42; false;) {}
+   │ ───  ────┬────  
+   │          ╰────── only expression statements and variable declarations are allowed here
+───╯

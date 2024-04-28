@@ -1,0 +1,15 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/string/multiline.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+1
+2
+3
+
+----- stderr -----

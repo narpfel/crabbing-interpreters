@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/operator/negate_nonnum.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in unary operator `-`: operand has type `String` but `-` requires type `Number`
+   ╭─[craftinginterpreters/test/operator/negate_nonnum.lox:1:1]
+   │
+ 1 │ -"s"; // expect runtime error: Operand must be a number.
+   │ ┬─┬─  
+   │ │ ╰─── this is of type `String`
+   │ │     
+   │ ╰───── the operator in question
+   │ 
+   │ Help: operator `-` can only be applied to numbers
+───╯

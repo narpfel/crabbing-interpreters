@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/assignment/undefined.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Undefined variable `unknown`.
+   ╭─[craftinginterpreters/test/assignment/undefined.lox:1:1]
+   │
+ 1 │ unknown = "what"; // expect runtime error: Undefined variable 'unknown'.
+   │ ───────  
+───╯

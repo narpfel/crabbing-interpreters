@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/constructor/extra_arguments.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class Foo (global @1) ∅
+      (method init [(local this @0) (local a @1) (local b @2)] []
+         (block
+            (expr (= (setattr (local this @0) a) (local a @1)))
+            (expr (= (setattr (local this @0) b) (local b @2))))))
+   (var foo (global @2) (call +2 (global Foo @1) 1.0 2.0 3.0 4.0)))
+
+----- stderr -----

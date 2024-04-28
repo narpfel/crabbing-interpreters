@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/return/in_function.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+ok
+
+----- stderr -----

@@ -1,0 +1,16 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/number/nan_equality.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+false
+true
+false
+true
+
+----- stderr -----

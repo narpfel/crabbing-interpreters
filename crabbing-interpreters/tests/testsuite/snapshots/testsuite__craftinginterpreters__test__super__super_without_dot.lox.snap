@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - craftinginterpreters/test/super/super_without_dot.lox
+---
+success: false
+exit_code: 65
+----- stdout -----
+
+----- stderr -----
+Error: at `;`: expected Dot
+   ╭─[craftinginterpreters/test/super/super_without_dot.lox:6:10]
+   │
+ 6 │     super;
+   │          ─  
+───╯
