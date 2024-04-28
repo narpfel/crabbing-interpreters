@@ -3,6 +3,9 @@ name = "crabbing-interpreters"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+miri_tests = []
+
 [dependencies]
 ariadne = { workspace = true }
 bumpalo = { workspace = true }

@@ -1,0 +1,26 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=closures"
+  stdin: nil * 2;
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[0mλ» [1m[0m
+----- stderr -----
+Error: type error in binary operator `*`: lhs has type `Nil`, but rhs has type `Number`
+   ╭─[<input>:1:1]
+   │
+ 1 │ nil * 2;
+   │ ─┬─ ┬ ┬  
+   │  │  │ ╰── this is of type `Number`
+   │  │  │    
+   │  │  ╰──── the operator in question
+   │  │       
+   │  ╰─────── this is of type `Nil`
+   │ 
+   │ Help: operator `*` can only be applied to numbers
+───╯

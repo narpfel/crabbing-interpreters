@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
 
+use crabbing_interpreters::Loop;
 use insta_cmd::assert_cmd_snapshot;
 use insta_cmd::get_cargo_bin;
 use rstest::fixture;
@@ -33,12 +34,64 @@ fn testname() -> String {
         .replace(':', "_")
 }
 
-type PointerFilter = insta::internals::SettingsBindDropGuard;
+enum Interpreter {
+    Native(Loop),
+    #[cfg(feature = "miri_tests")]
+    Miri(Loop),
+}
+
+impl From<Interpreter> for Command {
+    fn from(interpreter: Interpreter) -> Self {
+        match interpreter {
+            Interpreter::Native(Loop::Ast) => Command::new(get_cargo_bin("crabbing-interpreters")),
+            Interpreter::Native(Loop::Closures) => {
+                let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
+                command.arg("--loop=closures");
+                command
+            }
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Ast) => {
+                let mut command = Command::new("cargo");
+                command
+                    .args(&["miri", "run", "-q", "--"])
+                    // FIXME: the interpreter leaks until a GC is implemented
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation -Zmiri-ignore-leaks");
+                command
+            }
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Closures) => {
+                let mut command = Command::new("cargo");
+                command
+                    .args(&["miri", "run", "-q", "--", "--loop=closures"])
+                    // FIXME: the interpreter leaks until a GC is implemented
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation -Zmiri-ignore-leaks");
+                command
+            }
+        }
+    }
+}
+
+#[template]
+#[rstest]
+#[case::native_ast(Interpreter::Native(Loop::Ast))]
+#[case::native_closures(Interpreter::Native(Loop::Closures))]
+#[cfg_attr(feature = "miri_tests", case::miri_ast(Interpreter::Miri(Loop::Ast)))]
+#[cfg_attr(
+    feature = "miri_tests",
+    case::miri_closures(Interpreter::Miri(Loop::Closures))
+)]
+fn interpreter(#[case] interpreter: Interpreter) {}
+
+type OutputFilter = insta::internals::SettingsBindDropGuard;
 
 #[fixture]
-fn filter_pointers() -> PointerFilter {
+fn filter_output() -> OutputFilter {
     let mut settings = insta::Settings::clone_current();
-    settings.add_filter("0x[[:xdigit:]]{8,16}", "[POINTER]");
+    settings.add_filter("0x[[:xdigit:]]{4,16}", "[POINTER]");
+    settings.add_filter(
+        "Preparing a sysroot for Miri \\(target: .*?\\)\\.\\.\\. done\n",
+        "",
+    );
     settings.bind_to_scope()
 }
 
@@ -46,14 +99,22 @@ fn relative_to(path: &Path, target: impl AsRef<Path>) -> &Path {
     path.strip_prefix(target.as_ref()).unwrap()
 }
 
-#[test]
-fn repl_evaluates_expression() {
-    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("1 + 2;"))
+#[apply(interpreter)]
+fn repl_evaluates_expression(
+    _filter_output: OutputFilter,
+    testname: String,
+    interpreter: Interpreter,
+) {
+    assert_cmd_snapshot!(testname, Command::from(interpreter).pass_stdin("1 + 2;"))
 }
 
-#[test]
-fn repl_produces_error_message() {
-    assert_cmd_snapshot!(Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin("nil * 2;"))
+#[apply(interpreter)]
+fn repl_produces_error_message(
+    _filter_output: OutputFilter,
+    testname: String,
+    interpreter: Interpreter,
+) {
+    assert_cmd_snapshot!(testname, Command::from(interpreter).pass_stdin("nil * 2;"))
 }
 
 #[rstest]
@@ -83,33 +144,40 @@ fn repl_produces_error_message() {
 #[case::type_error_for_plus_mentions_strings("nil + 42;")]
 #[case::add_bools("true + false;")]
 #[case::var_statement_without_initialiser("var x; print x; print x == nil;")]
-fn repl(testname: String, #[case] src: &str) {
-    assert_cmd_snapshot!(
-        testname,
-        Command::new(get_cargo_bin("crabbing-interpreters")).pass_stdin(src)
-    )
+fn repl(_filter_output: OutputFilter, #[by_ref] testname: &str, #[case] src: &str) {
+    insta::allow_duplicates! {
+        for interpreter in [
+            Interpreter::Native(Loop::Ast),
+            Interpreter::Native(Loop::Closures),
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Ast),
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Closures),
+        ] {
+            assert_cmd_snapshot!(
+                testname,
+                Command::from(interpreter).pass_stdin(src),
+            )
+        }
+    }
 }
 
 #[apply(test_cases)]
-#[rstest]
-fn interpreter(_filter_pointers: PointerFilter, path: PathBuf) {
+#[apply(interpreter)]
+fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) {
     let path = relative_to(
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
     );
     assert_cmd_snapshot!(
         path.display().to_string(),
-        Command::new(get_cargo_bin("crabbing-interpreters"))
-            .current_dir("..")
-            .arg(path),
+        Command::from(interpreter).current_dir("..").arg(path),
     )
 }
 
-#[test]
-fn nonexistent_file() {
-    assert_cmd_snapshot!(
-        Command::new(get_cargo_bin("crabbing-interpreters")).arg("nonexistent_file")
-    );
+#[apply(interpreter)]
+fn nonexistent_file(_filter_output: OutputFilter, testname: String, interpreter: Interpreter) {
+    assert_cmd_snapshot!(testname, Command::from(interpreter).arg("nonexistent_file"));
 }
 
 #[apply(test_cases)]
@@ -120,7 +188,7 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
     );
     let command = || {
-        let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
+        let mut command = Command::from(Interpreter::Native(Loop::Ast));
         command
             .current_dir("..")
             .arg(path)
@@ -137,20 +205,4 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
     {
         assert_cmd_snapshot!(format!("scope-{}", path.display()), command());
     }
-}
-
-#[apply(test_cases)]
-#[rstest]
-fn closure_compiler(_filter_pointers: PointerFilter, path: PathBuf) {
-    let path = relative_to(
-        &path,
-        Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
-    );
-    assert_cmd_snapshot!(
-        path.display().to_string(),
-        Command::new(get_cargo_bin("crabbing-interpreters"))
-            .current_dir("..")
-            .arg("--loop=closures")
-            .arg(path),
-    );
 }

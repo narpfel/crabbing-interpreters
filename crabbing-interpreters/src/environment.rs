@@ -15,7 +15,11 @@ use crate::scope::Target;
 use crate::value::NativeError;
 use crate::value::Value;
 
+#[cfg(not(miri))]
 const ENV_SIZE: usize = 100_000;
+
+#[cfg(miri)]
+const ENV_SIZE: usize = 1_000;
 
 pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,

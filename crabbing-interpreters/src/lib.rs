@@ -176,7 +176,7 @@ enum StopAt {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum Loop {
+pub enum Loop {
     #[default]
     Ast,
     Closures,
