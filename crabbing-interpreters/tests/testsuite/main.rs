@@ -21,8 +21,6 @@ fn test_cases(
     #[exclude("/scanning/")]
     #[exclude("/expressions/")]
     #[exclude("/benchmark/")]
-    // FIXME: output is different in miri as the interpreter hard crashes
-    #[cfg_attr(feature = "miri_tests", exclude("/limit/stack_overflow.lox"))]
     path: PathBuf,
 ) {
 }
@@ -171,6 +169,15 @@ fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) 
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
     );
+
+    // FIXME: output is different in miri as the interpreter hard crashes
+    #[cfg(feature = "miri_tests")]
+    if matches!(interpreter, Interpreter::Miri(_))
+        && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
+    {
+        return;
+    }
+
     assert_cmd_snapshot!(
         path.display().to_string(),
         Command::from(interpreter).current_dir("..").arg(path),
