@@ -54,13 +54,13 @@ impl<'a> Environment<'a> {
         cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
         offset: usize,
         slot: Slot,
-    ) -> Result<Value<'a>, Box<Error<'a>>> {
+    ) -> Value<'a> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
-            Slot::Cell(slot) => return Ok(cell_vars[slot].get_clone().get_clone()),
+            Slot::Cell(slot) => return cell_vars[slot].get_clone().get_clone(),
         };
-        Ok(self.stack[index].clone())
+        self.stack[index].clone()
     }
 
     pub(crate) fn get_global_slot_by_name(

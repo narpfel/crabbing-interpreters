@@ -383,14 +383,14 @@ pub fn eval<'a>(
         }
         Expression::Grouping { expr, .. } => eval(env, cell_vars, offset, expr)?,
         Expression::Name(variable) => match variable.target() {
-            Target::Local(slot) => env.get(cell_vars, offset, Slot::Local(slot))?,
+            Target::Local(slot) => env.get(cell_vars, offset, Slot::Local(slot)),
             Target::GlobalByName => {
                 let (slot, value) = env.get_global_by_name(variable.name)?;
                 variable.set_target(Target::GlobalBySlot(slot));
                 value
             }
-            Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot))?,
-            Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot))?,
+            Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot)),
+            Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot)),
         },
         Expression::Attribute { lhs, attribute } => {
             let lhs = eval(env, cell_vars, offset, lhs)?;

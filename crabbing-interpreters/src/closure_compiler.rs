@@ -346,9 +346,9 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
         Expression::Name(variable) => match variable.target() {
             Target::Local(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    state
+                    Ok(state
                         .env
-                        .get(state.cell_vars, state.offset, Slot::Local(slot))
+                        .get(state.cell_vars, state.offset, Slot::Local(slot)))
                 },
             ),
             Target::GlobalByName => bump.alloc(
@@ -360,16 +360,16 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             ),
             Target::GlobalBySlot(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    state
+                    Ok(state
                         .env
-                        .get(state.cell_vars, state.offset, Slot::Global(slot))
+                        .get(state.cell_vars, state.offset, Slot::Global(slot)))
                 },
             ),
             Target::Cell(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    state
+                    Ok(state
                         .env
-                        .get(state.cell_vars, state.offset, Slot::Cell(slot))
+                        .get(state.cell_vars, state.offset, Slot::Cell(slot)))
                 },
             ),
         },
