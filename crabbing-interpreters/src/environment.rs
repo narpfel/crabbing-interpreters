@@ -7,6 +7,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::clone_from_cell::GetClone as _;
 use crate::eval::Error;
+use crate::gc::Gc;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::Name;
@@ -25,10 +26,11 @@ pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,
     globals: HashMap<InternedString, usize>,
     is_global_defined: Box<[bool]>,
+    pub(crate) gc: &'a Gc,
 }
 
 impl<'a> Environment<'a> {
-    pub fn new(globals: HashMap<InternedString, usize>) -> Self {
+    pub fn new(gc: &'a Gc, globals: HashMap<InternedString, usize>) -> Self {
         let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
             .into_boxed_slice()
             .try_into()
@@ -46,7 +48,7 @@ impl<'a> Environment<'a> {
             });
             is_global_defined[slot] = true;
         }
-        Self { stack, globals, is_global_defined }
+        Self { stack, globals, is_global_defined, gc }
     }
 
     pub(crate) fn get(
@@ -60,7 +62,7 @@ impl<'a> Environment<'a> {
             Slot::Global(slot) => slot,
             Slot::Cell(slot) => return cell_vars[slot].get_clone().get_clone(),
         };
-        self.stack[index].clone()
+        self.stack[index]
     }
 
     pub(crate) fn get_global_slot_by_name(
@@ -78,7 +80,7 @@ impl<'a> Environment<'a> {
         name: &'a Name<'a>,
     ) -> Result<(usize, Value<'a>), Box<Error<'a>>> {
         let slot = self.get_global_slot_by_name(name)?;
-        Ok((slot, self.stack[slot].clone()))
+        Ok((slot, self.stack[slot]))
     }
 
     fn define_impl(
@@ -129,5 +131,22 @@ impl<'a> Environment<'a> {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
             cell.get_clone().set(value)
         })
+    }
+
+    pub(crate) fn collect_if_necessary(&self, cell_vars: &[Cell<Rc<Cell<Value<'a>>>>]) {
+        if self.gc.collection_necessary() {
+            for value in self.stack.iter() {
+                value.walk_gc_roots(|root| self.gc.mark_recursively(root));
+            }
+            // FIXME: marking `cell_vars` is only necessary for the global scope’s cells
+            for cell in cell_vars {
+                cell.get_clone()
+                    .get_clone()
+                    .walk_gc_roots(|root| self.gc.mark_recursively(root));
+            }
+            unsafe {
+                self.gc.sweep();
+            }
+        }
     }
 }

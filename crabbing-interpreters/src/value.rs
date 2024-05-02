@@ -2,24 +2,27 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::ops::Deref as _;
 use std::rc::Rc;
 
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::clone_from_cell::CloneInCellSafe;
+use crate::clone_from_cell::GetClone;
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
+use crate::gc::GcRef;
+use crate::gc::GcRoot;
+use crate::gc::GcStr;
+use crate::gc::Trace;
 use crate::interner::InternedString;
-use crate::rc_str::RcStr;
-use crate::rc_value::RcValue;
 use crate::scope::Statement;
 use crate::scope::Variable;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[repr(u64)]
 pub enum Value<'a> {
     Number(f64),
-    String(RcStr<'a>),
+    String(GcStr<'a>),
     Bool(bool),
     Nil,
     Function(Function<'a>),
@@ -57,8 +60,25 @@ impl Value<'_> {
 
     pub(crate) fn lox_debug(&self) -> String {
         match self {
-            Value::String(s) => format!("{:?}", s.deref()),
+            Value::String(s) => format!("{s:?}"),
             _ => self.to_string(),
+        }
+    }
+
+    pub(crate) fn walk_gc_roots(&self, f: impl Fn(GcRoot)) {
+        match self {
+            Value::Number(_) => (),
+            Value::String(s) => f(s.as_root()),
+            Value::Bool(_) => (),
+            Value::Nil => (),
+            Value::Function(function) => f(function.as_root()),
+            Value::NativeFunction(_) => (),
+            Value::Class(class) => f(class.as_root()),
+            Value::Instance(instance) => f(instance.as_root()),
+            Value::BoundMethod(function, instance) => {
+                f(function.as_root());
+                f(instance.as_root());
+            }
         }
     }
 }
@@ -83,7 +103,7 @@ impl Display for Value<'_> {
     }
 }
 
-pub type Function<'a> = RcValue<FunctionInner<'a>>;
+pub type Function<'a> = GcRef<'a, FunctionInner<'a>>;
 
 pub struct FunctionInner<'a> {
     pub(crate) name: &'a str,
@@ -93,13 +113,21 @@ pub struct FunctionInner<'a> {
     pub(crate) compiled_body: &'a Execute<'a>,
 }
 
+unsafe impl Trace for FunctionInner<'_> {
+    fn trace(&self, f: &dyn Fn(GcRoot)) {
+        for cell in &self.cells {
+            cell.get_clone().get_clone().walk_gc_roots(f);
+        }
+    }
+}
+
 impl Debug for Function<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<function {} at {:p}>", self.name, Self::as_ptr(self))
     }
 }
 
-pub type Class<'a> = RcValue<ClassInner<'a>>;
+pub type Class<'a> = GcRef<'a, ClassInner<'a>>;
 
 pub struct ClassInner<'a> {
     pub(crate) name: &'a str,
@@ -114,8 +142,21 @@ impl<'a> ClassInner<'a> {
         })
     }
 
-    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<&Value<'a>> {
-        self.mro().find_map(|class| class.methods.get(&name))
+    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<Value<'a>> {
+        self.mro()
+            .find_map(|class| class.methods.get(&name))
+            .copied()
+    }
+}
+
+unsafe impl Trace for ClassInner<'_> {
+    fn trace(&self, f: &dyn Fn(crate::gc::GcRoot)) {
+        if let Some(base) = self.base {
+            f(base.as_root());
+        }
+        for method in self.methods.values() {
+            method.walk_gc_roots(f);
+        }
     }
 }
 
@@ -125,11 +166,21 @@ impl Debug for Class<'_> {
     }
 }
 
-pub type Instance<'a> = RcValue<InstanceInner<'a>>;
+pub type Instance<'a> = GcRef<'a, InstanceInner<'a>>;
 
 pub struct InstanceInner<'a> {
     pub(crate) class: Class<'a>,
     pub(crate) attributes: RefCell<HashMap<InternedString, Value<'a>>>,
+}
+
+unsafe impl Trace for InstanceInner<'_> {
+    fn trace(&self, f: &dyn Fn(GcRoot)) {
+        f(self.class.as_root());
+        self.attributes
+            .borrow()
+            .values()
+            .for_each(|value| value.walk_gc_roots(f));
+    }
 }
 
 impl Debug for Instance<'_> {

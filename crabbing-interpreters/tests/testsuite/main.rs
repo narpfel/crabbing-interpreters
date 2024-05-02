@@ -54,8 +54,7 @@ impl From<Interpreter> for Command {
                 let mut command = Command::new("cargo");
                 command
                     .args(&["miri", "run", "-q", "--"])
-                    // FIXME: the interpreter leaks until a GC is implemented
-                    .env("MIRIFLAGS", "-Zmiri-disable-isolation -Zmiri-ignore-leaks");
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
             #[cfg(feature = "miri_tests")]
@@ -63,8 +62,7 @@ impl From<Interpreter> for Command {
                 let mut command = Command::new("cargo");
                 command
                     .args(&["miri", "run", "-q", "--", "--loop=closures"])
-                    // FIXME: the interpreter leaks until a GC is implemented
-                    .env("MIRIFLAGS", "-Zmiri-disable-isolation -Zmiri-ignore-leaks");
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
         }

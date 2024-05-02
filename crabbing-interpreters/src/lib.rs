@@ -28,6 +28,7 @@ use crate::closure_compiler::State;
 use crate::environment::Environment;
 use crate::eval::execute;
 use crate::eval::ControlFlow;
+pub use crate::gc::Gc;
 use crate::interner::Interner;
 use crate::lex::Loc;
 use crate::parse::parse;
@@ -40,11 +41,10 @@ mod clone_from_cell;
 mod closure_compiler;
 mod environment;
 mod eval;
+mod gc;
 mod interner;
 mod nonempty;
 mod parse;
-mod rc_str;
-mod rc_value;
 mod scope;
 mod value;
 
@@ -188,7 +188,8 @@ fn repl() -> Result<(), Box<dyn Report>> {
     let clock = interner.intern("clock");
     let globals_names =
         bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
-    let mut globals = Environment::new([(clock, 0)].into_iter().collect());
+    let gc = &Gc::default();
+    let mut globals = Environment::new(gc, [(clock, 0)].into_iter().collect());
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -255,6 +256,7 @@ fn time<T>(step: &str, print: bool, f: impl FnOnce() -> T) -> T {
 
 pub fn run<'a>(
     bump: &'a Bump,
+    gc: &'a Gc,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> Result<(), Box<dyn Report + 'a>> {
     let args = Args::parse_from(args);
@@ -302,7 +304,9 @@ pub fn run<'a>(
                 _ => unreachable!(),
             })
             .collect();
-        let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
+        let mut stack = time("stk", args.times, || {
+            Environment::new(gc, global_name_offsets)
+        });
         let global_cells: Vec<_> = (0..program.global_cell_count)
             .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
             .collect();
