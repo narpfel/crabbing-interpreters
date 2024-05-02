@@ -1,13 +1,13 @@
 use std::cell::Cell;
-use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::clone_from_cell::GetClone as _;
 use crate::eval::Error;
 use crate::gc::Gc;
+use crate::gc::GcRef;
+use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::Name;
@@ -53,14 +53,14 @@ impl<'a> Environment<'a> {
 
     pub(crate) fn get(
         &self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
         offset: usize,
         slot: Slot,
     ) -> Value<'a> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
-            Slot::Cell(slot) => return cell_vars[slot].get_clone().get_clone(),
+            Slot::Cell(slot) => return cell_vars[slot].get().get(),
         };
         self.stack[index]
     }
@@ -85,11 +85,11 @@ impl<'a> Environment<'a> {
 
     fn define_impl(
         &mut self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
         offset: usize,
         target: Target,
         value: Value<'a>,
-        set_cell: impl FnOnce(&Cell<Rc<Cell<Value<'a>>>>, Value<'a>),
+        set_cell: impl FnOnce(&Cell<GcRef<'a, Cell<Value<'a>>>>, Value<'a>),
     ) {
         let index = match target {
             Target::Local(slot) => offset + slot,
@@ -111,38 +111,36 @@ impl<'a> Environment<'a> {
 
     pub(crate) fn define(
         &mut self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
         offset: usize,
         target: Target,
         value: Value<'a>,
     ) {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
-            cell.set(Rc::new(Cell::new(value)))
+            cell.set(GcRef::new_in(self.gc, Cell::new(value)))
         })
     }
 
     pub(crate) fn set(
         &mut self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
         offset: usize,
         target: Target,
         value: Value<'a>,
     ) {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
-            cell.get_clone().set(value)
+            cell.get().set(value)
         })
     }
 
-    pub(crate) fn collect_if_necessary(&self, cell_vars: &[Cell<Rc<Cell<Value<'a>>>>]) {
+    pub(crate) fn collect_if_necessary(&self, cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>]) {
         if self.gc.collection_necessary() {
             for value in self.stack.iter() {
-                value.walk_gc_roots(|root| self.gc.mark_recursively(root));
+                value.trace(&|root| self.gc.mark_recursively(root));
             }
             // FIXME: marking `cell_vars` is only necessary for the global scope’s cells
             for cell in cell_vars {
-                cell.get_clone()
-                    .get_clone()
-                    .walk_gc_roots(|root| self.gc.mark_recursively(root));
+                cell.trace(&|root| self.gc.mark_recursively(root));
             }
             unsafe {
                 self.gc.sweep();

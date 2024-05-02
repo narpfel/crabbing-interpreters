@@ -2,7 +2,6 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::iter::zip;
 use std::iter::Skip;
-use std::rc::Rc;
 use std::slice;
 
 use bumpalo::Bump;
@@ -35,7 +34,7 @@ use crate::value::Value;
 pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
     pub(crate) offset: usize,
-    pub(crate) cell_vars: &'b [Cell<Rc<Cell<Value<'a>>>>],
+    pub(crate) cell_vars: &'b [Cell<GcRef<'a, Cell<Value<'a>>>>],
 }
 
 type ExecResult<'a> = Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>>;
@@ -227,7 +226,7 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                             else {
                                 unreachable!()
                             };
-                            method.cells[0].set(Rc::new(Cell::new(base)));
+                            method.cells[0].set(GcRef::new_in(state.env.gc, Cell::new(base)));
                         });
                     }
                     Ok(Value::Nil)

@@ -14,7 +14,6 @@ use std::io::stdout;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::Instant;
 
 use bumpalo::Bump;
@@ -29,6 +28,7 @@ use crate::environment::Environment;
 use crate::eval::execute;
 use crate::eval::ControlFlow;
 pub use crate::gc::Gc;
+use crate::gc::GcRef;
 use crate::interner::Interner;
 use crate::lex::Loc;
 use crate::parse::parse;
@@ -37,7 +37,6 @@ use crate::parse::Name;
 use crate::scope::resolve_names;
 use crate::value::Value;
 
-mod clone_from_cell;
 mod closure_compiler;
 mod environment;
 mod eval;
@@ -232,7 +231,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
             }
         };
         let global_cells: Vec<_> = (0..program.global_cell_count)
-            .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
+            .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))))
             .collect();
         let result = execute(&mut globals, 0, program.stmts, &global_cells);
         match result {
@@ -308,7 +307,7 @@ pub fn run<'a>(
             Environment::new(gc, global_name_offsets)
         });
         let global_cells: Vec<_> = (0..program.global_cell_count)
-            .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
+            .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))))
             .collect();
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         match time("exe", args.times, || match args.r#loop {

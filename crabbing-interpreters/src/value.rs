@@ -2,12 +2,9 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::rc::Rc;
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::clone_from_cell::CloneInCellSafe;
-use crate::clone_from_cell::GetClone;
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
 use crate::gc::GcRef;
@@ -31,8 +28,6 @@ pub enum Value<'a> {
     Instance(Instance<'a>),
     BoundMethod(Function<'a>, Instance<'a>),
 }
-
-unsafe impl CloneInCellSafe for Value<'_> {}
 
 impl Value<'_> {
     pub fn typ(&self) -> &'static str {
@@ -64,20 +59,22 @@ impl Value<'_> {
             _ => self.to_string(),
         }
     }
+}
 
-    pub(crate) fn walk_gc_roots(&self, f: impl Fn(GcRoot)) {
+unsafe impl Trace for Value<'_> {
+    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
         match self {
             Value::Number(_) => (),
-            Value::String(s) => f(s.as_root()),
+            Value::String(s) => tracer(s.as_root()),
             Value::Bool(_) => (),
             Value::Nil => (),
-            Value::Function(function) => f(function.as_root()),
+            Value::Function(function) => tracer(function.as_root()),
             Value::NativeFunction(_) => (),
-            Value::Class(class) => f(class.as_root()),
-            Value::Instance(instance) => f(instance.as_root()),
+            Value::Class(class) => tracer(class.as_root()),
+            Value::Instance(instance) => tracer(instance.as_root()),
             Value::BoundMethod(function, instance) => {
-                f(function.as_root());
-                f(instance.as_root());
+                tracer(function.as_root());
+                tracer(instance.as_root());
             }
         }
     }
@@ -109,14 +106,14 @@ pub struct FunctionInner<'a> {
     pub(crate) name: &'a str,
     pub(crate) parameters: &'a [Variable<'a>],
     pub(crate) code: &'a [Statement<'a>],
-    pub(crate) cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
+    pub(crate) cells: Vec<Cell<GcRef<'a, Cell<Value<'a>>>>>,
     pub(crate) compiled_body: &'a Execute<'a>,
 }
 
 unsafe impl Trace for FunctionInner<'_> {
-    fn trace(&self, f: &dyn Fn(GcRoot)) {
+    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
         for cell in &self.cells {
-            cell.get_clone().get_clone().walk_gc_roots(f);
+            cell.trace(tracer);
         }
     }
 }
@@ -155,7 +152,7 @@ unsafe impl Trace for ClassInner<'_> {
             f(base.as_root());
         }
         for method in self.methods.values() {
-            method.walk_gc_roots(f);
+            method.trace(f);
         }
     }
 }
@@ -179,7 +176,7 @@ unsafe impl Trace for InstanceInner<'_> {
         self.attributes
             .borrow()
             .values()
-            .for_each(|value| value.walk_gc_roots(f));
+            .for_each(|value| value.trace(f));
     }
 }
 

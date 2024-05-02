@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::iter::zip;
 use std::iter::Skip;
-use std::rc::Rc;
 use std::slice;
 
 use ariadne::Color::Blue;
@@ -14,7 +13,6 @@ use crabbing_interpreters_derive_report::Report;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant;
 
-use crate::clone_from_cell::GetClone as _;
 use crate::environment::Environment;
 use crate::gc::Gc;
 use crate::gc::GcRef;
@@ -173,7 +171,7 @@ pub enum Error<'a> {
 
 pub fn eval<'a>(
     env: &mut Environment<'a>,
-    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
     offset: usize,
     expr: &Expression<'a>,
 ) -> Result<Value<'a>, Box<Error<'a>>> {
@@ -449,7 +447,7 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
-    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut last_value = Value::Nil;
     for statement in program {
@@ -543,7 +541,7 @@ pub fn execute<'a>(
                         else {
                             unreachable!()
                         };
-                        method.cells[0].set(Rc::new(Cell::new(base)));
+                        method.cells[0].set(GcRef::new_in(env.gc, Cell::new(base)));
                     });
                 }
                 Value::Nil
@@ -557,7 +555,7 @@ pub fn execute<'a>(
 
 pub(crate) fn eval_function<'a>(
     gc: &'a Gc,
-    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
     function: &crate::scope::Function<'a>,
 ) -> Value<'a> {
     let crate::scope::Function {
@@ -570,8 +568,8 @@ pub(crate) fn eval_function<'a>(
     let cells = cells
         .iter()
         .map(|cell| match cell {
-            Some(idx) => Cell::new(cell_vars[*idx].get_clone()),
-            None => Cell::new(Rc::new(Cell::new(Value::Nil))),
+            Some(idx) => Cell::new(cell_vars[*idx].get()),
+            None => Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))),
         })
         .collect();
     Value::Function(GcRef::new_in(

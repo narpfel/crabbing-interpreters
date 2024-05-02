@@ -36,6 +36,27 @@ unsafe impl Trace for String {
     fn trace(&self, _f: &dyn Fn(GcRoot)) {}
 }
 
+unsafe impl<T> Trace for Cell<T>
+where
+    T: Copy + Trace,
+{
+    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
+        let value = self.get();
+        value.trace(tracer);
+        self.set(value);
+    }
+}
+
+unsafe impl<T> Trace for GcRef<'_, T>
+where
+    T: Trace,
+{
+    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
+        tracer(self.as_root());
+        (self.0.head.get().vtable.iter_children)(NonNull::from(self.0).cast(), tracer);
+    }
+}
+
 #[derive(Default)]
 pub struct Gc {
     last: Cell<Option<NonNull<Cell<GcHead>>>>,
