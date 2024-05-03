@@ -142,13 +142,12 @@ impl<'a> Environment<'a> {
 
     pub(crate) fn collect_if_necessary(&self, last_value: Value<'a>, cell_vars: Cells<'a>) {
         if self.gc.collection_necessary() {
-            last_value.trace(&|root| self.gc.mark_recursively(root));
+            last_value.trace();
             for value in self.stack.iter() {
-                value.trace(&|root| self.gc.mark_recursively(root));
+                value.trace();
             }
-            self.global_cells
-                .trace(&|root| self.gc.mark_recursively(root));
-            cell_vars.trace(&|root| self.gc.mark_recursively(root));
+            self.global_cells.trace();
+            cell_vars.trace();
             unsafe {
                 self.gc.sweep();
             }

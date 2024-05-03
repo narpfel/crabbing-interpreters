@@ -22,29 +22,27 @@ enum Action {
 // FIXME: document safety
 #[expect(clippy::missing_safety_doc)]
 pub(crate) unsafe trait Trace {
-    fn trace(&self, f: &dyn Fn(GcRoot));
+    fn trace(&self);
 }
 
 unsafe impl Trace for () {
-    fn trace(&self, _f: &dyn Fn(GcRoot)) {}
+    fn trace(&self) {}
 }
 
 unsafe impl Trace for u64 {
-    fn trace(&self, _f: &dyn Fn(GcRoot)) {}
+    fn trace(&self) {}
 }
 
 unsafe impl Trace for String {
-    fn trace(&self, _f: &dyn Fn(GcRoot)) {}
+    fn trace(&self) {}
 }
 
 unsafe impl<T> Trace for Cell<T>
 where
     T: Copy + Trace,
 {
-    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
-        let value = self.get();
-        value.trace(tracer);
-        self.set(value);
+    fn trace(&self) {
+        self.get().trace();
     }
 }
 
@@ -52,8 +50,27 @@ unsafe impl<T> Trace for GcRef<'_, T>
 where
     T: Trace + ?Sized,
 {
-    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
-        tracer(self.as_root());
+    fn trace(&self) {
+        let head = &self.0.head;
+        let state = head.get().state;
+        match state {
+            State::Unvisited => {
+                head.set(GcHead {
+                    state: State::VisitingChildren,
+                    ..head.get()
+                });
+                (head.get().vtable.trace_children)(NonNull::from(self.0).cast(), head.get().length);
+                head.set(GcHead { state: State::Done, ..head.get() });
+            }
+            State::VisitingChildren => (),
+            State::Done => (),
+        }
+    }
+}
+
+unsafe impl Trace for GcStr<'_> {
+    fn trace(&self) {
+        self.0.trace();
     }
 }
 
@@ -61,9 +78,9 @@ unsafe impl<T> Trace for [T]
 where
     T: Trace,
 {
-    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
+    fn trace(&self) {
         for value in self {
-            value.trace(tracer);
+            value.trace();
         }
     }
 }
@@ -89,10 +106,10 @@ impl Gc {
                 length: 0,
                 vtable: &VTable {
                     drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
-                    iter_children: |head_ptr, tracer, _| {
+                    trace_children: |head_ptr, _| {
                         (unsafe { head_ptr.cast::<GcValue<'a, T>>().as_ref() })
                             .value
-                            .trace(tracer)
+                            .trace()
                     },
                 },
                 state: State::Unvisited,
@@ -110,29 +127,6 @@ impl Gc {
 
         self.last.set(head_ptr);
         unsafe { &*gc_value }
-    }
-
-    #[expect(clippy::only_used_in_recursion)]
-    pub(crate) fn mark_recursively(&self, root: GcRoot) {
-        let root_ptr = root.0;
-        let root = unsafe { root_ptr.as_ref() };
-        let state = root.get().state;
-        match state {
-            State::Unvisited => {
-                root.set(GcHead {
-                    state: State::VisitingChildren,
-                    ..root.get()
-                });
-                (root.get().vtable.iter_children)(
-                    root_ptr.cast(),
-                    &|root| self.mark_recursively(root),
-                    root.get().length,
-                );
-                root.set(GcHead { state: State::Done, ..root.get() });
-            }
-            State::VisitingChildren => (),
-            State::Done => (),
-        }
     }
 
     pub(crate) unsafe fn sweep(&self) {
@@ -215,7 +209,7 @@ struct GcHead {
 #[derive(Debug, Clone, Copy)]
 struct VTable {
     drop: fn(NonNull<()>, usize),
-    iter_children: fn(NonNull<()>, &dyn Fn(GcRoot), usize),
+    trace_children: fn(NonNull<()>, usize),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -223,17 +217,6 @@ enum State {
     Unvisited,
     VisitingChildren,
     Done,
-}
-
-#[derive(Clone, Copy)]
-pub struct GcRoot(NonNull<Cell<GcHead>>);
-
-impl fmt::Debug for GcRoot {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("GcRoot")
-            .field(unsafe { self.0.as_ref() })
-            .finish()
-    }
 }
 
 pub struct GcRef<'gc, T>(&'gc GcValue<'gc, T>)
@@ -290,9 +273,9 @@ impl<'gc, T> GcRef<'gc, [T]> {
                         ptr::drop_in_place(gc_value);
                         std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
                     },
-                    iter_children: |head_ptr, tracer, length| {
+                    trace_children: |head_ptr, length| {
                         let gc_value = Self::value_ptr_from_raw_parts(head_ptr.cast(), length);
-                        (*gc_value).value.trace(tracer)
+                        (*gc_value).value.trace()
                     },
                 },
                 state: State::Unvisited,
@@ -321,15 +304,6 @@ impl<'gc, T> GcRef<'gc, [T]> {
 
     fn value_ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> *mut GcValue<'gc, [T]> {
         GcValue::ptr_from_raw_parts(memory, length)
-    }
-}
-
-impl<'gc, T> GcRef<'gc, T>
-where
-    T: ?Sized,
-{
-    pub(crate) fn as_root(&self) -> GcRoot {
-        GcRoot(NonNull::from(self.0).cast())
     }
 }
 
@@ -389,10 +363,6 @@ impl<'a> GcStr<'a> {
     pub(crate) fn new_in(gc: &'a Gc, s: String) -> Self {
         Self(GcRef::new_in(gc, s))
     }
-
-    pub(crate) fn as_root(&self) -> GcRoot {
-        self.0.as_root()
-    }
 }
 
 impl Copy for GcStr<'_> {}
@@ -436,7 +406,7 @@ mod tests {
     }
 
     unsafe impl Trace for SharedValue {
-        fn trace(&self, _f: &dyn Fn(GcRoot)) {}
+        fn trace(&self) {}
     }
 
     #[test]
@@ -477,7 +447,7 @@ mod tests {
         }
 
         for gc_number in &gc_numbers {
-            gc.mark_recursively(gc_number.as_root());
+            gc_number.trace();
         }
         unsafe {
             gc.sweep();
@@ -520,7 +490,7 @@ mod tests {
         GcRef::new_in(&gc, ());
         let value = GcRef::new_in(&gc, 27);
         GcRef::new_in(&gc, ());
-        gc.mark_recursively(value.as_root());
+        value.trace();
         unsafe {
             gc.sweep();
         }
@@ -535,7 +505,7 @@ mod tests {
         GcRef::new_in(&gc, ());
         let value = GcRef::new_in(&gc, ());
         GcRef::new_in(&gc, ());
-        gc.mark_recursively(value.as_root());
+        value.trace();
         unsafe {
             gc.sweep();
         }

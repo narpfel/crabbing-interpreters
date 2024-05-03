@@ -8,7 +8,6 @@ use rustc_hash::FxHashMap as HashMap;
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
 use crate::gc::GcRef;
-use crate::gc::GcRoot;
 use crate::gc::GcStr;
 use crate::gc::Trace;
 use crate::interner::InternedString;
@@ -64,19 +63,19 @@ impl Value<'_> {
 }
 
 unsafe impl Trace for Value<'_> {
-    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
+    fn trace(&self) {
         match self {
             Value::Number(_) => (),
-            Value::String(s) => tracer(s.as_root()),
+            Value::String(s) => s.trace(),
             Value::Bool(_) => (),
             Value::Nil => (),
-            Value::Function(function) => function.trace(tracer),
+            Value::Function(function) => function.trace(),
             Value::NativeFunction(_) => (),
-            Value::Class(class) => tracer(class.as_root()),
-            Value::Instance(instance) => tracer(instance.as_root()),
+            Value::Class(class) => class.trace(),
+            Value::Instance(instance) => instance.trace(),
             Value::BoundMethod(function, instance) => {
-                tracer(function.as_root());
-                tracer(instance.as_root());
+                function.trace();
+                instance.trace();
             }
         }
     }
@@ -113,8 +112,8 @@ pub struct FunctionInner<'a> {
 }
 
 unsafe impl Trace for FunctionInner<'_> {
-    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
-        self.cells.trace(tracer);
+    fn trace(&self) {
+        self.cells.trace();
     }
 }
 
@@ -147,12 +146,12 @@ impl<'a> ClassInner<'a> {
 }
 
 unsafe impl Trace for ClassInner<'_> {
-    fn trace(&self, f: &dyn Fn(crate::gc::GcRoot)) {
+    fn trace(&self) {
         if let Some(base) = self.base {
-            f(base.as_root());
+            base.trace();
         }
         for method in self.methods.values() {
-            method.trace(f);
+            method.trace();
         }
     }
 }
@@ -171,12 +170,12 @@ pub struct InstanceInner<'a> {
 }
 
 unsafe impl Trace for InstanceInner<'_> {
-    fn trace(&self, f: &dyn Fn(GcRoot)) {
-        f(self.class.as_root());
+    fn trace(&self) {
+        self.class.trace();
         self.attributes
             .borrow()
             .values()
-            .for_each(|value| value.trace(f));
+            .for_each(|value| value.trace());
     }
 }
 
