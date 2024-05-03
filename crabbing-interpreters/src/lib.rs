@@ -1,7 +1,10 @@
 #![feature(closure_lifetime_binder)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
+#![feature(ptr_metadata)]
+#![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
+#![warn(clippy::as_conversions)]
 
 use std::cell::Cell;
 use std::ffi::OsStr;
@@ -14,7 +17,6 @@ use std::io::stdout;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::Instant;
 
 use bumpalo::Bump;
@@ -28,6 +30,8 @@ use crate::closure_compiler::State;
 use crate::environment::Environment;
 use crate::eval::execute;
 use crate::eval::ControlFlow;
+pub use crate::gc::Gc;
+use crate::gc::GcRef;
 use crate::interner::Interner;
 use crate::lex::Loc;
 use crate::parse::parse;
@@ -36,15 +40,13 @@ use crate::parse::Name;
 use crate::scope::resolve_names;
 use crate::value::Value;
 
-mod clone_from_cell;
 mod closure_compiler;
 mod environment;
 mod eval;
+mod gc;
 mod interner;
 mod nonempty;
 mod parse;
-mod rc_str;
-mod rc_value;
 mod scope;
 mod value;
 
@@ -188,7 +190,12 @@ fn repl() -> Result<(), Box<dyn Report>> {
     let clock = interner.intern("clock");
     let globals_names =
         bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
-    let mut globals = Environment::new([(clock, 0)].into_iter().collect());
+    let gc = &Gc::default();
+    let mut globals = Environment::new(
+        gc,
+        [(clock, 0)].into_iter().collect(),
+        GcRef::from_iter_in(gc, [].into_iter()),
+    );
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -230,10 +237,12 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 continue 'repl;
             }
         };
-        let global_cells: Vec<_> = (0..program.global_cell_count)
-            .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
-            .collect();
-        let result = execute(&mut globals, 0, program.stmts, &global_cells);
+        let global_cells = GcRef::from_iter_in(
+            globals.gc,
+            (0..program.global_cell_count)
+                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
+        );
+        let result = execute(&mut globals, 0, program.stmts, global_cells);
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
@@ -255,6 +264,7 @@ fn time<T>(step: &str, print: bool, f: impl FnOnce() -> T) -> T {
 
 pub fn run<'a>(
     bump: &'a Bump,
+    gc: &'a Gc,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> Result<(), Box<dyn Report + 'a>> {
     let args = Args::parse_from(args);
@@ -302,17 +312,21 @@ pub fn run<'a>(
                 _ => unreachable!(),
             })
             .collect();
-        let mut stack = time("stk", args.times, || Environment::new(global_name_offsets));
-        let global_cells: Vec<_> = (0..program.global_cell_count)
-            .map(|_| Cell::new(Rc::new(Cell::new(Value::Nil))))
-            .collect();
+        let global_cells = GcRef::from_iter_in(
+            gc,
+            (0..program.global_cell_count)
+                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
+        );
+        let mut stack = time("stk", args.times, || {
+            Environment::new(gc, global_name_offsets, global_cells)
+        });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         match time("exe", args.times, || match args.r#loop {
-            Loop::Ast => execute(&mut stack, 0, program.stmts, &global_cells),
+            Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells),
             Loop::Closures => execute_closures(&mut State {
                 env: &mut stack,
                 offset: 0,
-                cell_vars: &global_cells,
+                cell_vars: global_cells,
             }),
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),

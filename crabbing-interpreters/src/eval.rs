@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::iter::zip;
 use std::iter::Skip;
-use std::rc::Rc;
 use std::slice;
 
 use ariadne::Color::Blue;
@@ -14,8 +13,10 @@ use crabbing_interpreters_derive_report::Report;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant;
 
-use crate::clone_from_cell::GetClone as _;
 use crate::environment::Environment;
+use crate::gc::Gc;
+use crate::gc::GcRef;
+use crate::gc::GcStr;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -23,8 +24,6 @@ use crate::parse::LiteralKind;
 use crate::parse::Name;
 use crate::parse::UnaryOp;
 use crate::parse::UnaryOpKind;
-use crate::rc_str::RcStr;
-use crate::rc_value::RcValue;
 use crate::scope::AssignmentTarget;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
@@ -33,6 +32,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
@@ -172,7 +172,7 @@ pub enum Error<'a> {
 
 pub fn eval<'a>(
     env: &mut Environment<'a>,
-    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    cell_vars: Cells<'a>,
     offset: usize,
     expr: &Expression<'a>,
 ) -> Result<Value<'a>, Box<Error<'a>>> {
@@ -180,7 +180,7 @@ pub fn eval<'a>(
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
             LiteralKind::Number(n) => Number(n),
-            LiteralKind::String(s) => String(RcStr::Borrowed(s)),
+            LiteralKind::String(s) => String(GcStr::new_in(env.gc, s.to_owned())),
             LiteralKind::True => Bool(true),
             LiteralKind::False => Bool(false),
             LiteralKind::Nil => Nil,
@@ -204,7 +204,7 @@ pub fn eval<'a>(
                         let slot = env.get_global_slot_by_name(variable.name)?;
                         variable.set_target(Target::GlobalBySlot(slot));
                     }
-                    env.set(cell_vars, offset, variable.target(), value.clone());
+                    env.set(cell_vars, offset, variable.target(), value);
                 }
                 AssignmentTarget::Attribute { lhs, attribute } => {
                     let target_value = eval(env, cell_vars, offset, lhs)?;
@@ -213,7 +213,7 @@ pub fn eval<'a>(
                             instance
                                 .attributes
                                 .borrow_mut()
-                                .insert(attribute.id(), value.clone());
+                                .insert(attribute.id(), value);
                         }
                         _ => Err(Error::NoFields {
                             lhs: target_value,
@@ -253,7 +253,7 @@ pub fn eval<'a>(
                         (_, EqualEqual, _) => Bool(lhs == rhs),
                         (_, NotEqual, _) => Bool(lhs != rhs),
                         (String(lhs), Plus, String(rhs)) =>
-                            String(RcStr::Owned(Rc::from(format!("{}{}", lhs, rhs)))),
+                            String(GcStr::new_in(env.gc, format!("{lhs}{rhs}"))),
                         (Number(lhs), _, Number(rhs)) => match op.kind {
                             Plus => Number(lhs + rhs),
                             Less => Bool(lhs < rhs),
@@ -291,7 +291,7 @@ pub fn eval<'a>(
              -> Result<Value<'a>, Box<Error<'a>>> {
                 if arguments.len() != parameters.len() {
                     Err(Error::ArityMismatch {
-                        callee: callee.clone(),
+                        callee,
                         expected: parameters.len(),
                         at: expr.into_variant(),
                     })?;
@@ -299,7 +299,7 @@ pub fn eval<'a>(
                 zip(*arguments, parameters).try_for_each(|(arg, param)| -> Result<(), Box<_>> {
                     let arg = eval(env, cell_vars, offset, arg)?;
                     env.define(
-                        &function.cells,
+                        function.cells,
                         offset + stack_size_at_callsite,
                         param.target(),
                         arg,
@@ -310,7 +310,7 @@ pub fn eval<'a>(
                     env,
                     offset + stack_size_at_callsite,
                     function.code,
-                    &function.cells,
+                    function.cells,
                 ) {
                     Ok(_) => Ok(Value::Nil),
                     Err(ControlFlow::Return(value)) => Ok(value),
@@ -325,7 +325,7 @@ pub fn eval<'a>(
                                     instance: Value<'a>|
              -> Result<Value<'a>, Box<Error<'a>>> {
                 env.define(
-                    &method.cells,
+                    method.cells,
                     offset + stack_size_at_callsite,
                     method.parameters[0].target(),
                     instance,
@@ -356,19 +356,22 @@ pub fn eval<'a>(
                         },
                     })?
                 }
-                Value::Class(ref class) => {
-                    let instance = Value::Instance(RcValue::new(InstanceInner {
-                        class: class.clone(),
-                        attributes: RefCell::new(HashMap::default()),
-                    }));
+                Value::Class(class) => {
+                    let instance = Value::Instance(GcRef::new_in(
+                        env.gc,
+                        InstanceInner {
+                            class,
+                            attributes: RefCell::new(HashMap::default()),
+                        },
+                    ));
                     match class.lookup_method(interned::INIT) {
-                        Some(Value::Function(ref init)) => {
-                            eval_method_call(env, init, instance.clone())?;
+                        Some(Value::Function(init)) => {
+                            eval_method_call(env, &init, instance)?;
                         }
                         Some(_) => unreachable!(),
                         None if arguments.is_empty() => (),
                         None => Err(Error::ArityMismatch {
-                            callee: callee.clone(),
+                            callee,
                             expected: 0,
                             at: expr.into_variant(),
                         })?,
@@ -376,8 +379,8 @@ pub fn eval<'a>(
                     instance
                 }
                 // FIXME: When explicitly calling `init`, the instance should be returned
-                Value::BoundMethod(ref method, ref instance) =>
-                    eval_method_call(env, method, Value::Instance(instance.clone()))?,
+                Value::BoundMethod(method, instance) =>
+                    eval_method_call(env, &method, Value::Instance(instance))?,
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
@@ -395,7 +398,7 @@ pub fn eval<'a>(
         Expression::Attribute { lhs, attribute } => {
             let lhs = eval(env, cell_vars, offset, lhs)?;
             match lhs {
-                Value::Instance(ref instance) => instance
+                Value::Instance(instance) => instance
                     .attributes
                     .borrow()
                     .get(&attribute.id())
@@ -405,13 +408,12 @@ pub fn eval<'a>(
                             .class
                             .lookup_method(attribute.id())
                             .map(|method| match method {
-                                Value::Function(method) =>
-                                    Value::BoundMethod(method.clone(), instance.clone()),
+                                Value::Function(method) => Value::BoundMethod(method, instance),
                                 _ => unreachable!(),
                             })
                     })
                     .ok_or_else(|| Error::UndefinedProperty {
-                        lhs: lhs.clone(),
+                        lhs,
                         attribute: *attribute,
                         at: expr.into_variant(),
                     })?,
@@ -425,15 +427,14 @@ pub fn eval<'a>(
                 value => unreachable!("invalid base class value: {value}"),
             };
             match this {
-                Value::Instance(ref instance) => super_
+                Value::Instance(instance) => super_
                     .lookup_method(attribute.id())
                     .map(|method| match method {
-                        Value::Function(method) =>
-                            Value::BoundMethod(method.clone(), instance.clone()),
+                        Value::Function(method) => Value::BoundMethod(method, instance),
                         _ => unreachable!(),
                     })
                     .ok_or_else(|| Error::UndefinedSuperProperty {
-                        super_: this.clone(),
+                        super_: this,
                         attribute: *attribute,
                         at: expr.into_variant(),
                     })?,
@@ -447,7 +448,7 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
-    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    cell_vars: Cells<'a>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut last_value = Value::Nil;
     for statement in program {
@@ -506,7 +507,7 @@ pub fn execute<'a>(
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
                 env.define(cell_vars, offset, target.target(), Value::Nil);
-                let function = eval_function(cell_vars, function);
+                let function = eval_function(env.gc, cell_vars, function);
                 env.set(cell_vars, offset, target.target(), function);
                 Value::Nil
             }
@@ -527,34 +528,35 @@ pub fn execute<'a>(
                 env.define(cell_vars, offset, target.target(), Value::Nil);
                 let methods: HashMap<_, _> = methods
                     .iter()
-                    .map(|method| (method.name.id(), eval_function(cell_vars, method)))
+                    .map(|method| (method.name.id(), eval_function(env.gc, cell_vars, method)))
                     .collect();
-                let class = RcValue::new(ClassInner { name: target.name.slice(), base, methods });
-                env.set(
-                    cell_vars,
-                    offset,
-                    target.target(),
-                    Value::Class(class.clone()),
+                let class = GcRef::new_in(
+                    env.gc,
+                    ClassInner { name: target.name.slice(), base, methods },
                 );
-                if let Some(ref base) = class.base {
-                    let base = Value::Class(base.clone());
+                env.set(cell_vars, offset, target.target(), Value::Class(class));
+                if let Some(base) = class.base {
+                    let base = Value::Class(base);
                     class.methods.values().for_each(|method| {
                         let Value::Function(method) = method
                         else {
                             unreachable!()
                         };
-                        method.cells[0].set(Rc::new(Cell::new(base.clone())));
+                        method.cells[0].set(GcRef::new_in(env.gc, Cell::new(base)));
                     });
                 }
                 Value::Nil
             }
-        }
+        };
+
+        env.collect_if_necessary(last_value, cell_vars);
     }
     Ok(last_value)
 }
 
 pub(crate) fn eval_function<'a>(
-    cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+    gc: &'a Gc,
+    cell_vars: Cells<'a>,
     function: &crate::scope::Function<'a>,
 ) -> Value<'a> {
     let crate::scope::Function {
@@ -564,20 +566,25 @@ pub(crate) fn eval_function<'a>(
         cells,
         compiled_body,
     } = function;
-    let cells = cells
-        .iter()
-        .map(|cell| match cell {
-            Some(idx) => Cell::new(cell_vars[*idx].get_clone()),
-            None => Cell::new(Rc::new(Cell::new(Value::Nil))),
-        })
-        .collect();
-    Value::Function(RcValue::new(FunctionInner {
-        name: name.slice(),
-        parameters,
-        code: body,
-        cells,
-        compiled_body: *compiled_body,
-    }))
+
+    let cells = GcRef::from_iter_in(
+        gc,
+        cells.iter().map(|cell| match cell {
+            Some(idx) => Cell::new(cell_vars[*idx].get()),
+            None => Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))),
+        }),
+    );
+
+    Value::Function(GcRef::new_in(
+        gc,
+        FunctionInner {
+            name: name.slice(),
+            parameters,
+            code: body,
+            cells,
+            compiled_body: *compiled_body,
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -598,7 +605,12 @@ mod tests {
         Bump::new()
     }
 
-    fn eval_str<'a>(bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
+    #[fixture]
+    fn gc() -> Gc {
+        Gc::default()
+    }
+
+    fn eval_str<'a>(gc: &'a Gc, bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let (tokens, _) = crate::lex(bump, Path::new("<src>"), ";");
         let Ok(&[semi]) = tokens.collect::<Result<Vec<_>, _>>().as_deref()
         else {
@@ -622,9 +634,9 @@ mod tests {
                 _ => unreachable!(),
             })
             .collect();
-        let global_cells = &[];
+        let global_cells = GcRef::from_iter_in(gc, [].into_iter());
         eval(
-            &mut Environment::new(global_name_offsets),
+            &mut Environment::new(gc, global_name_offsets, global_cells),
             global_cells,
             0,
             scoped_ast,
@@ -636,7 +648,6 @@ mod tests {
     #[case::bool("true", Value::Bool(true))]
     #[case::bool("false", Value::Bool(false))]
     #[case::divide_numbers("4 / 2", Value::Number(2.0))]
-    #[case::concat_strings(r#""a" + "b""#, Value::String(RcStr::Borrowed("ab")))]
     #[case::exponentiation("2 ** 2", Value::Number(4.0))]
     #[case::exponentiation("2 ** 2 ** 3", Value::Number(2.0_f64.powi(8)))]
     #[case::associativity("2 + 2 * 3", Value::Number(8.0))]
@@ -655,10 +666,11 @@ mod tests {
     #[case::precedence_of_power_and_negation("2 ** -2", Value::Number(0.25))]
     fn test_eval<'a>(
         #[by_ref] bump: &'a Bump,
+        #[by_ref] gc: &'a Gc,
         #[case] src: &'static str,
         #[case] expected: Value<'a>,
     ) {
-        pretty_assertions::assert_eq!(eval_str(bump, src).unwrap(), expected);
+        pretty_assertions::assert_eq!(eval_str(gc, bump, src).unwrap(), expected);
     }
 
     macro_rules! check {
@@ -709,6 +721,7 @@ mod tests {
         #[case] expected: impl for<'a> FnOnce(Result<Value<'a>, Error<'a>>),
     ) {
         let bump = &Bump::new();
-        expected(eval_str(bump, src));
+        let gc = &Gc::default();
+        expected(eval_str(gc, bump, src));
     }
 }

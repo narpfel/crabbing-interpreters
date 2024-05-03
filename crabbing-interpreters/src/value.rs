@@ -2,24 +2,25 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::ops::Deref as _;
-use std::rc::Rc;
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::clone_from_cell::CloneInCellSafe;
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
+use crate::gc::GcRef;
+use crate::gc::GcStr;
+use crate::gc::Trace;
 use crate::interner::InternedString;
-use crate::rc_str::RcStr;
-use crate::rc_value::RcValue;
 use crate::scope::Statement;
 use crate::scope::Variable;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<Value<'a>>>>]>;
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[repr(u64)]
 pub enum Value<'a> {
     Number(f64),
-    String(RcStr<'a>),
+    String(GcStr<'a>),
     Bool(bool),
     Nil,
     Function(Function<'a>),
@@ -28,8 +29,6 @@ pub enum Value<'a> {
     Instance(Instance<'a>),
     BoundMethod(Function<'a>, Instance<'a>),
 }
-
-unsafe impl CloneInCellSafe for Value<'_> {}
 
 impl Value<'_> {
     pub fn typ(&self) -> &'static str {
@@ -57,8 +56,27 @@ impl Value<'_> {
 
     pub(crate) fn lox_debug(&self) -> String {
         match self {
-            Value::String(s) => format!("{:?}", s.deref()),
+            Value::String(s) => format!("{s:?}"),
             _ => self.to_string(),
+        }
+    }
+}
+
+unsafe impl Trace for Value<'_> {
+    fn trace(&self) {
+        match self {
+            Value::Number(_) => (),
+            Value::String(s) => s.trace(),
+            Value::Bool(_) => (),
+            Value::Nil => (),
+            Value::Function(function) => function.trace(),
+            Value::NativeFunction(_) => (),
+            Value::Class(class) => class.trace(),
+            Value::Instance(instance) => instance.trace(),
+            Value::BoundMethod(function, instance) => {
+                function.trace();
+                instance.trace();
+            }
         }
     }
 }
@@ -83,14 +101,20 @@ impl Display for Value<'_> {
     }
 }
 
-pub type Function<'a> = RcValue<FunctionInner<'a>>;
+pub type Function<'a> = GcRef<'a, FunctionInner<'a>>;
 
 pub struct FunctionInner<'a> {
     pub(crate) name: &'a str,
     pub(crate) parameters: &'a [Variable<'a>],
     pub(crate) code: &'a [Statement<'a>],
-    pub(crate) cells: Vec<Cell<Rc<Cell<Value<'a>>>>>,
+    pub(crate) cells: Cells<'a>,
     pub(crate) compiled_body: &'a Execute<'a>,
+}
+
+unsafe impl Trace for FunctionInner<'_> {
+    fn trace(&self) {
+        self.cells.trace();
+    }
 }
 
 impl Debug for Function<'_> {
@@ -99,7 +123,7 @@ impl Debug for Function<'_> {
     }
 }
 
-pub type Class<'a> = RcValue<ClassInner<'a>>;
+pub type Class<'a> = GcRef<'a, ClassInner<'a>>;
 
 pub struct ClassInner<'a> {
     pub(crate) name: &'a str,
@@ -114,8 +138,21 @@ impl<'a> ClassInner<'a> {
         })
     }
 
-    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<&Value<'a>> {
-        self.mro().find_map(|class| class.methods.get(&name))
+    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<Value<'a>> {
+        self.mro()
+            .find_map(|class| class.methods.get(&name))
+            .copied()
+    }
+}
+
+unsafe impl Trace for ClassInner<'_> {
+    fn trace(&self) {
+        if let Some(base) = self.base {
+            base.trace();
+        }
+        for method in self.methods.values() {
+            method.trace();
+        }
     }
 }
 
@@ -125,11 +162,21 @@ impl Debug for Class<'_> {
     }
 }
 
-pub type Instance<'a> = RcValue<InstanceInner<'a>>;
+pub type Instance<'a> = GcRef<'a, InstanceInner<'a>>;
 
 pub struct InstanceInner<'a> {
     pub(crate) class: Class<'a>,
     pub(crate) attributes: RefCell<HashMap<InternedString, Value<'a>>>,
+}
+
+unsafe impl Trace for InstanceInner<'_> {
+    fn trace(&self) {
+        self.class.trace();
+        self.attributes
+            .borrow()
+            .values()
+            .for_each(|value| value.trace());
+    }
 }
 
 impl Debug for Instance<'_> {

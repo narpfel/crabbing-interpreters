@@ -1,17 +1,19 @@
 use std::cell::Cell;
-use std::rc::Rc;
 use std::sync::OnceLock;
 use std::time::Instant;
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::clone_from_cell::GetClone as _;
 use crate::eval::Error;
+use crate::gc::Gc;
+use crate::gc::GcRef;
+use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
+use crate::value::Cells;
 use crate::value::NativeError;
 use crate::value::Value;
 
@@ -25,10 +27,16 @@ pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,
     globals: HashMap<InternedString, usize>,
     is_global_defined: Box<[bool]>,
+    pub(crate) gc: &'a Gc,
+    global_cells: Cells<'a>,
 }
 
 impl<'a> Environment<'a> {
-    pub fn new(globals: HashMap<InternedString, usize>) -> Self {
+    pub fn new(
+        gc: &'a Gc,
+        globals: HashMap<InternedString, usize>,
+        global_cells: Cells<'a>,
+    ) -> Self {
         let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
             .into_boxed_slice()
             .try_into()
@@ -46,21 +54,22 @@ impl<'a> Environment<'a> {
             });
             is_global_defined[slot] = true;
         }
-        Self { stack, globals, is_global_defined }
+        Self {
+            stack,
+            globals,
+            is_global_defined,
+            gc,
+            global_cells,
+        }
     }
 
-    pub(crate) fn get(
-        &self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
-        offset: usize,
-        slot: Slot,
-    ) -> Value<'a> {
+    pub(crate) fn get(&self, cell_vars: Cells<'a>, offset: usize, slot: Slot) -> Value<'a> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
-            Slot::Cell(slot) => return cell_vars[slot].get_clone().get_clone(),
+            Slot::Cell(slot) => return cell_vars[slot].get().get(),
         };
-        self.stack[index].clone()
+        self.stack[index]
     }
 
     pub(crate) fn get_global_slot_by_name(
@@ -78,16 +87,16 @@ impl<'a> Environment<'a> {
         name: &'a Name<'a>,
     ) -> Result<(usize, Value<'a>), Box<Error<'a>>> {
         let slot = self.get_global_slot_by_name(name)?;
-        Ok((slot, self.stack[slot].clone()))
+        Ok((slot, self.stack[slot]))
     }
 
     fn define_impl(
         &mut self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: Cells<'a>,
         offset: usize,
         target: Target,
         value: Value<'a>,
-        set_cell: impl FnOnce(&Cell<Rc<Cell<Value<'a>>>>, Value<'a>),
+        set_cell: impl FnOnce(&Cell<GcRef<'a, Cell<Value<'a>>>>, Value<'a>),
     ) {
         let index = match target {
             Target::Local(slot) => offset + slot,
@@ -109,25 +118,39 @@ impl<'a> Environment<'a> {
 
     pub(crate) fn define(
         &mut self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: Cells<'a>,
         offset: usize,
         target: Target,
         value: Value<'a>,
     ) {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
-            cell.set(Rc::new(Cell::new(value)))
+            cell.set(GcRef::new_in(self.gc, Cell::new(value)))
         })
     }
 
     pub(crate) fn set(
         &mut self,
-        cell_vars: &[Cell<Rc<Cell<Value<'a>>>>],
+        cell_vars: Cells<'a>,
         offset: usize,
         target: Target,
         value: Value<'a>,
     ) {
         self.define_impl(cell_vars, offset, target, value, |cell, value| {
-            cell.get_clone().set(value)
+            cell.get().set(value)
         })
+    }
+
+    pub(crate) fn collect_if_necessary(&self, last_value: Value<'a>, cell_vars: Cells<'a>) {
+        if self.gc.collection_necessary() {
+            last_value.trace();
+            for value in self.stack.iter() {
+                value.trace();
+            }
+            self.global_cells.trace();
+            cell_vars.trace();
+            unsafe {
+                self.gc.sweep();
+            }
+        }
     }
 }

@@ -972,6 +972,8 @@ fn resolve_expr<'a>(
                     .collect::<Result<Vec<_>, _>>()?,
             ),
             r_paren: *r_paren,
+            // FIXME: adding a `+ 1` here makes test 236 fail in miri. Why? Is there an underlying
+            // issue with the GC?
             stack_size_at_callsite: scopes.current_stack_size(),
         },
         Attribute { lhs, attribute } => Expression::Attribute {

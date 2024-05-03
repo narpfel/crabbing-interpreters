@@ -2,7 +2,6 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::iter::zip;
 use std::iter::Skip;
-use std::rc::Rc;
 use std::slice;
 
 use bumpalo::Bump;
@@ -13,19 +12,20 @@ use crate::environment::Environment;
 use crate::eval::eval_function;
 use crate::eval::ControlFlow;
 use crate::eval::Error;
+use crate::gc::GcRef;
+use crate::gc::GcStr;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::LiteralKind;
 use crate::parse::UnaryOpKind;
-use crate::rc_str::RcStr;
-use crate::rc_value::RcValue;
 use crate::scope::AssignmentTarget;
 use crate::scope::Expression;
 use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
 use crate::value::InstanceInner;
@@ -35,7 +35,7 @@ use crate::value::Value;
 pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
     pub(crate) offset: usize,
-    pub(crate) cell_vars: &'b [Cell<Rc<Cell<Value<'a>>>>],
+    pub(crate) cell_vars: Cells<'a>,
 }
 
 type ExecResult<'a> = Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>>;
@@ -50,6 +50,7 @@ pub(crate) fn compile_block<'a>(bump: &'a Bump, block: &'a [Statement<'a>]) -> &
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
             for stmt in stmts {
                 stmt(state)?;
+                state.env.collect_if_necessary(Value::Nil, state.cell_vars);
             }
             Ok(Value::Nil)
         },
@@ -159,7 +160,7 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                     state
                         .env
                         .define(state.cell_vars, state.offset, target.target(), Value::Nil);
-                    let function = eval_function(state.cell_vars, &function);
+                    let function = eval_function(state.env.gc, state.cell_vars, &function);
                     state
                         .env
                         .set(state.cell_vars, state.offset, target.target(), function);
@@ -202,24 +203,31 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                         .define(state.cell_vars, state.offset, target.target(), Value::Nil);
                     let methods = methods
                         .iter()
-                        .map(|method| (method.name.id(), eval_function(state.cell_vars, method)))
+                        .map(|method| {
+                            (
+                                method.name.id(),
+                                eval_function(state.env.gc, state.cell_vars, method),
+                            )
+                        })
                         .collect();
-                    let class =
-                        RcValue::new(ClassInner { name: target.name.slice(), base, methods });
+                    let class = GcRef::new_in(
+                        state.env.gc,
+                        ClassInner { name: target.name.slice(), base, methods },
+                    );
                     state.env.set(
                         state.cell_vars,
                         state.offset,
                         target.target(),
-                        Value::Class(class.clone()),
+                        Value::Class(class),
                     );
-                    if let Some(ref base) = class.base {
-                        let base = Value::Class(base.clone());
+                    if let Some(base) = class.base {
+                        let base = Value::Class(base);
                         class.methods.values().for_each(|method| {
                             let Value::Function(method) = method
                             else {
                                 unreachable!()
                             };
-                            method.cells[0].set(Rc::new(Cell::new(base.clone())));
+                            method.cells[0].set(GcRef::new_in(state.env.gc, Cell::new(base)));
                         });
                     }
                     Ok(Value::Nil)
@@ -238,8 +246,8 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                 },
             ),
             LiteralKind::String(s) => bump.alloc(
-                for<'b, 'c> move |_: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    Ok(Value::String(RcStr::Borrowed(s)))
+                for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
+                    Ok(Value::String(GcStr::new_in(state.env.gc, String::from(s))))
                 },
             ),
             LiteralKind::True => &|_| Ok(Value::Bool(true)),
@@ -275,9 +283,9 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             let rhs = *rhs;
             match op.kind {
                 BinOpKind::EqualEqual =>
-                    any_binop(bump, lhs, rhs, |lhs, rhs| Ok(Value::Bool(lhs == rhs))),
+                    any_binop(bump, lhs, rhs, |_, lhs, rhs| Ok(Value::Bool(lhs == rhs))),
                 BinOpKind::NotEqual =>
-                    any_binop(bump, lhs, rhs, |lhs, rhs| Ok(Value::Bool(lhs != rhs))),
+                    any_binop(bump, lhs, rhs, |_, lhs, rhs| Ok(Value::Bool(lhs != rhs))),
                 BinOpKind::Less =>
                     number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| Value::Bool(lhs < rhs)),
                 BinOpKind::LessEqual =>
@@ -286,17 +294,19 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| Value::Bool(lhs > rhs)),
                 BinOpKind::GreaterEqual =>
                     number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| Value::Bool(lhs >= rhs)),
-                BinOpKind::Plus => any_binop(bump, lhs, rhs, |lhs, rhs| match (&lhs, &rhs) {
-                    (Value::Number(lhs), Value::Number(rhs)) => Ok(Value::Number(lhs + rhs)),
-                    (Value::String(lhs), Value::String(rhs)) =>
-                        Ok(Value::String(RcStr::Owned(Rc::from(format!("{lhs}{rhs}"))))),
-                    _ => Err(Error::InvalidBinaryOp {
-                        lhs,
-                        op: *op,
-                        rhs,
-                        at: expr.into_variant(),
-                    })?,
-                }),
+                BinOpKind::Plus =>
+                    any_binop(bump, lhs, rhs, |state, lhs, rhs| match (&lhs, &rhs) {
+                        (Value::Number(lhs), Value::Number(rhs)) => Ok(Value::Number(lhs + rhs)),
+                        (Value::String(lhs), Value::String(rhs)) => Ok(Value::String(
+                            GcStr::new_in(state.env.gc, format!("{lhs}{rhs}")),
+                        )),
+                        _ => Err(Error::InvalidBinaryOp {
+                            lhs,
+                            op: *op,
+                            rhs,
+                            at: expr.into_variant(),
+                        })?,
+                    }),
                 BinOpKind::Minus => number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| {
                     Value::Number(lhs - rhs)
                 }),
@@ -385,12 +395,9 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 let slot = state.env.get_global_slot_by_name(variable.name)?;
                                 variable.set_target(Target::GlobalBySlot(slot));
                             }
-                            state.env.set(
-                                state.cell_vars,
-                                state.offset,
-                                variable.target(),
-                                value.clone(),
-                            );
+                            state
+                                .env
+                                .set(state.cell_vars, state.offset, variable.target(), value);
                             Ok(value)
                         },
                     )
@@ -406,7 +413,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     instance
                                         .attributes
                                         .borrow_mut()
-                                        .insert(attribute.id(), value.clone());
+                                        .insert(attribute.id(), value);
                                 }
                                 _ => Err(Error::NoFields {
                                     lhs: target_value,
@@ -441,7 +448,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                      -> EvalResult<'a> {
                         if arguments.len() != parameters.len() {
                             Err(Error::ArityMismatch {
-                                callee: callee.clone(),
+                                callee,
                                 expected: parameters.len(),
                                 at: expr.into_variant(),
                             })?;
@@ -450,7 +457,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             |(arg, param)| -> Result<(), Box<_>> {
                                 let arg = arg(state)?;
                                 state.env.define(
-                                    &function.cells,
+                                    function.cells,
                                     state.offset + stack_size_at_callsite,
                                     param.target(),
                                     arg,
@@ -461,7 +468,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                         match (function.compiled_body)(&mut State {
                             env: state.env,
                             offset: state.offset + stack_size_at_callsite,
-                            cell_vars: &function.cells,
+                            cell_vars: function.cells,
                         }) {
                             Ok(_) => Ok(Value::Nil),
                             Err(ControlFlow::Return(value)) => Ok(value),
@@ -477,7 +484,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                          instance: Value<'a>|
                          -> Result<Value<'a>, Box<Error<'a>>> {
                             state.env.define(
-                                &method.cells,
+                                method.cells,
                                 state.offset + stack_size_at_callsite,
                                 method.parameters[0].target(),
                                 instance,
@@ -511,19 +518,22 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 })
                             })
                         }
-                        Value::Class(ref class) => {
-                            let instance = Value::Instance(RcValue::new(InstanceInner {
-                                class: class.clone(),
-                                attributes: RefCell::new(HashMap::default()),
-                            }));
+                        Value::Class(class) => {
+                            let instance = Value::Instance(GcRef::new_in(
+                                state.env.gc,
+                                InstanceInner {
+                                    class,
+                                    attributes: RefCell::new(HashMap::default()),
+                                },
+                            ));
                             match class.lookup_method(interned::INIT) {
-                                Some(Value::Function(ref init)) => {
-                                    eval_method_call(state, init, instance.clone())?;
+                                Some(Value::Function(init)) => {
+                                    eval_method_call(state, &init, instance)?;
                                 }
                                 Some(_) => unreachable!(),
                                 None if arguments.is_empty() => (),
                                 None => Err(Error::ArityMismatch {
-                                    callee: callee.clone(),
+                                    callee,
                                     expected: 0,
                                     at: expr.into_variant(),
                                 })?,
@@ -531,8 +541,8 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             Ok(instance)
                         }
 
-                        Value::BoundMethod(ref method, ref instance) =>
-                            eval_method_call(state, method, Value::Instance(instance.clone())),
+                        Value::BoundMethod(method, instance) =>
+                            eval_method_call(state, &method, Value::Instance(instance)),
                         _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
                     }
                 },
@@ -544,7 +554,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     let lhs = lhs(state)?;
-                    match &lhs {
+                    match lhs {
                         Value::Instance(instance) => instance
                             .attributes
                             .borrow()
@@ -556,13 +566,13 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     .lookup_method(attr_id)
                                     .map(|method| match method {
                                         Value::Function(method) =>
-                                            Value::BoundMethod(method.clone(), instance.clone()),
+                                            Value::BoundMethod(method, instance),
                                         _ => unreachable!(),
                                     })
                             })
                             .ok_or_else(|| {
                                 Box::new(Error::UndefinedProperty {
-                                    lhs: lhs.clone(),
+                                    lhs,
                                     attribute: *attribute,
                                     at: expr.into_variant(),
                                 })
@@ -583,17 +593,16 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                         value => unreachable!("invalid base class value: {value}"),
                     };
                     let this = this(state)?;
-                    match &this {
+                    match this {
                         Value::Instance(instance) => super_class
                             .lookup_method(attr_id)
                             .map(|method| match method {
-                                Value::Function(method) =>
-                                    Value::BoundMethod(method.clone(), instance.clone()),
+                                Value::Function(method) => Value::BoundMethod(method, instance),
                                 _ => unreachable!(),
                             })
                             .ok_or_else(|| {
                                 Box::new(Error::UndefinedSuperProperty {
-                                    super_: this.clone(),
+                                    super_: this,
                                     attribute: *attribute,
                                     at: expr.into_variant(),
                                 })
@@ -610,7 +619,7 @@ fn any_binop<'a>(
     bump: &'a Bump,
     lhs: &'a Expression<'a>,
     rhs: &'a Expression<'a>,
-    op: impl Fn(Value<'a>, Value<'a>) -> EvalResult<'a> + 'a,
+    op: impl for<'b, 'c> Fn(&'c mut State<'a, 'b>, Value<'a>, Value<'a>) -> EvalResult<'a> + 'a,
 ) -> &'a Evaluate<'a> {
     let lhs = compile_expr(bump, lhs);
     let rhs = compile_expr(bump, rhs);
@@ -618,7 +627,7 @@ fn any_binop<'a>(
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
             let lhs = lhs(state)?;
             let rhs = rhs(state)?;
-            op(lhs, rhs)
+            op(state, lhs, rhs)
         },
     )
 }
