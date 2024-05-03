@@ -96,12 +96,9 @@ impl Gc {
     where
         T: Trace,
     {
-        self.allocation_count.set(self.allocation_count.get() + 1);
-        let last = self.last.get();
-
         let gc_value = BoxedValue::<'a, T>::into_raw(BoxedValue::<'a, T>::new(GcValue {
             head: Cell::new(GcHead {
-                prev: last,
+                prev: None,
                 next: None,
                 length: 0,
                 vtable: &VTable {
@@ -114,19 +111,38 @@ impl Gc {
                 },
                 state: State::Unvisited,
             }),
-            value,
             _gc: PhantomData,
+            value,
         }));
 
-        let head_ptr = NonNull::new(unsafe { ptr::addr_of_mut!((*gc_value).head) });
-
-        if let Some(last) = last {
-            let last = unsafe { last.as_ref() };
-            last.set(GcHead { next: head_ptr, ..last.get() });
+        unsafe {
+            self.adopt(gc_value);
+            &*gc_value
         }
+    }
 
-        self.last.set(head_ptr);
-        unsafe { &*gc_value }
+    unsafe fn adopt<'a, T>(&'a self, value: *mut GcValue<'a, T>)
+    where
+        T: ?Sized,
+    {
+        self.allocation_count.set(self.allocation_count.get() + 1);
+        let last = self.last.get();
+        unsafe {
+            let value_ref = &*value;
+            let head_ptr = NonNull::new(ptr::addr_of_mut!((*value).head));
+            let mut head = value_ref.head.get();
+            debug_assert!(head.prev.is_none());
+            debug_assert!(head.next.is_none());
+            head.prev = last;
+            value_ref.head.set(head);
+
+            if let Some(last) = last {
+                let last = last.as_ref();
+                last.set(GcHead { next: head_ptr, ..last.get() });
+            }
+
+            self.last.set(head_ptr);
+        }
     }
 
     pub(crate) unsafe fn sweep(&self) {
@@ -237,34 +253,19 @@ impl<'gc, T> GcRef<'gc, T> {
 }
 
 impl<'gc, T> GcRef<'gc, [T]> {
-    // FIXME: this duplicates a lot of code from `Gc::alloc`
     pub(crate) fn from_iter_in(gc: &'gc Gc, mut iterator: impl ExactSizeIterator<Item = T>) -> Self
     where
         T: Trace,
     {
         let length = iterator.len();
 
-        gc.allocation_count.set(gc.allocation_count.get() + 1);
-
         unsafe {
             let memory = NonNull::new(std::alloc::alloc(Self::compute_layout(length)))
                 .expect("allocation returned non-null pointer");
             let gc_value = Self::value_ptr_from_raw_parts(memory, length);
 
-            // We need to iterate the iterator before creating our own `GcHead` because the
-            // iterator might allocate in the same `Gc`, breaking the `Gc`’s list of allocations.
-            let values = ptr::addr_of_mut!((*gc_value).value);
-            for i in 0..length {
-                values
-                    .get_unchecked_mut(i)
-                    .write(iterator.next().expect("iterator was long enough"));
-            }
-            assert!(iterator.next().is_none(), "iterator was too long");
-
-            let last = gc.last.get();
-
             ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
-                prev: last,
+                prev: None,
                 next: None,
                 length,
                 vtable: &VTable {
@@ -282,14 +283,16 @@ impl<'gc, T> GcRef<'gc, [T]> {
             }));
             ptr::addr_of_mut!((*gc_value)._gc).write(PhantomData);
 
-            let head_ptr = NonNull::new(ptr::addr_of_mut!((*gc_value).head));
+            gc.adopt(gc_value);
 
-            if let Some(last) = last {
-                let last = last.as_ref();
-                last.set(GcHead { next: head_ptr, ..last.get() });
+            let values = ptr::addr_of_mut!((*gc_value).value);
+            for i in 0..length {
+                values
+                    .get_unchecked_mut(i)
+                    .write(iterator.next().expect("iterator was long enough"));
             }
+            assert!(iterator.next().is_none(), "iterator was too long");
 
-            gc.last.set(head_ptr);
             Self(&*gc_value)
         }
     }
