@@ -1,6 +1,6 @@
-use core::fmt;
 use std::alloc::Layout;
 use std::cell::Cell;
+use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr;
