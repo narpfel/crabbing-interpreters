@@ -19,8 +19,10 @@ enum Action {
     Drop,
 }
 
-// FIXME: document safety
-#[expect(clippy::missing_safety_doc)]
+/// # Safety
+///
+/// Implementors must make sure to trace into all children that contain [`GcRef`]s. Missed children
+/// will be collected during the next sweep, leading to dangling references.
 pub(crate) unsafe trait Trace {
     fn trace(&self);
 }
