@@ -409,6 +409,26 @@ mod tests {
         fn trace(&self) {}
     }
 
+    unsafe impl<T> Trace for &T
+    where
+        T: Trace,
+    {
+        fn trace(&self) {
+            (*self).trace();
+        }
+    }
+
+    unsafe impl<T> Trace for Option<T>
+    where
+        T: Trace,
+    {
+        fn trace(&self) {
+            if let Some(value) = self {
+                value.trace();
+            }
+        }
+    }
+
     #[test]
     fn dropping_the_gc_doesnt_leak() {
         let gc = Gc::default();
@@ -528,5 +548,45 @@ mod tests {
             }
         }
         assert!(gc.last.get().is_none());
+    }
+
+    #[test]
+    fn circular_references_in_cells() {
+        #[derive(Clone, Copy)]
+        struct Value<'a> {
+            n: u64,
+            maybe_value: Option<&'a Cell<GcRef<'a, Cell<Value<'a>>>>>,
+        }
+        unsafe impl Trace for Value<'_> {
+            fn trace(&self) {
+                self.n.trace();
+                self.maybe_value.trace();
+            }
+        }
+        let gc = &Gc::default();
+        let initial = Cell::new(GcRef::new_in(
+            gc,
+            Cell::new(Value { n: 17, maybe_value: None }),
+        ));
+        let x = Cell::new(GcRef::new_in(
+            gc,
+            Cell::new(Value { n: 42, maybe_value: Some(&initial) }),
+        ));
+        let y = Cell::new(GcRef::new_in(
+            gc,
+            Cell::new(Value { n: 27, maybe_value: Some(&x) }),
+        ));
+        x.get().set(Value {
+            n: x.get().get().n,
+            maybe_value: Some(&y),
+        });
+        x.trace();
+        unsafe {
+            gc.sweep();
+        }
+        assert_eq!(x.get().get().n, 42);
+        assert_eq!(x.get().get().maybe_value.unwrap().get().get().n, 27);
+        assert_eq!(y.get().get().n, 27);
+        assert_eq!(y.get().get().maybe_value.unwrap().get().get().n, 42);
     }
 }
