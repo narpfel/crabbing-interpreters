@@ -285,8 +285,8 @@ impl<'gc, T> GcRef<'gc, [T]> {
             }));
             ptr::addr_of_mut!((*gc_value)._gc).write(PhantomData);
 
-            gc.adopt(gc_value);
-
+            // FIXME: a panic here until the adoption leaks `gc_value`
+            // TODO: add a test with a broken `ExactSizeIterator` that reports an incorrect size
             let values = ptr::addr_of_mut!((*gc_value).value);
             for i in 0..length {
                 values
@@ -295,6 +295,9 @@ impl<'gc, T> GcRef<'gc, [T]> {
             }
             assert!(iterator.next().is_none(), "iterator was too long");
 
+            // adopt after initialising the slice to prevent dropping uninitialised values when the
+            // loop above panics
+            gc.adopt(gc_value);
             Self(&*gc_value)
         }
     }
