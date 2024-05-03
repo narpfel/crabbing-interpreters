@@ -13,6 +13,7 @@ use crate::interner::InternedString;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
+use crate::value::Cells;
 use crate::value::NativeError;
 use crate::value::Value;
 
@@ -27,10 +28,15 @@ pub struct Environment<'a> {
     globals: HashMap<InternedString, usize>,
     is_global_defined: Box<[bool]>,
     pub(crate) gc: &'a Gc,
+    global_cells: Cells<'a>,
 }
 
 impl<'a> Environment<'a> {
-    pub fn new(gc: &'a Gc, globals: HashMap<InternedString, usize>) -> Self {
+    pub fn new(
+        gc: &'a Gc,
+        globals: HashMap<InternedString, usize>,
+        global_cells: Cells<'a>,
+    ) -> Self {
         let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
             .into_boxed_slice()
             .try_into()
@@ -48,15 +54,16 @@ impl<'a> Environment<'a> {
             });
             is_global_defined[slot] = true;
         }
-        Self { stack, globals, is_global_defined, gc }
+        Self {
+            stack,
+            globals,
+            is_global_defined,
+            gc,
+            global_cells,
+        }
     }
 
-    pub(crate) fn get(
-        &self,
-        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
-        offset: usize,
-        slot: Slot,
-    ) -> Value<'a> {
+    pub(crate) fn get(&self, cell_vars: Cells<'a>, offset: usize, slot: Slot) -> Value<'a> {
         let index = match slot {
             Slot::Local(slot) => offset + slot,
             Slot::Global(slot) => slot,
@@ -85,7 +92,7 @@ impl<'a> Environment<'a> {
 
     fn define_impl(
         &mut self,
-        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
+        cell_vars: Cells<'a>,
         offset: usize,
         target: Target,
         value: Value<'a>,
@@ -111,7 +118,7 @@ impl<'a> Environment<'a> {
 
     pub(crate) fn define(
         &mut self,
-        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
+        cell_vars: Cells<'a>,
         offset: usize,
         target: Target,
         value: Value<'a>,
@@ -123,7 +130,7 @@ impl<'a> Environment<'a> {
 
     pub(crate) fn set(
         &mut self,
-        cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
+        cell_vars: Cells<'a>,
         offset: usize,
         target: Target,
         value: Value<'a>,
@@ -133,15 +140,15 @@ impl<'a> Environment<'a> {
         })
     }
 
-    pub(crate) fn collect_if_necessary(&self, cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>]) {
+    pub(crate) fn collect_if_necessary(&self, last_value: Value<'a>, cell_vars: Cells<'a>) {
         if self.gc.collection_necessary() {
+            last_value.trace(&|root| self.gc.mark_recursively(root));
             for value in self.stack.iter() {
                 value.trace(&|root| self.gc.mark_recursively(root));
             }
-            // FIXME: marking `cell_vars` is only necessary for the global scope’s cells
-            for cell in cell_vars {
-                cell.trace(&|root| self.gc.mark_recursively(root));
-            }
+            self.global_cells
+                .trace(&|root| self.gc.mark_recursively(root));
+            cell_vars.trace(&|root| self.gc.mark_recursively(root));
             unsafe {
                 self.gc.sweep();
             }

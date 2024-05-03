@@ -25,6 +25,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
 use crate::value::InstanceInner;
@@ -34,7 +35,7 @@ use crate::value::Value;
 pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
     pub(crate) offset: usize,
-    pub(crate) cell_vars: &'b [Cell<GcRef<'a, Cell<Value<'a>>>>],
+    pub(crate) cell_vars: Cells<'a>,
 }
 
 type ExecResult<'a> = Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>>;
@@ -49,7 +50,7 @@ pub(crate) fn compile_block<'a>(bump: &'a Bump, block: &'a [Statement<'a>]) -> &
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
             for stmt in stmts {
                 stmt(state)?;
-                state.env.collect_if_necessary(state.cell_vars);
+                state.env.collect_if_necessary(Value::Nil, state.cell_vars);
             }
             Ok(Value::Nil)
         },
@@ -456,7 +457,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             |(arg, param)| -> Result<(), Box<_>> {
                                 let arg = arg(state)?;
                                 state.env.define(
-                                    &function.cells,
+                                    function.cells,
                                     state.offset + stack_size_at_callsite,
                                     param.target(),
                                     arg,
@@ -467,7 +468,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                         match (function.compiled_body)(&mut State {
                             env: state.env,
                             offset: state.offset + stack_size_at_callsite,
-                            cell_vars: &function.cells,
+                            cell_vars: function.cells,
                         }) {
                             Ok(_) => Ok(Value::Nil),
                             Err(ControlFlow::Return(value)) => Ok(value),
@@ -483,7 +484,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                          instance: Value<'a>|
                          -> Result<Value<'a>, Box<Error<'a>>> {
                             state.env.define(
-                                &method.cells,
+                                method.cells,
                                 state.offset + stack_size_at_callsite,
                                 method.parameters[0].target(),
                                 instance,

@@ -1,7 +1,10 @@
 #![feature(closure_lifetime_binder)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
+#![feature(ptr_metadata)]
+#![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
+#![warn(clippy::as_conversions)]
 
 use std::cell::Cell;
 use std::ffi::OsStr;
@@ -188,7 +191,11 @@ fn repl() -> Result<(), Box<dyn Report>> {
     let globals_names =
         bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
     let gc = &Gc::default();
-    let mut globals = Environment::new(gc, [(clock, 0)].into_iter().collect());
+    let mut globals = Environment::new(
+        gc,
+        [(clock, 0)].into_iter().collect(),
+        GcRef::from_iter_in(gc, [].into_iter()),
+    );
     let mut line = String::new();
     'repl: loop {
         line.clear();
@@ -230,10 +237,12 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 continue 'repl;
             }
         };
-        let global_cells: Vec<_> = (0..program.global_cell_count)
-            .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))))
-            .collect();
-        let result = execute(&mut globals, 0, program.stmts, &global_cells);
+        let global_cells = GcRef::from_iter_in(
+            globals.gc,
+            (0..program.global_cell_count)
+                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
+        );
+        let result = execute(&mut globals, 0, program.stmts, global_cells);
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
@@ -303,19 +312,21 @@ pub fn run<'a>(
                 _ => unreachable!(),
             })
             .collect();
+        let global_cells = GcRef::from_iter_in(
+            gc,
+            (0..program.global_cell_count)
+                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
+        );
         let mut stack = time("stk", args.times, || {
-            Environment::new(gc, global_name_offsets)
+            Environment::new(gc, global_name_offsets, global_cells)
         });
-        let global_cells: Vec<_> = (0..program.global_cell_count)
-            .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))))
-            .collect();
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         match time("exe", args.times, || match args.r#loop {
-            Loop::Ast => execute(&mut stack, 0, program.stmts, &global_cells),
+            Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells),
             Loop::Closures => execute_closures(&mut State {
                 env: &mut stack,
                 offset: 0,
-                cell_vars: &global_cells,
+                cell_vars: global_cells,
             }),
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),

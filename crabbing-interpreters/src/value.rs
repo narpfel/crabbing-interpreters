@@ -15,6 +15,8 @@ use crate::interner::InternedString;
 use crate::scope::Statement;
 use crate::scope::Variable;
 
+pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<Value<'a>>>>]>;
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u64)]
 pub enum Value<'a> {
@@ -68,7 +70,7 @@ unsafe impl Trace for Value<'_> {
             Value::String(s) => tracer(s.as_root()),
             Value::Bool(_) => (),
             Value::Nil => (),
-            Value::Function(function) => tracer(function.as_root()),
+            Value::Function(function) => function.trace(tracer),
             Value::NativeFunction(_) => (),
             Value::Class(class) => tracer(class.as_root()),
             Value::Instance(instance) => tracer(instance.as_root()),
@@ -106,15 +108,13 @@ pub struct FunctionInner<'a> {
     pub(crate) name: &'a str,
     pub(crate) parameters: &'a [Variable<'a>],
     pub(crate) code: &'a [Statement<'a>],
-    pub(crate) cells: Vec<Cell<GcRef<'a, Cell<Value<'a>>>>>,
+    pub(crate) cells: Cells<'a>,
     pub(crate) compiled_body: &'a Execute<'a>,
 }
 
 unsafe impl Trace for FunctionInner<'_> {
     fn trace(&self, tracer: &dyn Fn(GcRoot)) {
-        for cell in &self.cells {
-            cell.trace(tracer);
-        }
+        self.cells.trace(tracer);
     }
 }
 

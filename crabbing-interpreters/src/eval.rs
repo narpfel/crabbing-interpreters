@@ -32,6 +32,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
@@ -171,7 +172,7 @@ pub enum Error<'a> {
 
 pub fn eval<'a>(
     env: &mut Environment<'a>,
-    cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
+    cell_vars: Cells<'a>,
     offset: usize,
     expr: &Expression<'a>,
 ) -> Result<Value<'a>, Box<Error<'a>>> {
@@ -298,7 +299,7 @@ pub fn eval<'a>(
                 zip(*arguments, parameters).try_for_each(|(arg, param)| -> Result<(), Box<_>> {
                     let arg = eval(env, cell_vars, offset, arg)?;
                     env.define(
-                        &function.cells,
+                        function.cells,
                         offset + stack_size_at_callsite,
                         param.target(),
                         arg,
@@ -309,7 +310,7 @@ pub fn eval<'a>(
                     env,
                     offset + stack_size_at_callsite,
                     function.code,
-                    &function.cells,
+                    function.cells,
                 ) {
                     Ok(_) => Ok(Value::Nil),
                     Err(ControlFlow::Return(value)) => Ok(value),
@@ -324,7 +325,7 @@ pub fn eval<'a>(
                                     instance: Value<'a>|
              -> Result<Value<'a>, Box<Error<'a>>> {
                 env.define(
-                    &method.cells,
+                    method.cells,
                     offset + stack_size_at_callsite,
                     method.parameters[0].target(),
                     instance,
@@ -447,7 +448,7 @@ pub fn execute<'a>(
     env: &mut Environment<'a>,
     offset: usize,
     program: &[Statement<'a>],
-    cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
+    cell_vars: Cells<'a>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut last_value = Value::Nil;
     for statement in program {
@@ -548,14 +549,14 @@ pub fn execute<'a>(
             }
         };
 
-        env.collect_if_necessary(cell_vars);
+        env.collect_if_necessary(last_value, cell_vars);
     }
     Ok(last_value)
 }
 
 pub(crate) fn eval_function<'a>(
     gc: &'a Gc,
-    cell_vars: &[Cell<GcRef<'a, Cell<Value<'a>>>>],
+    cell_vars: Cells<'a>,
     function: &crate::scope::Function<'a>,
 ) -> Value<'a> {
     let crate::scope::Function {
@@ -565,13 +566,15 @@ pub(crate) fn eval_function<'a>(
         cells,
         compiled_body,
     } = function;
-    let cells = cells
-        .iter()
-        .map(|cell| match cell {
+
+    let cells = GcRef::from_iter_in(
+        gc,
+        cells.iter().map(|cell| match cell {
             Some(idx) => Cell::new(cell_vars[*idx].get()),
             None => Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))),
-        })
-        .collect();
+        }),
+    );
+
     Value::Function(GcRef::new_in(
         gc,
         FunctionInner {
@@ -631,9 +634,9 @@ mod tests {
                 _ => unreachable!(),
             })
             .collect();
-        let global_cells = &[];
+        let global_cells = GcRef::from_iter_in(gc, [].into_iter());
         eval(
-            &mut Environment::new(gc, global_name_offsets),
+            &mut Environment::new(gc, global_name_offsets, global_cells),
             global_cells,
             0,
             scoped_ast,

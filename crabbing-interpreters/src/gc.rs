@@ -1,9 +1,10 @@
 use core::fmt;
+use std::alloc::Layout;
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::ptr;
 use std::ptr::NonNull;
-use std::ptr::{self};
 
 #[cfg(not(miri))]
 const COLLECTION_INTERVAL: usize = 100_000;
@@ -49,11 +50,21 @@ where
 
 unsafe impl<T> Trace for GcRef<'_, T>
 where
-    T: Trace,
+    T: Trace + ?Sized,
 {
     fn trace(&self, tracer: &dyn Fn(GcRoot)) {
         tracer(self.as_root());
-        (self.0.head.get().vtable.iter_children)(NonNull::from(self.0).cast(), tracer);
+    }
+}
+
+unsafe impl<T> Trace for [T]
+where
+    T: Trace,
+{
+    fn trace(&self, tracer: &dyn Fn(GcRoot)) {
+        for value in self {
+            value.trace(tracer);
+        }
     }
 }
 
@@ -75,9 +86,10 @@ impl Gc {
             head: Cell::new(GcHead {
                 prev: last,
                 next: None,
+                length: 0,
                 vtable: &VTable {
-                    drop: |p| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
-                    iter_children: |head_ptr, tracer| {
+                    drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
+                    iter_children: |head_ptr, tracer, _| {
                         (unsafe { head_ptr.cast::<GcValue<'a, T>>().as_ref() })
                             .value
                             .trace(tracer)
@@ -111,9 +123,11 @@ impl Gc {
                     state: State::VisitingChildren,
                     ..root.get()
                 });
-                (root.get().vtable.iter_children)(root_ptr.cast(), &|root| {
-                    self.mark_recursively(root)
-                });
+                (root.get().vtable.iter_children)(
+                    root_ptr.cast(),
+                    &|root| self.mark_recursively(root),
+                    root.get().length,
+                );
                 root.set(GcHead { state: State::Done, ..root.get() });
             }
             State::VisitingChildren => (),
@@ -156,7 +170,7 @@ impl Gc {
                         self.last.set(prev);
                     }
 
-                    (head.vtable.drop)(head_ptr.cast())
+                    (head.vtable.drop)(head_ptr.cast(), head.length)
                 }
             }
         }
@@ -174,24 +188,34 @@ impl Drop for Gc {
 }
 
 #[repr(C)]
-struct GcValue<'gc, T> {
+struct GcValue<'gc, T>
+where
+    T: ?Sized,
+{
     head: Cell<GcHead>,
-    value: T,
     _gc: PhantomData<&'gc Gc>,
+    value: T,
+}
+
+impl<T> GcValue<'_, [T]> {
+    fn ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> *mut Self {
+        NonNull::from_raw_parts(memory.cast(), length).as_ptr()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 struct GcHead {
     prev: Option<NonNull<Cell<GcHead>>>,
     next: Option<NonNull<Cell<GcHead>>>,
+    length: usize,
     vtable: &'static VTable,
     state: State,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct VTable {
-    drop: fn(NonNull<()>),
-    iter_children: fn(NonNull<()>, &dyn Fn(GcRoot)),
+    drop: fn(NonNull<()>, usize),
+    iter_children: fn(NonNull<()>, &dyn Fn(GcRoot), usize),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -212,7 +236,9 @@ impl fmt::Debug for GcRoot {
     }
 }
 
-pub struct GcRef<'gc, T>(&'gc GcValue<'gc, T>);
+pub struct GcRef<'gc, T>(&'gc GcValue<'gc, T>)
+where
+    T: ?Sized;
 
 impl<'gc, T> GcRef<'gc, T> {
     pub(crate) fn new_in(gc: &'gc Gc, value: T) -> Self
@@ -225,19 +251,98 @@ impl<'gc, T> GcRef<'gc, T> {
     pub(crate) fn as_ptr(this: &Self) -> *const T {
         &this.0.value
     }
+}
 
+impl<'gc, T> GcRef<'gc, [T]> {
+    // FIXME: this duplicates a lot of code from `Gc::alloc`
+    pub(crate) fn from_iter_in(gc: &'gc Gc, mut iterator: impl ExactSizeIterator<Item = T>) -> Self
+    where
+        T: Trace,
+    {
+        let length = iterator.len();
+
+        gc.allocation_count.set(gc.allocation_count.get() + 1);
+
+        unsafe {
+            let memory = NonNull::new(std::alloc::alloc(Self::compute_layout(length)))
+                .expect("allocation returned non-null pointer");
+            let gc_value = Self::value_ptr_from_raw_parts(memory, length);
+
+            // We need to iterate the iterator before creating our own `GcHead` because the
+            // iterator might allocate in the same `Gc`, breaking the `Gc`’s list of allocations.
+            let values = ptr::addr_of_mut!((*gc_value).value);
+            for i in 0..length {
+                values
+                    .get_unchecked_mut(i)
+                    .write(iterator.next().expect("iterator was long enough"));
+            }
+            assert!(iterator.next().is_none(), "iterator was too long");
+
+            let last = gc.last.get();
+
+            ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
+                prev: last,
+                next: None,
+                length,
+                vtable: &VTable {
+                    drop: |memory, length| {
+                        let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
+                        ptr::drop_in_place(gc_value);
+                        std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
+                    },
+                    iter_children: |head_ptr, tracer, length| {
+                        let gc_value = Self::value_ptr_from_raw_parts(head_ptr.cast(), length);
+                        (*gc_value).value.trace(tracer)
+                    },
+                },
+                state: State::Unvisited,
+            }));
+            ptr::addr_of_mut!((*gc_value)._gc).write(PhantomData);
+
+            let head_ptr = NonNull::new(ptr::addr_of_mut!((*gc_value).head));
+
+            if let Some(last) = last {
+                let last = last.as_ref();
+                last.set(GcHead { next: head_ptr, ..last.get() });
+            }
+
+            gc.last.set(head_ptr);
+            Self(&*gc_value)
+        }
+    }
+
+    fn compute_layout(length: usize) -> Layout {
+        Layout::new::<GcValue<'gc, ()>>()
+            .extend(Layout::array::<T>(length).unwrap())
+            .unwrap()
+            .0
+            .pad_to_align()
+    }
+
+    fn value_ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> *mut GcValue<'gc, [T]> {
+        GcValue::ptr_from_raw_parts(memory, length)
+    }
+}
+
+impl<'gc, T> GcRef<'gc, T>
+where
+    T: ?Sized,
+{
     pub(crate) fn as_root(&self) -> GcRoot {
         GcRoot(NonNull::from(self.0).cast())
     }
 }
 
-impl<T> Clone for GcRef<'_, T> {
+impl<T> Clone for GcRef<'_, T>
+where
+    T: ?Sized,
+{
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T> Copy for GcRef<'_, T> {}
+impl<T> Copy for GcRef<'_, T> where T: ?Sized {}
 
 impl<T> PartialEq for GcRef<'_, T> {
     fn eq(&self, other: &Self) -> bool {
@@ -253,11 +358,27 @@ impl<T> PartialOrd for GcRef<'_, T> {
     }
 }
 
-impl<T> Deref for GcRef<'_, T> {
+impl<T> Deref for GcRef<'_, T>
+where
+    T: ?Sized,
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.0.value
+    }
+}
+
+impl<'a, T> IntoIterator for GcRef<'a, T>
+where
+    T: ?Sized,
+    &'a T: IntoIterator,
+{
+    type IntoIter = <&'a T as IntoIterator>::IntoIter;
+    type Item = <&'a T as IntoIterator>::Item;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.value.into_iter()
     }
 }
 
