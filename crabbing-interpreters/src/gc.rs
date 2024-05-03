@@ -146,10 +146,6 @@ impl Gc {
                         let prev = unsafe { prev.as_ref() };
                         prev.set(GcHead { next, ..prev.get() });
                     }
-                    else {
-                        // `head` is first
-                        self.last.set(next);
-                    }
 
                     if let Some(next) = next {
                         let next = unsafe { next.as_ref() };
@@ -157,7 +153,7 @@ impl Gc {
                     }
                     else {
                         // `head` is last
-                        self.last.set(ptr);
+                        self.last.set(prev);
                     }
 
                     (head.vtable.drop)(head_ptr.cast())
