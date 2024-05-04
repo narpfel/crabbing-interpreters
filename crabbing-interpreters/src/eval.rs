@@ -180,7 +180,7 @@ pub fn eval<'a>(
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
             LiteralKind::Number(n) => Number(n),
-            LiteralKind::String(s) => String(GcStr::new_in(env.gc, s.to_owned())),
+            LiteralKind::String(s) => String(GcStr::new_in(env.gc, s)),
             LiteralKind::True => Bool(true),
             LiteralKind::False => Bool(false),
             LiteralKind::Nil => Nil,
@@ -253,7 +253,7 @@ pub fn eval<'a>(
                         (_, EqualEqual, _) => Bool(lhs == rhs),
                         (_, NotEqual, _) => Bool(lhs != rhs),
                         (String(lhs), Plus, String(rhs)) =>
-                            String(GcStr::new_in(env.gc, format!("{lhs}{rhs}"))),
+                            String(GcStr::new_in(env.gc, &format!("{lhs}{rhs}"))),
                         (Number(lhs), _, Number(rhs)) => match op.kind {
                             Plus => Number(lhs + rhs),
                             Less => Bool(lhs < rhs),
