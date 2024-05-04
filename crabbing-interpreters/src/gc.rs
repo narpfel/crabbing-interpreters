@@ -61,7 +61,7 @@ where
                     state: State::VisitingChildren,
                     ..head.get()
                 });
-                (head.get().vtable.trace_children)(NonNull::from(self.0).cast(), head.get().length);
+                self.0.value.trace();
                 head.set(GcHead { state: State::Done, ..head.get() });
             }
             State::VisitingChildren => (),
@@ -103,14 +103,7 @@ impl Gc {
                 prev: None,
                 next: None,
                 length: 0,
-                vtable: &VTable {
-                    drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
-                    trace_children: |head_ptr, _| {
-                        (unsafe { head_ptr.cast::<GcValue<'a, T>>().as_ref() })
-                            .value
-                            .trace()
-                    },
-                },
+                drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
                 state: State::Unvisited,
             }),
             _gc: PhantomData,
@@ -182,7 +175,7 @@ impl Gc {
                         self.last.set(prev);
                     }
 
-                    (head.vtable.drop)(head_ptr.cast(), head.length)
+                    (head.drop)(head_ptr.cast(), head.length)
                 }
             }
         }
@@ -220,14 +213,8 @@ struct GcHead {
     prev: Option<NonNull<Cell<GcHead>>>,
     next: Option<NonNull<Cell<GcHead>>>,
     length: usize,
-    vtable: &'static VTable,
-    state: State,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct VTable {
     drop: fn(NonNull<()>, usize),
-    trace_children: fn(NonNull<()>, usize),
+    state: State,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -270,16 +257,10 @@ impl<'gc, T> GcRef<'gc, [T]> {
                 prev: None,
                 next: None,
                 length,
-                vtable: &VTable {
-                    drop: |memory, length| {
-                        let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
-                        ptr::drop_in_place(gc_value);
-                        std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
-                    },
-                    trace_children: |head_ptr, length| {
-                        let gc_value = Self::value_ptr_from_raw_parts(head_ptr.cast(), length);
-                        (*gc_value).value.trace()
-                    },
+                drop: |memory, length| {
+                    let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
+                    ptr::drop_in_place(gc_value);
+                    std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
                 },
                 state: State::Unvisited,
             }));
