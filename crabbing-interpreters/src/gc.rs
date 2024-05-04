@@ -270,8 +270,9 @@ impl<'gc, T> GcRef<'gc, [T]> {
         let length = iterator.len();
 
         unsafe {
-            let memory = NonNull::new(std::alloc::alloc(Self::compute_layout(length)))
-                .expect("allocation returned non-null pointer");
+            let layout = Self::compute_layout(length);
+            let memory = NonNull::new(std::alloc::alloc(layout))
+                .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
             let gc_value = Self::value_ptr_from_raw_parts(memory, length);
 
             ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
