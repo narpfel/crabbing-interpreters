@@ -31,11 +31,19 @@ unsafe impl Trace for () {
     fn trace(&self) {}
 }
 
+unsafe impl Trace for u8 {
+    fn trace(&self) {}
+}
+
 unsafe impl Trace for u64 {
     fn trace(&self) {}
 }
 
 unsafe impl Trace for String {
+    fn trace(&self) {}
+}
+
+unsafe impl Trace for str {
     fn trace(&self) {}
 }
 
@@ -364,16 +372,18 @@ where
     }
 }
 
-#[derive(Clone)]
-pub struct GcStr<'a>(GcRef<'a, String>);
+#[derive(Clone, Copy)]
+pub struct GcStr<'a>(GcRef<'a, [u8]>);
 
 impl<'a> GcStr<'a> {
-    pub(crate) fn new_in(gc: &'a Gc, s: String) -> Self {
-        Self(GcRef::new_in(gc, s))
+    pub(crate) fn new_in(gc: &'a Gc, s: &str) -> Self {
+        Self(GcRef::from_iter_in(gc, s.bytes()))
+    }
+
+    fn str(&self) -> &'a str {
+        unsafe { std::str::from_utf8_unchecked(&self.0 .0.value) }
     }
 }
-
-impl Copy for GcStr<'_> {}
 
 impl PartialEq for GcStr<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -389,13 +399,21 @@ impl PartialOrd for GcStr<'_> {
 
 impl fmt::Debug for GcStr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0 .0.value.fmt(f)
+        self.str().fmt(f)
     }
 }
 
 impl fmt::Display for GcStr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0 .0.value.fmt(f)
+        self.str().fmt(f)
+    }
+}
+
+impl Deref for GcStr<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.str()
     }
 }
 
@@ -441,7 +459,7 @@ mod tests {
     fn dropping_the_gc_doesnt_leak() {
         let gc = Gc::default();
         for i in 0..10 {
-            GcRef::new_in(&gc, 42);
+            GcRef::new_in(&gc, 42_u64);
             GcRef::new_in(&gc, format!("{i}"));
         }
     }
@@ -516,14 +534,14 @@ mod tests {
     fn can_allocate_after_collection() {
         let gc = Gc::default();
         GcRef::new_in(&gc, ());
-        let value = GcRef::new_in(&gc, 27);
+        let value = GcRef::new_in(&gc, 27_u64);
         GcRef::new_in(&gc, ());
         value.trace();
         unsafe {
             gc.sweep();
         }
         assert_eq!(*value, 27);
-        let value = GcRef::new_in(&gc, 42);
+        let value = GcRef::new_in(&gc, 42_u64);
         assert_eq!(*value, 42);
     }
 
@@ -537,7 +555,7 @@ mod tests {
         unsafe {
             gc.sweep();
         }
-        let value = GcRef::new_in(&gc, 42);
+        let value = GcRef::new_in(&gc, 42_u64);
         assert_eq!(*value, 42);
         unsafe {
             gc.sweep();

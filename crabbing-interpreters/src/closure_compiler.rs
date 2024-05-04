@@ -247,7 +247,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             ),
             LiteralKind::String(s) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    Ok(Value::String(GcStr::new_in(state.env.gc, String::from(s))))
+                    Ok(Value::String(GcStr::new_in(state.env.gc, s)))
                 },
             ),
             LiteralKind::True => &|_| Ok(Value::Bool(true)),
@@ -298,7 +298,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     any_binop(bump, lhs, rhs, |state, lhs, rhs| match (&lhs, &rhs) {
                         (Value::Number(lhs), Value::Number(rhs)) => Ok(Value::Number(lhs + rhs)),
                         (Value::String(lhs), Value::String(rhs)) => Ok(Value::String(
-                            GcStr::new_in(state.env.gc, format!("{lhs}{rhs}")),
+                            GcStr::new_in(state.env.gc, &format!("{lhs}{rhs}")),
                         )),
                         _ => Err(Error::InvalidBinaryOp {
                             lhs,
