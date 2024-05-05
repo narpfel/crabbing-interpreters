@@ -36,11 +36,21 @@ struct Vm<'a, 'b> {
 
 impl<'a, 'b> Vm<'a, 'b> {
     fn push_stack(&mut self, value: Value<'a>) {
+        #[cfg(feature = "debug_print")]
+        {
+            println!("pushing: {value}");
+            println!("     at: {:>5}   {:?}", self.pc, self.bytecode[self.pc]);
+        }
         self.stack[self.sp] = value;
         self.sp += 1;
     }
 
     fn pop_stack(&mut self) -> Value<'a> {
+        #[cfg(feature = "debug_print")]
+        {
+            println!("popping: {}", self.stack[self.sp - 1]);
+            println!("     at: {:>5}   {:?}", self.pc, self.bytecode[self.pc]);
+        }
         self.sp -= 1;
         self.stack[self.sp]
     }
@@ -97,6 +107,16 @@ pub fn run_bytecode<'a>(
     };
 
     loop {
+        #[cfg(feature = "debug_print")]
+        {
+            println!(
+                "{pc:>5}   {bytecode} ({sp})",
+                bytecode = vm.bytecode[vm.pc],
+                pc = vm.pc,
+                sp = vm.sp,
+            );
+        }
+
         match vm.bytecode[vm.pc] {
             Pop => {
                 vm.pop_stack();

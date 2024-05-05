@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 miri_tests = []
+debug_print = []
 
 [dependencies]
 ariadne = { workspace = true }
