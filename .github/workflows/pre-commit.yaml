@@ -1,8 +1,12 @@
 name: pre-commit
 
 on:
-  - push
-  - pull_request
+  push:
+    tags: '*'
+    branches:
+      - main
+      - 'test-me-*'
+  pull_request:
 
 jobs:
   pre-commit:
