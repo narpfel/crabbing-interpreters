@@ -325,6 +325,7 @@ impl<'a> Compiler<'a> {
                 rhs,
             } => {
                 self.compile_expr(lhs);
+                self.code.push(Dup);
                 let jump_index = self.code.len();
                 self.code.push(JumpIfFalse(0));
                 self.code.push(Pop);
@@ -338,7 +339,7 @@ impl<'a> Compiler<'a> {
                 rhs,
             } => {
                 self.compile_expr(lhs);
-                self.compile_expr(lhs);
+                self.code.push(Dup);
                 let jump_index = self.code.len();
                 self.code.push(JumpIfTrue(0));
                 self.code.push(Pop);
