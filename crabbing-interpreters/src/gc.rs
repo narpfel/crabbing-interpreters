@@ -354,6 +354,15 @@ where
     }
 }
 
+impl<T> fmt::Debug for GcRef<'_, T>
+where
+    T: ?Sized + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.deref().fmt(f)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct GcStr<'a>(GcRef<'a, [u8]>);
 

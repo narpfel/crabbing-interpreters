@@ -1,15 +1,9 @@
 ---
 source: crabbing-interpreters/tests/testsuite/main.rs
 info:
-  program: cargo
+  program: crabbing-interpreters
   args:
-    - miri
-    - run
-    - "-q"
-    - "--"
-    - "--loop=closures"
-  env:
-    MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-ignore-leaks"
+    - "--loop=bytecode"
   stdin: 1 + 2;
 ---
 success: true

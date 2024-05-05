@@ -559,6 +559,10 @@ impl<'a> Variable<'a> {
     fn make_cell(&self, slot: usize) {
         self.set_target(Target::Cell(slot))
     }
+
+    pub(crate) fn is_cell(&self) -> bool {
+        matches!(self.target(), Target::Cell(_))
+    }
 }
 
 impl PartialEq for Variable<'_> {

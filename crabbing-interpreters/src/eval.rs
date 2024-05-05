@@ -583,6 +583,7 @@ pub(crate) fn eval_function<'a>(
             code: body,
             cells,
             compiled_body: *compiled_body,
+            code_ptr: 0,
         },
     ))
 }

@@ -7,9 +7,8 @@ info:
     - run
     - "-q"
     - "--"
-    - "--loop=closures"
   env:
-    MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-ignore-leaks"
+    MIRIFLAGS: "-Zmiri-disable-isolation"
   stdin: nil * 2;
 ---
 success: true

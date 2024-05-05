@@ -12,6 +12,12 @@ pub mod interned {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InternedString(u32);
 
+impl std::fmt::Display for InternedString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "s.{}", self.0)
+    }
+}
+
 #[derive(Clone)]
 pub struct Interner<'a> {
     interned_strings: HashMap<&'a str, InternedString>,
