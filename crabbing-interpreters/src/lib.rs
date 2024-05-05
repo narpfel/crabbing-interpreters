@@ -290,6 +290,7 @@ pub fn run<'a>(
         let program = time("scp", args.times, move || {
             scope::resolve_names(bump, globals, ast)
         })?;
+
         if args.scopes {
             print!("(program");
             if !program.stmts.is_empty() {
@@ -303,7 +304,9 @@ pub fn run<'a>(
             if args.stop_at == Some(StopAt::Scopes) {
                 return Ok(());
             }
+            println!();
         }
+
         let global_name_offsets = program
             .global_name_offsets
             .iter()
