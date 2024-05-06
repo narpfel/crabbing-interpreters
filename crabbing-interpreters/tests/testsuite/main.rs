@@ -86,10 +86,6 @@ type OutputFilter = insta::internals::SettingsBindDropGuard;
 fn filter_output() -> OutputFilter {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter("0x[[:xdigit:]]{4,16}", "[POINTER]");
-    settings.add_filter(
-        "Preparing a sysroot for Miri \\(target: .*?\\)\\.\\.\\. done\n",
-        "",
-    );
     settings.bind_to_scope()
 }
 
