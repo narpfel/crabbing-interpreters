@@ -132,7 +132,7 @@ struct Compiler<'a> {
     metadata: Vec<Metadata<'a>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum Metadata<'a> {
     Function {
         function: &'a Function<'a>,
@@ -143,6 +143,44 @@ pub enum Metadata<'a> {
         methods: &'a [Function<'a>],
         has_base: bool,
     },
+}
+
+impl<'s> fmt::Debug for Metadata<'s> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Metadata::Function { function, code_size } => f
+                .debug_struct("Metadata::Function")
+                .field_with("function", |f| {
+                    write!(
+                        f,
+                        "<function {} arity={}>",
+                        function.name.id(),
+                        function.parameters.len(),
+                    )
+                })
+                .field("code_size", code_size)
+                .finish(),
+            Metadata::Class { name, methods, has_base } => f
+                .debug_struct("Metadata::Class")
+                .field("name", name)
+                .field_with("methods", |f| {
+                    let mut list = f.debug_list();
+                    methods.iter().for_each(|method| {
+                        list.entry_with(|f| {
+                            write!(
+                                f,
+                                "<method {} arity={}>",
+                                method.name.id(),
+                                method.parameters.len(),
+                            )
+                        });
+                    });
+                    list.finish()
+                })
+                .field("has_base", has_base)
+                .finish(),
+        }
+    }
 }
 
 pub(crate) fn compile_program<'a>(

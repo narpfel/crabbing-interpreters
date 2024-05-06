@@ -1,4 +1,5 @@
 #![feature(closure_lifetime_binder)]
+#![feature(debug_closure_helpers)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
@@ -52,6 +53,9 @@ mod nonempty;
 mod parse;
 mod scope;
 mod value;
+
+const EMPTY: &str = "";
+const DEBUG_INDENT: usize = 8;
 
 pub trait AllocPath {
     fn alloc_path(&self, path: impl AsRef<Path>) -> &Path;
@@ -336,27 +340,31 @@ pub fn run<'a>(
             time("cmp", args.times, || compile_program(gc, program.stmts));
 
         if args.bytecode {
+            println!("Interned strings");
+            interner.print_interned_strings();
+            println!();
+
             println!("Metadata");
             for (i, metadata) in metadata.iter().enumerate() {
-                print!("{i:>5}:  ");
+                print!("{i:>DEBUG_INDENT$}:  ");
                 let metadata_string = format!("{metadata:#?}");
                 let mut lines = metadata_string.lines();
                 println!("{}", lines.next().unwrap());
-                for line in lines.take(5) {
-                    println!("     |  {line}");
+                for line in lines {
+                    println!("{EMPTY:>DEBUG_INDENT$}|  {line}");
                 }
             }
             println!();
 
             println!("Constants");
             for (i, constant) in constants.iter().enumerate() {
-                println!("{i:>5}:  {}", constant.lox_debug());
+                println!("{i:>DEBUG_INDENT$}:  {}", constant.lox_debug());
             }
             println!();
 
             println!("Bytecode");
             for (i, bytecode) in bytecode.iter().enumerate() {
-                println!("{i:>5}   {bytecode}");
+                println!("{i:>DEBUG_INDENT$}   {bytecode}");
             }
 
             if args.stop_at == Some(StopAt::Bytecode) {
