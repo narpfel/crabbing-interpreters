@@ -14,6 +14,7 @@ use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::interner::interned;
+use crate::scope::Target;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
@@ -220,8 +221,12 @@ pub fn run_bytecode<'a>(
             }
             StoreGlobal(slot) => {
                 let value = vm.pop_stack();
-                // FIXME: set `is_global_defined` here
-                vm.env[slot] = value;
+                vm.env.set(
+                    vm.cell_vars,
+                    vm.offset.cast(),
+                    Target::GlobalBySlot(slot.cast()),
+                    value,
+                );
             }
             StoreCell(slot) => {
                 let value = vm.pop_stack();
@@ -315,14 +320,14 @@ pub fn run_bytecode<'a>(
                 vm.push_stack(value);
             }
             StoreGlobalByName(name) => {
-                let index = vm
-                    .env
-                    .get_global_slot_by_id(name)
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                // FIXME: Do we need to set `is_global_defined` here?
-                vm.env[index] = vm.pop_stack();
+                let slot = vm.env.get_global_slot_by_id(name).unwrap();
+                let value = vm.pop_stack();
+                vm.env.set(
+                    vm.cell_vars,
+                    vm.offset.cast(),
+                    Target::GlobalBySlot(slot),
+                    value,
+                );
             }
             JumpIfTrue(target) => {
                 let value = vm.pop_stack();
