@@ -20,6 +20,20 @@ use crate::value::FunctionInner;
 use crate::value::InstanceInner;
 use crate::value::Value;
 
+trait Cast {
+    type Target;
+
+    fn cast(self) -> Self::Target;
+}
+
+impl Cast for u32 {
+    type Target = usize;
+
+    fn cast(self) -> Self::Target {
+        usize::try_from(self).unwrap()
+    }
+}
+
 struct Vm<'a, 'b> {
     bytecode: &'a [Bytecode],
     constants: GcRef<'a, [Value<'a>]>,
@@ -61,11 +75,11 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     #[expect(unused)]
     fn get_stack_entry(&self, index: u32) -> Value<'a> {
-        self.stack[usize::try_from(index).unwrap()]
+        self.stack[index.cast()]
     }
 
     fn get_constant(&self, index: u32) -> Value<'a> {
-        self.constants[usize::try_from(index).unwrap()]
+        self.constants[index.cast()]
     }
 
     #[inline(never)]
@@ -159,7 +173,7 @@ pub fn run_bytecode<'a>(
                 vm.push_stack(vm.env[slot]);
             }
             Cell(slot) => {
-                vm.push_stack(vm.cell_vars[usize::try_from(slot).unwrap()].get().get());
+                vm.push_stack(vm.cell_vars[slot.cast()].get().get());
             }
             Dup => {
                 let value = vm.peek_stack();
@@ -211,17 +225,14 @@ pub fn run_bytecode<'a>(
             }
             StoreCell(slot) => {
                 let value = vm.pop_stack();
-                vm.cell_vars[usize::try_from(slot).unwrap()]
-                    .get()
-                    .set(value);
+                vm.cell_vars[slot.cast()].get().set(value);
             }
             DefineCell(slot) => {
                 let value = vm.pop_stack();
-                vm.cell_vars[usize::try_from(slot).unwrap()]
-                    .set(GcRef::new_in(vm.env.gc, Cell::new(value)));
+                vm.cell_vars[slot.cast()].set(GcRef::new_in(vm.env.gc, Cell::new(value)));
             }
             Call { argument_count, stack_size_at_callsite } => {
-                let callee = vm.stack[vm.sp - 1 - usize::try_from(argument_count).unwrap()];
+                let callee = vm.stack[vm.sp - 1 - argument_count.cast()];
                 match callee {
                     Function(function) => {
                         if function.parameters.len() != argument_count.try_into().unwrap() {
@@ -268,7 +279,7 @@ pub fn run_bytecode<'a>(
                                 if init.parameters.len() - 1 != argument_count.try_into().unwrap() {
                                     todo!("FIXME: type error on argcount mismatch");
                                 }
-                                vm.stack[vm.sp - 1 - usize::try_from(argument_count).unwrap()] =
+                                vm.stack[vm.sp - 1 - argument_count.cast()] =
                                     BoundMethod(init, instance);
                                 vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
                                 vm.call_sp += 1;
@@ -316,46 +327,45 @@ pub fn run_bytecode<'a>(
             JumpIfTrue(target) => {
                 let value = vm.pop_stack();
                 if value.is_truthy() {
-                    vm.pc = usize::try_from(target).unwrap() - 1;
+                    vm.pc = target.cast() - 1;
                 }
             }
             JumpIfFalse(target) => {
                 let value = vm.pop_stack();
                 if !value.is_truthy() {
-                    vm.pc = usize::try_from(target).unwrap() - 1;
+                    vm.pc = target.cast() - 1;
                 }
             }
             PopJumpIfTrue(target) => {
                 let value = vm.peek_stack();
                 if value.is_truthy() {
                     vm.pop_stack();
-                    vm.pc = usize::try_from(target).unwrap() - 1;
+                    vm.pc = target.cast() - 1;
                 }
             }
             PopJumpIfFalse(target) => {
                 let value = vm.peek_stack();
                 if !value.is_truthy() {
                     vm.pop_stack();
-                    vm.pc = usize::try_from(target).unwrap() - 1;
+                    vm.pc = target.cast() - 1;
                 }
             }
             Jump(target) => {
-                vm.pc = usize::try_from(target).unwrap() - 1;
+                vm.pc = target.cast() - 1;
             }
             BeginFunction(target) => {
-                vm.pc += usize::try_from(target).unwrap();
+                vm.pc += target.cast();
             }
             Return => {
                 vm.call_sp -= 1;
                 (vm.pc, vm.offset, vm.cell_vars) = vm.call_stack[vm.call_sp]
             }
             BuildFunction(metadata_index) => {
-                let Metadata::Function { function, code_size } =
-                    vm.metadata[usize::try_from(metadata_index).unwrap()]
+                let Metadata::Function { function, code_size } = vm.metadata[metadata_index.cast()]
                 else {
                     unreachable!()
                 };
-                let code_ptr = vm.pc - usize::try_from(code_size).unwrap();
+                let code_ptr = vm.pc - code_size.cast();
                 let cells = GcRef::from_iter_in(
                     vm.env.gc,
                     function.cells.iter().map(|cell| match cell {
@@ -387,7 +397,7 @@ pub fn run_bytecode<'a>(
             }
             BuildClass(metadata_index) => {
                 let Metadata::Class { name, methods, has_base } =
-                    vm.metadata[usize::try_from(metadata_index).unwrap()]
+                    vm.metadata[metadata_index.cast()]
                 else {
                     unreachable!()
                 };
