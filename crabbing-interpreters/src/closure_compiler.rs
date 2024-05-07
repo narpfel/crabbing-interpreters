@@ -179,6 +179,14 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                 },
             )
         }
+        Statement::InitReturn(this) => {
+            let this = compile_expr(bump, this);
+            bump.alloc(
+                for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
+                    Err(ControlFlow::Return(this(state)?))
+                },
+            )
+        }
         Statement::Class { target, base, methods } => {
             let target = *target;
             let base_expr = base;

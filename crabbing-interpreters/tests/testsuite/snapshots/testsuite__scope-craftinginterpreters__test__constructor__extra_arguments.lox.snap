@@ -15,7 +15,8 @@ exit_code: 0
       (method init [(local this @0) (local a @1) (local b @2)] []
          (block
             (expr (= (setattr (local this @0) a) (local a @1)))
-            (expr (= (setattr (local this @0) b) (local b @2))))))
+            (expr (= (setattr (local this @0) b) (local b @2)))
+            (init-return))))
    (var foo (global @2) (call +2 (global Foo @1) 1.0 2.0 3.0 4.0)))
 
 ----- stderr -----

@@ -10,7 +10,7 @@ exit_code: 0
 ----- stdout -----
 Foo.init(one)
 Foo.init(two)
-nil
+<Foo instance at [POINTER]>
 init
 
 ----- stderr -----

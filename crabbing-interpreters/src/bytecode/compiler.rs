@@ -2,7 +2,6 @@ use std::fmt;
 
 use crate::gc::Gc;
 use crate::gc::GcStr;
-use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -21,7 +20,7 @@ const NIL_CONSTANT: u32 = 0;
 const FALSE_CONSTANT: u32 = 1;
 const TRUE_CONSTANT: u32 = 2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bytecode {
     Pop,
     Const(u32),
@@ -306,6 +305,10 @@ impl<'a> Compiler<'a> {
                 }
                 self.code.push(Return);
             }
+            Statement::InitReturn(_) => {
+                self.code.push(BoundMethodGetInstance);
+                self.code.push(Return);
+            }
             Statement::Class { target, base, methods } => {
                 if target.is_cell() {
                     self.code.push(Const(NIL_CONSTANT));
@@ -477,8 +480,6 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_function(&mut self, function: &'a Function<'a>, kind: FunctionKind) {
-        let is_init = kind == FunctionKind::Method && function.name.id() == interned::INIT;
-
         let begin_index = self.code.len();
         self.code.push(BeginFunction(0));
 
@@ -500,14 +501,10 @@ impl<'a> Compiler<'a> {
             self.compile_stmt(stmt);
         }
 
-        // FIXME: push `this` here in case of `init`
-        if is_init {
-            self.code.push(BoundMethodGetInstance);
-        }
-        else {
+        if self.code.last() != Some(&Return) {
             self.code.push(Const(NIL_CONSTANT));
+            self.code.push(Return);
         }
-        self.code.push(Return);
         let code_size = (self.code.len() - begin_index - 1).try_into().unwrap();
         self.code[begin_index] = BeginFunction(code_size);
         let meta_index = self.metadata.len();

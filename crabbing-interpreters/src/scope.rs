@@ -5,6 +5,7 @@ use std::iter;
 use std::primitive::usize;
 use std::ptr;
 
+use ariadne::Color::Blue;
 use ariadne::Color::Red;
 use bumpalo::Bump;
 use crabbing_interpreters_derive_report::Report;
@@ -57,10 +58,26 @@ impl From<bool> for HasBase {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum FunctionKindWithBase {
     Function,
     Method(HasBase),
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+enum IsInit {
+    #[default]
+    No,
+    Yes,
+}
+
+impl IsInit {
+    fn then<T>(self, iterator: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
+        match self {
+            IsInit::Yes => Either::Left(iterator),
+            IsInit::No => Either::Right(iter::empty()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -83,6 +100,7 @@ struct Locals<'a>(nonempty::Vec<HashMap<InternedString, Variable<'a>>>);
 
 #[derive(Debug, Default)]
 struct Scope<'a> {
+    is_init: IsInit,
     locals: Locals<'a>,
     cells: IndexMap<Variable<'a>, CellRef<'a>>,
 }
@@ -144,6 +162,15 @@ pub enum Error<'a> {
         at: ErrorAtToken<'a>,
     },
 
+    #[error("Initializer cannot return a value.")]
+    ReturnValueInInit {
+        #[diagnostics(
+            0(colour = Blue, label = "cannot return a value"),
+            1(colour = Red, label = "Help: remove this expression"),
+        )]
+        at: ErrorAtToken<'a, parse::Expression<'a>>,
+    },
+
     #[error("Can’t use `{at}` outside of class.")]
     TopLevelThis {
         #[diagnostics(loc(colour = Red))]
@@ -202,6 +229,10 @@ impl<'a> Locals<'a> {
 }
 
 impl Scope<'_> {
+    fn new(is_init: IsInit) -> Self {
+        Self { is_init, ..Self::default() }
+    }
+
     fn push(&mut self) {
         self.locals.push()
     }
@@ -327,9 +358,10 @@ impl<'a> Scopes<'a> {
 
     fn with_function(
         &mut self,
+        is_init: IsInit,
         f: impl FnOnce(&mut Self) -> Result<(&'a [Variable<'a>], &'a [Statement<'a>]), Error<'a>>,
     ) -> Result<FunctionScope<'a>, Error<'a>> {
-        self.push();
+        self.push(is_init);
         let old_offset = std::mem::take(&mut self.offset);
         let (parameters, body) = f(self)?;
         let scope = self.pop();
@@ -353,8 +385,8 @@ impl<'a> Scopes<'a> {
             .unwrap_or(0)
     }
 
-    fn push(&mut self) {
-        self.scopes.push(Scope::default())
+    fn push(&mut self, is_init: IsInit) {
+        self.scopes.push(Scope::new(is_init))
     }
 
     fn pop(&mut self) -> Scope<'a> {
@@ -449,6 +481,8 @@ pub enum Statement<'a> {
         function: Function<'a>,
     },
     Return(Option<Expression<'a>>),
+    // FIXME: This is not strictly necessary because it does the same as `Return(Some(this))`.
+    InitReturn(Expression<'a>),
     Class {
         target: Variable<'a>,
         base: Option<Expression<'a>>,
@@ -509,6 +543,7 @@ impl Statement<'_> {
                 "(return {})",
                 expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr()),
             ),
+            Statement::InitReturn(_) => "(init-return)".to_owned(),
             Statement::Class { target, base, methods } => format!(
                 "(class {} {} {}{}{})",
                 target.name.slice(),
@@ -886,6 +921,17 @@ fn resolve_stmt<'a>(
             if !scopes.is_in_function() {
                 Err(Error::TopLevelReturn { at: ErrorAtToken::at(*return_token) })?
             }
+            else if let IsInit::Yes = scopes.scopes.last().is_init {
+                if let Some(expr) = expr {
+                    Err(Error::ReturnValueInInit { at: ErrorAtToken(*return_token, *expr) })?
+                }
+
+                // FIXME: this allocates unnecessarily
+                let loc = bump.alloc(return_token.loc());
+                let ident = bump.alloc(parse::Expression::Ident(Name::new(interned::THIS, loc)));
+                let this = resolve_expr(bump, scopes, ident)?;
+                Statement::InitReturn(this)
+            }
             else {
                 Statement::Return(
                     expr.as_ref()
@@ -1018,7 +1064,8 @@ fn resolve_function<'a>(
     else {
         unreachable!()
     };
-    let FunctionScope { parameters, body, cells } = scopes.with_function(|scopes| {
+    let is_init = is_function_init(name, kind);
+    let FunctionScope { parameters, body, cells } = scopes.with_function(is_init, |scopes| {
         let this = match kind {
             FunctionKindWithBase::Function => Either::Left(iter::empty()),
             FunctionKindWithBase::Method(has_base) => {
@@ -1043,15 +1090,26 @@ fn resolve_function<'a>(
             }
         };
         let variables: Vec<_> = this
+            .clone()
             .chain(parameters.iter())
             .map(|name| scopes.add(name))
             .try_collect()?;
+
+        let init_return = is_init
+            .then(this)
+            .map(|&this| {
+                let this = bump.alloc(parse::Expression::Ident(this));
+                Ok(Statement::InitReturn(resolve_expr(bump, scopes, this)?))
+            })
+            .next();
+
         Ok((
             bump.alloc_slice_copy(&variables),
             &*bump.alloc_slice_copy(
                 &body
                     .iter()
                     .map(|stmt| resolve_stmt(bump, scopes, stmt))
+                    .chain(init_return)
                     .collect::<Result<Vec<_>, _>>()?,
             ),
         ))
@@ -1097,4 +1155,13 @@ fn cell_slots<'a>(
         }
     }
     cells
+}
+
+fn is_function_init(name: &Name, kind: FunctionKindWithBase) -> IsInit {
+    if name.id() == interned::INIT && matches!(kind, FunctionKindWithBase::Method(_)) {
+        IsInit::Yes
+    }
+    else {
+        IsInit::No
+    }
 }

@@ -517,6 +517,8 @@ pub fn execute<'a>(
                     .map_or(Ok(Value::Nil), |expr| eval(env, cell_vars, offset, expr))?;
                 Err(ControlFlow::Return(return_value))?
             }
+            Statement::InitReturn(this) =>
+                Err(ControlFlow::Return(eval(env, cell_vars, offset, this)?))?,
             Statement::Class { target, base, methods } => {
                 let base = base
                     .as_ref()

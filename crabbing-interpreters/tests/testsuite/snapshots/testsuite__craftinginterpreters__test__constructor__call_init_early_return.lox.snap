@@ -10,6 +10,6 @@ exit_code: 0
 ----- stdout -----
 init
 init
-nil
+<Foo instance at [POINTER]>
 
 ----- stderr -----

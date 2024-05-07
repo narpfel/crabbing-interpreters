@@ -15,8 +15,9 @@ exit_code: 0
       (method init [(local this @0)] []
          (block
             (print "init")
-            (return ∅)
-            (print "nope"))))
+            (init-return)
+            (print "nope")
+            (init-return))))
    (var foo (global @2) (call +2 (global Foo @1)))
    (print (global foo @2)))
 

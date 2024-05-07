@@ -14,7 +14,8 @@ exit_code: 0
    (class A (global @1) ∅
       (method init [(local this @0) (local param @1)] []
          (block
-            (expr (= (setattr (local this @0) field) (local param @1)))))
+            (expr (= (setattr (local this @0) field) (local param @1)))
+            (init-return)))
       (method test [(local this @0)] []
          (block
             (print (attr (local this @0) field)))))
