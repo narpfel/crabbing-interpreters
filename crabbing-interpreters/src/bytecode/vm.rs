@@ -431,7 +431,7 @@ pub fn run_bytecode<'a>(
             PrintStack => {
                 vm.print_stack();
             }
-            b @ BoundMethodGetInstance => match vm.pop_stack() {
+            b @ BoundMethodGetInstance => match vm.peek_stack() {
                 BoundMethod(_, instance) => vm.push_stack(Value::Instance(instance)),
                 value => unreachable!(
                     "invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"

@@ -492,7 +492,6 @@ impl<'a> Compiler<'a> {
         }
 
         if kind == FunctionKind::Method {
-            self.code.push(Dup);
             self.code.push(BoundMethodGetInstance);
             self.compile_define(&function.parameters[0]);
         }
@@ -503,7 +502,6 @@ impl<'a> Compiler<'a> {
 
         // FIXME: push `this` here in case of `init`
         if is_init {
-            self.code.push(Dup);
             self.code.push(BoundMethodGetInstance);
         }
         else {
