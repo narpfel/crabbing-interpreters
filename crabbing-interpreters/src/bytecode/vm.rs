@@ -2,9 +2,12 @@ use std::cell::Cell;
 use std::cell::RefCell;
 
 use rustc_hash::FxHashMap as HashMap;
+use variant_types::IntoEnum;
+use variant_types::IntoVariant;
 use Bytecode::*;
 use Value::*;
 
+use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::Bytecode;
 use crate::environment::Environment;
@@ -14,11 +17,15 @@ use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::interner::interned;
+use crate::scope::AssignmentTargetTypes;
+use crate::scope::Expression;
+use crate::scope::ExpressionTypes;
 use crate::scope::Target;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
+use crate::value::NativeError;
 use crate::value::Value;
 
 trait Cast {
@@ -39,6 +46,7 @@ struct Vm<'a, 'b> {
     bytecode: &'b [Bytecode],
     constants: &'b [Value<'a>],
     metadata: &'b [Metadata<'a>],
+    error_locations: &'b [ContainingExpression<'a>],
     env: &'b mut Environment<'a>,
     pc: usize,
     stack: Box<[Value<'a>; ENV_SIZE]>,
@@ -92,12 +100,46 @@ impl<'a, 'b> Vm<'a, 'b> {
             &self.stack[..self.sp]
         );
     }
+
+    fn error_location<ExpressionType>(&self) -> ExpressionType
+    where
+        ExpressionType: IntoEnum<Enum = Expression<'a>>,
+        Expression<'a>: IntoVariant<ExpressionType>,
+    {
+        self.error_location_at(self.pc)
+    }
+
+    fn error_location_at<ExpressionType>(&self, pc: usize) -> ExpressionType
+    where
+        ExpressionType: IntoEnum<Enum = Expression<'a>>,
+        Expression<'a>: IntoVariant<ExpressionType>,
+    {
+        let index = self
+            .error_locations
+            .partition_point(|containing_expr| containing_expr.at() <= pc);
+
+        let mut depth = 0;
+        for containing_expr in self.error_locations[..index].iter().rev() {
+            match containing_expr {
+                ContainingExpression::Enter { at: _, expr } =>
+                    if depth == 0 {
+                        return expr.into_variant();
+                    }
+                    else {
+                        depth -= 1;
+                    },
+                ContainingExpression::Exit { at: _ } => depth += 1,
+            }
+        }
+        unreachable!()
+    }
 }
 
 pub fn run_bytecode<'a>(
     bytecode: &[Bytecode],
     constants: &[Value<'a>],
     metadata: &[Metadata<'a>],
+    error_locations: &[ContainingExpression<'a>],
     env: &mut Environment<'a>,
     global_cells: Cells<'a>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
@@ -111,6 +153,7 @@ pub fn run_bytecode<'a>(
         bytecode,
         constants,
         metadata,
+        error_locations,
         env,
         pc: 0,
         stack,
@@ -142,8 +185,14 @@ pub fn run_bytecode<'a>(
             UnaryMinus => {
                 let value = match vm.pop_stack() {
                     Number(x) => Number(-x),
-                    // _ => Err(Error::InvalidUnaryOp { op: *op, value, at: expr.into_variant() })?,
-                    value => todo!("type error: -{value}"),
+                    value => {
+                        let expr = vm.error_location();
+                        Err(Box::new(Error::InvalidUnaryOp {
+                            value,
+                            at: expr,
+                            op: expr.0,
+                        }))?
+                    }
                 };
                 vm.push_stack(value);
             }
@@ -151,22 +200,30 @@ pub fn run_bytecode<'a>(
                 let value = vm.pop_stack();
                 vm.push_stack(Bool(!value.is_truthy()));
             }
-            Equal => any_binop(&mut vm, |_, lhs, rhs| Bool(lhs == rhs)),
-            NotEqual => any_binop(&mut vm, |_, lhs, rhs| Bool(lhs != rhs)),
-            Less => number_binop(&mut vm, |lhs, rhs| Bool(lhs < rhs)),
-            LessEqual => number_binop(&mut vm, |lhs, rhs| Bool(lhs <= rhs)),
-            Greater => number_binop(&mut vm, |lhs, rhs| Bool(lhs > rhs)),
-            GreaterEqual => number_binop(&mut vm, |lhs, rhs| Bool(lhs >= rhs)),
+            Equal => any_binop(&mut vm, |_, lhs, rhs| Ok(Bool(lhs == rhs)))?,
+            NotEqual => any_binop(&mut vm, |_, lhs, rhs| Ok(Bool(lhs != rhs)))?,
+            Less => number_binop(&mut vm, |lhs, rhs| Bool(lhs < rhs))?,
+            LessEqual => number_binop(&mut vm, |lhs, rhs| Bool(lhs <= rhs))?,
+            Greater => number_binop(&mut vm, |lhs, rhs| Bool(lhs > rhs))?,
+            GreaterEqual => number_binop(&mut vm, |lhs, rhs| Bool(lhs >= rhs))?,
             Add => any_binop(&mut vm, |vm, lhs, rhs| match (lhs, rhs) {
-                (Number(lhs), Number(rhs)) => Number(lhs + rhs),
+                (Number(lhs), Number(rhs)) => Ok(Number(lhs + rhs)),
                 (String(lhs), String(rhs)) =>
-                    String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}"))),
-                _ => todo!("type error: {lhs} + {rhs}"),
-            }),
-            Subtract => number_binop(&mut vm, |lhs, rhs| Number(lhs - rhs)),
-            Multiply => number_binop(&mut vm, |lhs, rhs| Number(lhs * rhs)),
-            Divide => number_binop(&mut vm, |lhs, rhs| Number(lhs / rhs)),
-            Power => number_binop(&mut vm, |lhs, rhs| Number(lhs.powf(rhs))),
+                    Ok(String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}")))),
+                _ => {
+                    let expr = vm.error_location();
+                    Err(Box::new(Error::InvalidBinaryOp {
+                        at: expr,
+                        lhs,
+                        op: expr.op,
+                        rhs,
+                    }))?
+                }
+            })?,
+            Subtract => number_binop(&mut vm, |lhs, rhs| Number(lhs - rhs))?,
+            Multiply => number_binop(&mut vm, |lhs, rhs| Number(lhs * rhs))?,
+            Divide => number_binop(&mut vm, |lhs, rhs| Number(lhs / rhs))?,
+            Power => number_binop(&mut vm, |lhs, rhs| Number(lhs.powf(rhs)))?,
             Local(slot) => {
                 vm.push_stack(vm.env[vm.offset + slot]);
             }
@@ -185,7 +242,13 @@ pub fn run_bytecode<'a>(
                 let value = vm.pop_stack();
                 match assignment_target {
                     Instance(instance) => instance.attributes.borrow_mut().insert(name, value),
-                    _ => todo!("type error: invalid assignment target: {assignment_target}"),
+                    _ => {
+                        let expr: ExpressionTypes::Assign = vm.error_location();
+                        Err(Box::new(Error::NoFields {
+                            lhs: assignment_target,
+                            at: expr.target.into_variant(),
+                        }))?
+                    }
                 };
             }
             LoadAttr(name) => {
@@ -205,13 +268,18 @@ pub fn run_bytecode<'a>(
                                     _ => unreachable!(),
                                 })
                         })
-                        .unwrap(),
-                    // .ok_or_else(|| Error::UndefinedProperty {
-                    //     lhs: lhs.clone(),
-                    //     attribute: name
-                    //     at: expr.into_variant(),
-                    // })?,
-                    _ => todo!("type error: no property: {value}"),
+                        .ok_or_else(|| {
+                            let expr = vm.error_location();
+                            Box::new(Error::UndefinedProperty {
+                                at: expr,
+                                lhs: value,
+                                attribute: expr.attribute,
+                            })
+                        })?,
+                    _ => Err(Box::new(Error::NoProperty {
+                        lhs: value,
+                        at: vm.error_location(),
+                    }))?,
                 };
                 vm.push_stack(value);
             }
@@ -240,12 +308,12 @@ pub fn run_bytecode<'a>(
                 let callee = vm.stack[vm.sp - 1 - argument_count.cast()];
                 match callee {
                     Function(function) => {
-                        if function.parameters.len() != argument_count.try_into().unwrap() {
-                            todo!(
-                                "FIXME: type error on argcount mismatch: {} != {}",
-                                function.parameters.len(),
-                                argument_count,
-                            );
+                        if function.parameters.len() != argument_count.cast() {
+                            Err(Box::new(Error::ArityMismatch {
+                                callee,
+                                expected: function.parameters.len(),
+                                at: vm.error_location(),
+                            }))?
                         }
                         vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
                         vm.call_sp += 1;
@@ -254,8 +322,12 @@ pub fn run_bytecode<'a>(
                         vm.cell_vars = function.cells;
                     }
                     BoundMethod(method, _instance) => {
-                        if method.parameters.len() - 1 != argument_count.try_into().unwrap() {
-                            todo!("FIXME: type error on argcount mismatch");
+                        if method.parameters.len() - 1 != argument_count.cast() {
+                            Err(Box::new(Error::ArityMismatch {
+                                callee,
+                                expected: method.parameters.len() - 1,
+                                at: vm.error_location(),
+                            }))?
                         }
                         vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
                         vm.call_sp += 1;
@@ -268,7 +340,16 @@ pub fn run_bytecode<'a>(
                         let mut args: Vec<_> =
                             (0..argument_count).map(|_| vm.pop_stack()).collect();
                         args.reverse();
-                        let value = native_fn(args).unwrap_or_else(|_| todo!("native error"));
+                        let value = native_fn(args).map_err(|err| {
+                            Box::new(match err {
+                                NativeError::Error(err) => err,
+                                NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                                    callee,
+                                    expected,
+                                    at: vm.error_location(),
+                                },
+                            })
+                        })?;
                         vm.push_stack(value);
                     }
                     Class(class) => {
@@ -281,8 +362,12 @@ pub fn run_bytecode<'a>(
                         );
                         match class.lookup_method(interned::INIT) {
                             Some(Value::Function(init)) => {
-                                if init.parameters.len() - 1 != argument_count.try_into().unwrap() {
-                                    todo!("FIXME: type error on argcount mismatch");
+                                if init.parameters.len() - 1 != argument_count.cast() {
+                                    Err(Box::new(Error::ArityMismatch {
+                                        callee,
+                                        expected: init.parameters.len() - 1,
+                                        at: vm.error_location(),
+                                    }))?
                                 }
                                 vm.stack[vm.sp - 1 - argument_count.cast()] =
                                     BoundMethod(init, instance);
@@ -294,15 +379,17 @@ pub fn run_bytecode<'a>(
                             }
                             Some(_) => unreachable!(),
                             None if argument_count == 0 => vm.push_stack(Value::Instance(instance)),
-                            None => todo!("error: arity mismatch for `init`"),
-                            // None => Err(Error::ArityMismatch {
-                            //     callee: callee.clone(),
-                            //     expected: 0,
-                            //     at: expr.into_variant(),
-                            // })?,
+                            None => Err(Box::new(Error::ArityMismatch {
+                                callee,
+                                expected: 0,
+                                at: vm.error_location(),
+                            }))?,
                         }
                     }
-                    value => todo!("type error: uncallable: {value}"),
+                    _ => Err(Box::new(Error::Uncallable {
+                        callee,
+                        at: vm.error_location(),
+                    }))?,
                 }
             }
             Print => {
@@ -310,17 +397,20 @@ pub fn run_bytecode<'a>(
                 println!("{value}");
             }
             GlobalByName(name) => {
-                let variable = vm
-                    .env
-                    .get_global_slot_by_id(name)
-                    .unwrap()
-                    .try_into()
-                    .unwrap();
-                let value = vm.env[variable];
+                let variable = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
+                    let expr: ExpressionTypes::Name = vm.error_location();
+                    Box::new(Error::UndefinedName { at: *expr.0.name })
+                })?;
+
+                let value = vm.env[u32::try_from(variable).unwrap()];
                 vm.push_stack(value);
             }
             StoreGlobalByName(name) => {
-                let slot = vm.env.get_global_slot_by_id(name).unwrap();
+                let slot = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
+                    let expr: ExpressionTypes::Assign = vm.error_location();
+                    let target: AssignmentTargetTypes::Variable = expr.target.into_variant();
+                    Box::new(Error::UndefinedName { at: *target.0.name })
+                })?;
                 let value = vm.pop_stack();
                 vm.env.set(
                     vm.cell_vars,
@@ -401,7 +491,7 @@ pub fn run_bytecode<'a>(
                 vm.push_stack(value);
             }
             BuildClass(metadata_index) => {
-                let Metadata::Class { name, methods, has_base } =
+                let Metadata::Class { name, methods, base_error_location } =
                     vm.metadata[metadata_index.cast()]
                 else {
                     unreachable!()
@@ -411,10 +501,13 @@ pub fn run_bytecode<'a>(
                     .rev()
                     .map(|method| (method.name.id(), vm.pop_stack()))
                     .collect();
-                let base = if has_base {
+                let base = if let Some(error_location) = base_error_location {
                     match vm.pop_stack() {
                         Class(class) => Some(class),
-                        _ => unreachable!(),
+                        base => Err(Box::new(Error::InvalidBase {
+                            base,
+                            at: vm.error_location_at(error_location),
+                        }))?,
                     }
                 }
                 else {
@@ -457,7 +550,14 @@ pub fn run_bytecode<'a>(
                         Value::Function(method) => Value::BoundMethod(method, this),
                         _ => unreachable!(),
                     })
-                    .unwrap_or_else(|| todo!());
+                    .ok_or_else(|| {
+                        let super_ = vm.error_location();
+                        Box::new(Error::UndefinedSuperProperty {
+                            at: super_,
+                            super_: Value::Instance(this),
+                            attribute: super_.attribute,
+                        })
+                    })?;
                 vm.push_stack(value);
             }
         }
@@ -469,22 +569,34 @@ pub fn run_bytecode<'a>(
 #[track_caller]
 fn any_binop<'a, 'b>(
     vm: &mut Vm<'a, 'b>,
-    op: impl for<'c> FnOnce(&'c mut Vm<'a, 'b>, Value<'a>, Value<'a>) -> Value<'a>,
-) {
+    op: impl for<'c> FnOnce(
+        &'c mut Vm<'a, 'b>,
+        Value<'a>,
+        Value<'a>,
+    ) -> Result<Value<'a>, Box<Error<'a>>>,
+) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.pop_stack();
     let lhs = vm.pop_stack();
-    let result = op(vm, lhs, rhs);
+    let result = op(vm, lhs, rhs)?;
     vm.push_stack(result);
+    Ok(())
 }
 
 #[inline(always)]
 #[track_caller]
-fn number_binop<'a, 'b>(vm: &mut Vm<'a, 'b>, op: impl FnOnce(f64, f64) -> Value<'a>) {
+fn number_binop<'a, 'b>(
+    vm: &mut Vm<'a, 'b>,
+    op: impl FnOnce(f64, f64) -> Value<'a>,
+) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.pop_stack();
     let lhs = vm.pop_stack();
     let result = match (lhs, rhs) {
         (Number(lhs), Number(rhs)) => op(lhs, rhs),
-        _ => unreachable!("{lhs} <op> {rhs}"),
+        _ => {
+            let expr = vm.error_location();
+            Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+        }
     };
     vm.push_stack(result);
+    Ok(())
 }

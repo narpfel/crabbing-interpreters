@@ -34,10 +34,21 @@ fn testname() -> String {
         .replace(':', "_")
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Interpreter {
     Native(Loop),
     #[cfg(feature = "miri_tests")]
     Miri(Loop),
+}
+
+impl Interpreter {
+    fn loop_(self) -> Loop {
+        match self {
+            Interpreter::Native(loop_) => loop_,
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(loop_) => loop_,
+        }
+    }
 }
 
 impl From<Interpreter> for Command {
@@ -177,38 +188,20 @@ fn repl(_filter_output: OutputFilter, #[by_ref] testname: &str, #[case] src: &st
 #[apply(test_cases)]
 #[apply(interpreter)]
 fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) {
-    use std::ops::Not as _;
-
     let path = relative_to(
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
     );
 
     // FIXME: output is different in miri as the interpreter hard crashes
+    // FIXME: output is different in the bytecode loop
     #[cfg(feature = "miri_tests")]
-    if matches!(interpreter, Interpreter::Miri(_))
-        && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
-    {
-        return;
-    }
-
-    // FIXME: error message tests are skipped for bytecode loop because error messages are not
-    // implemented yet
-    #[cfg(feature = "miri_tests")]
-    let is_bytecode_in_miri = matches!(interpreter, Interpreter::Miri(Loop::Bytecode));
+    let is_miri = matches!(interpreter, Interpreter::Miri(_));
     #[cfg(not(feature = "miri_tests"))]
-    let is_bytecode_in_miri = false;
+    let is_miri = false;
 
-    if (matches!(interpreter, Interpreter::Native(Loop::Bytecode)) || is_bytecode_in_miri)
-        && Command::from(Interpreter::Native(Loop::Ast))
-            .current_dir("..")
-            .arg(path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .unwrap()
-            .success()
-            .not()
+    if (is_miri || matches!(interpreter.loop_(), Loop::Bytecode))
+        && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
     {
         return;
     }

@@ -129,6 +129,7 @@ struct Compiler<'a> {
     code: Vec<Bytecode>,
     constants: Vec<Value<'a>>,
     metadata: Vec<Metadata<'a>>,
+    error_locations: Vec<ContainingExpression<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -140,7 +141,7 @@ pub enum Metadata<'a> {
     Class {
         name: &'a str,
         methods: &'a [Function<'a>],
-        has_base: bool,
+        base_error_location: Option<usize>,
     },
 }
 
@@ -159,7 +160,7 @@ impl<'s> fmt::Debug for Metadata<'s> {
                 })
                 .field("code_size", code_size)
                 .finish(),
-            Metadata::Class { name, methods, has_base } => f
+            Metadata::Class { name, methods, base_error_location } => f
                 .debug_struct("Metadata::Class")
                 .field("name", name)
                 .field_with("methods", |f| {
@@ -176,8 +177,22 @@ impl<'s> fmt::Debug for Metadata<'s> {
                     });
                     list.finish()
                 })
-                .field("has_base", has_base)
+                .field("has_base", &base_error_location.is_some())
                 .finish(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ContainingExpression<'a> {
+    Enter { at: usize, expr: &'a Expression<'a> },
+    Exit { at: usize },
+}
+
+impl ContainingExpression<'_> {
+    pub(crate) fn at(&self) -> usize {
+        match self {
+            ContainingExpression::Enter { at, expr: _ } | ContainingExpression::Exit { at } => *at,
         }
     }
 }
@@ -185,12 +200,18 @@ impl<'s> fmt::Debug for Metadata<'s> {
 pub(crate) fn compile_program<'a>(
     gc: &'a Gc,
     program: &'a [Statement<'a>],
-) -> (Vec<Bytecode>, Vec<Value<'a>>, Vec<Metadata<'a>>) {
+) -> (
+    Vec<Bytecode>,
+    Vec<Value<'a>>,
+    Vec<Metadata<'a>>,
+    Vec<ContainingExpression<'a>>,
+) {
     let mut compiler = Compiler {
         gc,
         code: Vec::new(),
         constants: vec![Value::Nil, Value::Bool(false), Value::Bool(true)],
         metadata: Vec::new(),
+        error_locations: Vec::new(),
     };
 
     for stmt in program {
@@ -199,8 +220,14 @@ pub(crate) fn compile_program<'a>(
 
     compiler.code.push(End);
 
-    let Compiler { gc: _, code, constants, metadata } = compiler;
-    (code, constants, metadata)
+    let Compiler {
+        gc: _,
+        code,
+        constants,
+        metadata,
+        error_locations,
+    } = compiler;
+    (code, constants, metadata, error_locations)
 }
 
 impl<'a> Compiler<'a> {
@@ -314,9 +341,13 @@ impl<'a> Compiler<'a> {
                     self.code.push(Const(NIL_CONSTANT));
                     self.compile_define(target);
                 }
-                if let Some(base) = base {
+                let base_error_location = if let Some(base) = base {
                     self.compile_expr(base);
+                    Some(self.code.len().checked_sub(1).unwrap())
                 }
+                else {
+                    None
+                };
                 methods
                     .iter()
                     .for_each(|method| self.compile_function(method, FunctionKind::Method));
@@ -324,7 +355,7 @@ impl<'a> Compiler<'a> {
                 self.metadata.push(Metadata::Class {
                     name: target.name.slice(),
                     methods,
-                    has_base: base.is_some(),
+                    base_error_location,
                 });
                 self.code.push(BuildClass(meta_index.try_into().unwrap()));
                 self.compile_store(target);
@@ -332,7 +363,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn compile_expr(&mut self, expr: &Expression<'a>) {
+    fn compile_expr(&mut self, expr: &'a Expression<'a>) {
+        self.enter_expression(self.code.len(), expr);
         match expr {
             Expression::Literal(literal) => {
                 // FIXME: deduplicate constants
@@ -408,15 +440,7 @@ impl<'a> Compiler<'a> {
                 self.code.push(op);
             }
             Expression::Grouping { l_paren: _, expr, r_paren: _ } => self.compile_expr(expr),
-            Expression::Name(variable) => {
-                let op = match variable.target() {
-                    Target::Local(slot) => Local(slot.try_into().unwrap()),
-                    Target::GlobalByName => GlobalByName(variable.name.id()),
-                    Target::GlobalBySlot(slot) => Global(slot.try_into().unwrap()),
-                    Target::Cell(slot) => Cell(slot.try_into().unwrap()),
-                };
-                self.code.push(op);
-            }
+            Expression::Name(variable) => self.compile_load(variable),
             Expression::Assign { target, equal: _, value } => {
                 self.compile_expr(value);
                 self.code.push(Dup);
@@ -455,11 +479,22 @@ impl<'a> Compiler<'a> {
                 self.code.push(LoadAttr(attribute.id()));
             }
             Expression::Super { super_, this, attribute } => {
-                self.compile_expr(&Expression::Name(*this));
-                self.compile_expr(&Expression::Name(*super_));
+                self.compile_load(this);
+                self.compile_load(super_);
                 self.code.push(Super(attribute.id()));
             }
         }
+        self.exit_expression(self.code.len());
+    }
+
+    fn compile_load(&mut self, variable: &Variable<'_>) {
+        let op = match variable.target() {
+            Target::Local(slot) => Local(slot.try_into().unwrap()),
+            Target::GlobalByName => GlobalByName(variable.name.id()),
+            Target::GlobalBySlot(slot) => Global(slot.try_into().unwrap()),
+            Target::Cell(slot) => Cell(slot.try_into().unwrap()),
+        };
+        self.code.push(op);
     }
 
     fn compile_store(&mut self, variable: &Variable<'_>) {
@@ -512,5 +547,14 @@ impl<'a> Compiler<'a> {
             .push(Metadata::Function { function, code_size });
         self.code
             .push(BuildFunction(meta_index.try_into().unwrap()));
+    }
+
+    fn enter_expression(&mut self, at: usize, expr: &'a Expression<'a>) {
+        self.error_locations
+            .push(ContainingExpression::Enter { at, expr });
+    }
+
+    fn exit_expression(&mut self, at: usize) {
+        self.error_locations.push(ContainingExpression::Exit { at });
     }
 }

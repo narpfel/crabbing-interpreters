@@ -336,7 +336,7 @@ pub fn run<'a>(
             Environment::new(gc, global_name_offsets, global_cells)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
-        let (bytecode, constants, metadata) =
+        let (bytecode, constants, metadata, error_locations) =
             time("cmp", args.times, || compile_program(gc, program.stmts));
 
         if args.bytecode {
@@ -380,8 +380,14 @@ pub fn run<'a>(
                 offset: 0,
                 cell_vars: global_cells,
             }),
-            Loop::Bytecode =>
-                run_bytecode(&bytecode, &constants, &metadata, &mut stack, global_cells),
+            Loop::Bytecode => run_bytecode(
+                &bytecode,
+                &constants,
+                &metadata,
+                &error_locations,
+                &mut stack,
+                global_cells,
+            ),
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,
