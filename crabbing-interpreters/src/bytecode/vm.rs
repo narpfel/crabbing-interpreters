@@ -36,9 +36,9 @@ impl Cast for u32 {
 }
 
 struct Vm<'a, 'b> {
-    bytecode: &'a [Bytecode],
-    constants: GcRef<'a, [Value<'a>]>,
-    metadata: &'a [Metadata<'a>],
+    bytecode: &'b [Bytecode],
+    constants: &'b [Value<'a>],
+    metadata: &'b [Metadata<'a>],
     env: &'b mut Environment<'a>,
     pc: usize,
     stack: Box<[Value<'a>; ENV_SIZE]>,
@@ -95,9 +95,9 @@ impl<'a, 'b> Vm<'a, 'b> {
 }
 
 pub fn run_bytecode<'a>(
-    bytecode: &'a [Bytecode],
-    constants: GcRef<'a, [Value<'a>]>,
-    metadata: &'a [Metadata<'a>],
+    bytecode: &[Bytecode],
+    constants: &[Value<'a>],
+    metadata: &[Metadata<'a>],
     env: &mut Environment<'a>,
     global_cells: Cells<'a>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {

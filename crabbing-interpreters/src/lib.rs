@@ -380,13 +380,8 @@ pub fn run<'a>(
                 offset: 0,
                 cell_vars: global_cells,
             }),
-            Loop::Bytecode => run_bytecode(
-                bump.alloc_slice_copy(&bytecode),
-                GcRef::from_iter_in(gc, constants.into_iter()),
-                bump.alloc_slice_copy(&metadata),
-                &mut stack,
-                global_cells,
-            ),
+            Loop::Bytecode =>
+                run_bytecode(&bytecode, &constants, &metadata, &mut stack, global_cells),
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,
