@@ -96,11 +96,6 @@ impl<'a, 'b> Vm<'a, 'b> {
         self.stack[self.sp - 1]
     }
 
-    #[expect(unused)]
-    fn get_stack_entry(&self, index: u32) -> Value<'a> {
-        self.stack[index.cast()]
-    }
-
     fn get_constant(&self, index: u32) -> Value<'a> {
         self.constants[index.cast()]
     }
