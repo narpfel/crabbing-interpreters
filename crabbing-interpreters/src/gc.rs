@@ -35,7 +35,15 @@ unsafe impl Trace for u8 {
     fn trace(&self) {}
 }
 
+unsafe impl Trace for u32 {
+    fn trace(&self) {}
+}
+
 unsafe impl Trace for u64 {
+    fn trace(&self) {}
+}
+
+unsafe impl Trace for usize {
     fn trace(&self) {}
 }
 
@@ -81,6 +89,19 @@ where
 unsafe impl Trace for GcStr<'_> {
     fn trace(&self) {
         self.0.trace();
+    }
+}
+
+unsafe impl<T, U, V> Trace for (T, U, V)
+where
+    T: Trace,
+    U: Trace,
+    V: Trace,
+{
+    fn trace(&self) {
+        self.0.trace();
+        self.1.trace();
+        self.2.trace();
     }
 }
 

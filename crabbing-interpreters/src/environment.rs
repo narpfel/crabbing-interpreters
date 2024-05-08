@@ -147,13 +147,15 @@ impl<'a> Environment<'a> {
         })
     }
 
+    pub(crate) fn trace(&self) {
+        self.stack.trace();
+        self.global_cells.trace();
+    }
+
     pub(crate) fn collect_if_necessary(&self, last_value: Value<'a>, cell_vars: Cells<'a>) {
         if self.gc.collection_necessary() {
+            self.trace();
             last_value.trace();
-            for value in self.stack.iter() {
-                value.trace();
-            }
-            self.global_cells.trace();
             cell_vars.trace();
             unsafe {
                 self.gc.sweep();

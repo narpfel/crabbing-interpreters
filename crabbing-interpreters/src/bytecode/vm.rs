@@ -16,6 +16,7 @@ use crate::eval::ControlFlow;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
+use crate::gc::Trace;
 use crate::interner::interned;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
@@ -58,6 +59,19 @@ struct Vm<'a, 'b> {
 }
 
 impl<'a, 'b> Vm<'a, 'b> {
+    fn collect_if_necessary(&self) {
+        if self.env.gc.collection_necessary() {
+            self.constants.trace();
+            // FIXME: This leaves dangling references in the unused portions of `self.stack` and
+            // `self.call_stack`.
+            self.stack[..self.sp].trace();
+            self.call_stack[..self.call_sp].trace();
+            self.cell_vars.trace();
+            self.env.trace();
+            unsafe { self.env.gc.sweep() };
+        }
+    }
+
     fn push_stack(&mut self, value: Value<'a>) {
         #[cfg(feature = "debug_print")]
         {
@@ -562,6 +576,7 @@ pub fn run_bytecode<'a>(
             }
         }
         vm.pc += 1;
+        vm.collect_if_necessary();
     }
 }
 
