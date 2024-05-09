@@ -182,6 +182,8 @@ pub fn run_bytecode<'a>(
             );
         }
 
+        let previous_pc = vm.pc;
+
         match vm.bytecode[vm.pc] {
             Pop => {
                 vm.pop_stack();
@@ -569,7 +571,9 @@ pub fn run_bytecode<'a>(
             }
         }
         vm.pc += 1;
-        vm.collect_if_necessary();
+        if cfg!(miri) || previous_pc > vm.pc {
+            vm.collect_if_necessary();
+        }
     }
 }
 
