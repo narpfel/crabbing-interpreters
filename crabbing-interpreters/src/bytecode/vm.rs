@@ -62,8 +62,6 @@ impl<'a, 'b> Vm<'a, 'b> {
     fn collect_if_necessary(&self) {
         if self.env.gc.collection_necessary() {
             self.constants.trace();
-            // FIXME: This leaves dangling references in the unused portions of `self.stack` and
-            // `self.call_stack`.
             self.stack[..self.sp].trace();
             self.call_stack[..self.call_sp].trace();
             self.cell_vars.trace();
