@@ -5,8 +5,17 @@ info:
   args:
     - craftinginterpreters/test/constructor/return_value.lox
 ---
-success: true
-exit_code: 0
+success: false
+exit_code: 65
 ----- stdout -----
 
 ----- stderr -----
+Error: Initializer cannot return a value.
+   ╭─[craftinginterpreters/test/constructor/return_value.lox:3:5]
+   │
+ 3 │     return "result"; // Error at 'return': Can't return a value from an initializer.
+   │     ───┬── ────┬───  
+   │        │       ╰───── Help: remove this expression
+   │        │             
+   │        ╰───────────── cannot return a value
+───╯

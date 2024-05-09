@@ -34,10 +34,21 @@ fn testname() -> String {
         .replace(':', "_")
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Interpreter {
     Native(Loop),
     #[cfg(feature = "miri_tests")]
     Miri(Loop),
+}
+
+impl Interpreter {
+    fn loop_(self) -> Loop {
+        match self {
+            Interpreter::Native(loop_) => loop_,
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(loop_) => loop_,
+        }
+    }
 }
 
 impl From<Interpreter> for Command {
@@ -47,6 +58,11 @@ impl From<Interpreter> for Command {
             Interpreter::Native(Loop::Closures) => {
                 let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
                 command.arg("--loop=closures");
+                command
+            }
+            Interpreter::Native(Loop::Bytecode) => {
+                let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
+                command.arg("--loop=bytecode");
                 command
             }
             #[cfg(feature = "miri_tests")]
@@ -65,6 +81,14 @@ impl From<Interpreter> for Command {
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Bytecode) => {
+                let mut command = Command::new("cargo");
+                command
+                    .args(&["miri", "run", "-q", "--", "--loop=bytecode"])
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                command
+            }
         }
     }
 }
@@ -73,10 +97,15 @@ impl From<Interpreter> for Command {
 #[rstest]
 #[case::native_ast(Interpreter::Native(Loop::Ast))]
 #[case::native_closures(Interpreter::Native(Loop::Closures))]
+#[case::native_bytecode(Interpreter::Native(Loop::Bytecode))]
 #[cfg_attr(feature = "miri_tests", case::miri_ast(Interpreter::Miri(Loop::Ast)))]
 #[cfg_attr(
     feature = "miri_tests",
     case::miri_closures(Interpreter::Miri(Loop::Closures))
+)]
+#[cfg_attr(
+    feature = "miri_tests",
+    case::miri_bytecode(Interpreter::Miri(Loop::Bytecode))
 )]
 fn interpreter(#[case] interpreter: Interpreter) {}
 
@@ -165,8 +194,13 @@ fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) 
     );
 
     // FIXME: output is different in miri as the interpreter hard crashes
+    // FIXME: output is different in the bytecode loop
     #[cfg(feature = "miri_tests")]
-    if matches!(interpreter, Interpreter::Miri(_))
+    let is_miri = matches!(interpreter, Interpreter::Miri(_));
+    #[cfg(not(feature = "miri_tests"))]
+    let is_miri = false;
+
+    if (is_miri || matches!(interpreter.loop_(), Loop::Bytecode))
         && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
     {
         return;

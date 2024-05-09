@@ -35,7 +35,15 @@ unsafe impl Trace for u8 {
     fn trace(&self) {}
 }
 
+unsafe impl Trace for u32 {
+    fn trace(&self) {}
+}
+
 unsafe impl Trace for u64 {
+    fn trace(&self) {}
+}
+
+unsafe impl Trace for usize {
     fn trace(&self) {}
 }
 
@@ -61,7 +69,7 @@ where
     T: Trace + ?Sized,
 {
     fn trace(&self) {
-        let head = &self.0.head;
+        let head = &self.value().head;
         let state = head.get().state;
         match state {
             State::Unvisited => {
@@ -69,7 +77,7 @@ where
                     state: State::VisitingChildren,
                     ..head.get()
                 });
-                self.0.value.trace();
+                self.value().value.trace();
                 head.set(GcHead { state: State::Done, ..head.get() });
             }
             State::VisitingChildren => (),
@@ -81,6 +89,19 @@ where
 unsafe impl Trace for GcStr<'_> {
     fn trace(&self) {
         self.0.trace();
+    }
+}
+
+unsafe impl<T, U, V> Trace for (T, U, V)
+where
+    T: Trace,
+    U: Trace,
+    V: Trace,
+{
+    fn trace(&self) {
+        self.0.trace();
+        self.1.trace();
+        self.2.trace();
     }
 }
 
@@ -102,7 +123,7 @@ pub struct Gc {
 }
 
 impl Gc {
-    fn alloc<'a, T>(&'a self, value: T) -> &'a GcValue<'a, T>
+    fn alloc<'a, T>(&'a self, value: T) -> *const GcValue<'a, T>
     where
         T: Trace,
     {
@@ -120,8 +141,8 @@ impl Gc {
 
         unsafe {
             self.adopt(gc_value);
-            &*gc_value
         }
+        gc_value
     }
 
     unsafe fn adopt<'a, T>(&'a self, value: *mut GcValue<'a, T>)
@@ -232,7 +253,7 @@ enum State {
     Done,
 }
 
-pub struct GcRef<'gc, T>(&'gc GcValue<'gc, T>)
+pub struct GcRef<'gc, T>(*const GcValue<'gc, T>, PhantomData<&'gc GcValue<'gc, T>>)
 where
     T: ?Sized;
 
@@ -241,11 +262,22 @@ impl<'gc, T> GcRef<'gc, T> {
     where
         T: Trace,
     {
-        Self(gc.alloc(value))
+        Self(gc.alloc(value), PhantomData)
     }
 
     pub(crate) fn as_ptr(this: &Self) -> *const T {
-        &this.0.value
+        &GcRef::value(this).value
+    }
+}
+
+impl<'gc, T> GcRef<'gc, T>
+where
+    T: ?Sized,
+{
+    fn value(&self) -> &'gc GcValue<'gc, T> {
+        // SAFETY: This is safe for uncollected `GcRef`s. Callers of `Gc::sweep` must ensure that
+        // no reachable `GcRef`s are collected.
+        unsafe { &*self.0 }
     }
 }
 
@@ -288,7 +320,7 @@ impl<'gc, T> GcRef<'gc, [T]> {
             // adopt after initialising the slice to prevent dropping uninitialised values when the
             // loop above panics
             gc.adopt(gc_value);
-            Self(&*gc_value)
+            Self(gc_value, PhantomData)
         }
     }
 
@@ -337,7 +369,7 @@ where
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.0.value
+        &self.value().value
     }
 }
 
@@ -350,7 +382,16 @@ where
     type Item = <&'a T as IntoIterator>::Item;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.value.into_iter()
+        self.value().value.into_iter()
+    }
+}
+
+impl<T> fmt::Debug for GcRef<'_, T>
+where
+    T: ?Sized + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.deref().fmt(f)
     }
 }
 
@@ -363,19 +404,19 @@ impl<'a> GcStr<'a> {
     }
 
     fn str(&self) -> &'a str {
-        unsafe { std::str::from_utf8_unchecked(&self.0 .0.value) }
+        unsafe { std::str::from_utf8_unchecked(&self.0.value().value) }
     }
 }
 
 impl PartialEq for GcStr<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 .0.value == other.0 .0.value
+        self.0.value().value == other.0.value().value
     }
 }
 
 impl PartialOrd for GcStr<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0 .0.value.partial_cmp(&other.0 .0.value)
+        self.0.value().value.partial_cmp(&other.0.value().value)
     }
 }
 

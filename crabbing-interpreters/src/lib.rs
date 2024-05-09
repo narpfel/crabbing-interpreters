@@ -1,4 +1,5 @@
 #![feature(closure_lifetime_binder)]
+#![feature(debug_closure_helpers)]
 #![feature(lint_reasons)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
@@ -25,6 +26,8 @@ use clap::ValueEnum;
 pub(crate) use crabbing_interpreters_lex as lex;
 pub use crabbing_interpreters_lex::lex;
 
+use crate::bytecode::compile_program;
+use crate::bytecode::run_bytecode;
 use crate::closure_compiler::compile_block;
 use crate::closure_compiler::State;
 use crate::environment::Environment;
@@ -40,6 +43,7 @@ use crate::parse::Name;
 use crate::scope::resolve_names;
 use crate::value::Value;
 
+mod bytecode;
 mod closure_compiler;
 mod environment;
 mod eval;
@@ -49,6 +53,9 @@ mod nonempty;
 mod parse;
 mod scope;
 mod value;
+
+const EMPTY: &str = "";
+const DEBUG_INDENT: usize = 8;
 
 pub trait AllocPath {
     fn alloc_path(&self, path: impl AsRef<Path>) -> &Path;
@@ -164,6 +171,9 @@ struct Args {
     filename: Option<PathBuf>,
     #[arg(short, long)]
     scopes: bool,
+    /// print bytecode
+    #[arg(short, long)]
+    bytecode: bool,
     #[arg(short, long)]
     times: bool,
     #[arg(long)]
@@ -175,6 +185,7 @@ struct Args {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum StopAt {
     Scopes,
+    Bytecode,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -182,6 +193,7 @@ pub enum Loop {
     #[default]
     Ast,
     Closures,
+    Bytecode,
 }
 
 fn repl() -> Result<(), Box<dyn Report>> {
@@ -324,6 +336,43 @@ pub fn run<'a>(
             Environment::new(gc, global_name_offsets, global_cells)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
+        let (bytecode, constants, metadata, error_locations) =
+            time("cmp", args.times, || compile_program(gc, program.stmts));
+
+        if args.bytecode {
+            println!("Interned strings");
+            interner.print_interned_strings();
+            println!();
+
+            println!("Metadata");
+            for (i, metadata) in metadata.iter().enumerate() {
+                print!("{i:>DEBUG_INDENT$}:  ");
+                let metadata_string = format!("{metadata:#?}");
+                let mut lines = metadata_string.lines();
+                println!("{}", lines.next().unwrap());
+                for line in lines {
+                    println!("{EMPTY:>DEBUG_INDENT$}|  {line}");
+                }
+            }
+            println!();
+
+            println!("Constants");
+            for (i, constant) in constants.iter().enumerate() {
+                println!("{i:>DEBUG_INDENT$}:  {}", constant.lox_debug());
+            }
+            println!();
+
+            println!("Bytecode");
+            for (i, bytecode) in bytecode.iter().enumerate() {
+                println!("{i:>DEBUG_INDENT$}   {bytecode}");
+            }
+
+            if args.stop_at == Some(StopAt::Bytecode) {
+                return Ok(());
+            }
+            println!()
+        }
+
         match time("exe", args.times, || match args.r#loop {
             Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells),
             Loop::Closures => execute_closures(&mut State {
@@ -331,6 +380,14 @@ pub fn run<'a>(
                 offset: 0,
                 cell_vars: global_cells,
             }),
+            Loop::Bytecode => run_bytecode(
+                &bytecode,
+                &constants,
+                &metadata,
+                &error_locations,
+                &mut stack,
+                global_cells,
+            ),
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,

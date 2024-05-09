@@ -1,4 +1,6 @@
 use std::cell::Cell;
+use std::ops::Index;
+use std::ops::IndexMut;
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -18,10 +20,10 @@ use crate::value::NativeError;
 use crate::value::Value;
 
 #[cfg(not(miri))]
-const ENV_SIZE: usize = 100_000;
+pub(crate) const ENV_SIZE: usize = 100_000;
 
 #[cfg(miri)]
-const ENV_SIZE: usize = 1_000;
+pub(crate) const ENV_SIZE: usize = 1_000;
 
 pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,
@@ -72,14 +74,19 @@ impl<'a> Environment<'a> {
         self.stack[index]
     }
 
+    pub(crate) fn get_global_slot_by_id(&self, id: InternedString) -> Option<usize> {
+        match self.globals.get(&id).copied() {
+            Some(slot) if self.is_global_defined[slot] => Some(slot),
+            _ => None,
+        }
+    }
+
     pub(crate) fn get_global_slot_by_name(
         &self,
         name: &'a Name<'a>,
     ) -> Result<usize, Box<Error<'a>>> {
-        match self.globals.get(&name.id()).copied() {
-            Some(slot) if self.is_global_defined[slot] => Ok(slot),
-            _ => Err(Box::new(Error::UndefinedName { at: *name })),
-        }
+        self.get_global_slot_by_id(name.id())
+            .ok_or_else(|| Box::new(Error::UndefinedName { at: *name }))
     }
 
     pub(crate) fn get_global_by_name(
@@ -140,17 +147,33 @@ impl<'a> Environment<'a> {
         })
     }
 
+    pub(crate) fn trace(&self) {
+        self.stack.trace();
+        self.global_cells.trace();
+    }
+
     pub(crate) fn collect_if_necessary(&self, last_value: Value<'a>, cell_vars: Cells<'a>) {
         if self.gc.collection_necessary() {
+            self.trace();
             last_value.trace();
-            for value in self.stack.iter() {
-                value.trace();
-            }
-            self.global_cells.trace();
             cell_vars.trace();
             unsafe {
                 self.gc.sweep();
             }
         }
+    }
+}
+
+impl<'a> Index<u32> for Environment<'a> {
+    type Output = Value<'a>;
+
+    fn index(&self, index: u32) -> &Self::Output {
+        &self.stack[usize::try_from(index).unwrap()]
+    }
+}
+
+impl<'a> IndexMut<u32> for Environment<'a> {
+    fn index_mut(&mut self, index: u32) -> &mut Self::Output {
+        &mut self.stack[usize::try_from(index).unwrap()]
     }
 }

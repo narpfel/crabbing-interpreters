@@ -7,9 +7,10 @@ info:
     - run
     - "-q"
     - "--"
+    - "--loop=closures"
     - nonexistent_file
   env:
-    MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-ignore-leaks"
+    MIRIFLAGS: "-Zmiri-disable-isolation"
 ---
 success: false
 exit_code: 74

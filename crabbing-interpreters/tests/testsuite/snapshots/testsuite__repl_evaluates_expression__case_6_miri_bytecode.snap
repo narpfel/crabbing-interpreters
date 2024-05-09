@@ -7,8 +7,9 @@ info:
     - run
     - "-q"
     - "--"
+    - "--loop=bytecode"
   env:
-    MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-ignore-leaks"
+    MIRIFLAGS: "-Zmiri-disable-isolation"
   stdin: 1 + 2;
 ---
 success: true

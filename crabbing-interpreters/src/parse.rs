@@ -14,7 +14,7 @@ use crate::lex::TokenKind;
 use crate::scope::ErrorAtToken;
 use crate::Sliced;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum FunctionKind {
     Function,
     Method,

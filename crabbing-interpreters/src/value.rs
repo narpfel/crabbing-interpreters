@@ -17,7 +17,7 @@ use crate::scope::Variable;
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<Value<'a>>>>]>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-#[repr(u64)]
+#[repr(align(16))]
 pub enum Value<'a> {
     Number(f64),
     String(GcStr<'a>),
@@ -109,6 +109,7 @@ pub struct FunctionInner<'a> {
     pub(crate) code: &'a [Statement<'a>],
     pub(crate) cells: Cells<'a>,
     pub(crate) compiled_body: &'a Execute<'a>,
+    pub(crate) code_ptr: usize,
 }
 
 unsafe impl Trace for FunctionInner<'_> {
