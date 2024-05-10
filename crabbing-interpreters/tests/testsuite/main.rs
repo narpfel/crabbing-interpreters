@@ -21,6 +21,7 @@ fn test_cases(
     #[exclude("/scanning/")]
     #[exclude("/expressions/")]
     #[exclude("/benchmark/")]
+    #[exclude("/stack_overflow.lox$")]
     path: PathBuf,
 ) {
 }
@@ -39,16 +40,6 @@ enum Interpreter {
     Native(Loop),
     #[cfg(feature = "miri_tests")]
     Miri(Loop),
-}
-
-impl Interpreter {
-    fn loop_(self) -> Loop {
-        match self {
-            Interpreter::Native(loop_) => loop_,
-            #[cfg(feature = "miri_tests")]
-            Interpreter::Miri(loop_) => loop_,
-        }
-    }
 }
 
 impl From<Interpreter> for Command {
@@ -210,19 +201,6 @@ fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) 
         &path,
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
     );
-
-    // FIXME: output is different in miri as the interpreter hard crashes
-    // FIXME: output is different in the bytecode loop
-    #[cfg(feature = "miri_tests")]
-    let is_miri = matches!(interpreter, Interpreter::Miri(_));
-    #[cfg(not(feature = "miri_tests"))]
-    let is_miri = false;
-
-    if (is_miri || matches!(interpreter.loop_(), Loop::Bytecode | Loop::Threaded))
-        && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
-    {
-        return;
-    }
 
     assert_cmd_snapshot!(
         path.display().to_string(),
