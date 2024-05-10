@@ -26,10 +26,20 @@ jobs:
           curl -LsSf https://insta.rs/install.sh | sh
       - name: test
         run: |
+          set -x
+          ulimit -a
+          ulimit -s $((8192 * 10))
+          ulimit -a
+
           # ignore unreferenced snapshots here because miri snapshots would be
           # rejected here
           cargo insta test --unreferenced=ignore
       - name: miri tests
         run: |
+          set -x
+          ulimit -a
+          ulimit -s $((8192 * 10))
+          ulimit -a
+
           cargo miri test --lib
           cargo insta test --features=miri_tests --unreferenced=reject
