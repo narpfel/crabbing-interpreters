@@ -1,8 +1,10 @@
 use std::fmt;
 
+use crate::bytecode::Bytecode;
+use crate::bytecode::Bytecode::*;
+use crate::bytecode::CallInner;
 use crate::gc::Gc;
 use crate::gc::GcStr;
-use crate::interner::InternedString;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::FunctionKind;
@@ -19,110 +21,6 @@ use crate::value::Value;
 const NIL_CONSTANT: u32 = 0;
 const FALSE_CONSTANT: u32 = 1;
 const TRUE_CONSTANT: u32 = 2;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Bytecode {
-    Pop,
-    Const(u32),
-    UnaryMinus,
-    UnaryNot,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Power,
-    Local(u32),
-    Global(u32),
-    Cell(u32),
-    Dup,
-    StoreAttr(InternedString),
-    LoadAttr(InternedString),
-    StoreLocal(u32),
-    StoreGlobal(u32),
-    StoreCell(u32),
-    DefineCell(u32),
-    Call {
-        argument_count: u32,
-        stack_size_at_callsite: u32,
-    },
-    Print,
-    GlobalByName(InternedString),
-    StoreGlobalByName(InternedString),
-    JumpIfTrue(u32),
-    JumpIfFalse(u32),
-    PopJumpIfTrue(u32),
-    PopJumpIfFalse(u32),
-    Jump(u32),
-    BeginFunction(u32),
-    Return,
-    BuildFunction(u32),
-    End,
-    Pop2,
-    BuildClass(u32),
-    #[allow(unused)]
-    PrintStack,
-    BoundMethodGetInstance,
-    Super(InternedString),
-}
-
-use Bytecode::*;
-
-impl fmt::Display for Bytecode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Pop => write!(f, "pop"),
-            Const(constant) => write!(f, "const {constant}"),
-            UnaryMinus => write!(f, "unary_minus"),
-            UnaryNot => write!(f, "unary_not"),
-            Equal => write!(f, "equal"),
-            NotEqual => write!(f, "not_equal"),
-            Less => write!(f, "less"),
-            LessEqual => write!(f, "less_equal"),
-            Greater => write!(f, "greater"),
-            GreaterEqual => write!(f, "greater_equal"),
-            Add => write!(f, "add"),
-            Subtract => write!(f, "subtract"),
-            Multiply => write!(f, "multiply"),
-            Divide => write!(f, "divide"),
-            Power => write!(f, "power"),
-            Local(slot) => write!(f, "load_local {slot}"),
-            Global(slot) => write!(f, "load_global {slot}"),
-            Cell(slot) => write!(f, "load_cell {slot}"),
-            Dup => write!(f, "dup"),
-            StoreAttr(string) => write!(f, "store_attr {string}"),
-            LoadAttr(string) => write!(f, "load_attr {string}"),
-            StoreLocal(slot) => write!(f, "store_local {slot}"),
-            StoreGlobal(slot) => write!(f, "store_global {slot}"),
-            StoreCell(slot) => write!(f, "store_cell {slot}"),
-            DefineCell(slot) => write!(f, "define_cell {slot}"),
-            Call { argument_count, stack_size_at_callsite } =>
-                write!(f, "call +{stack_size_at_callsite} arity={argument_count}"),
-            Print => write!(f, "print"),
-            GlobalByName(string) => write!(f, "global_by_name {string}"),
-            StoreGlobalByName(string) => write!(f, "store_global_by_name {string}"),
-            JumpIfTrue(target) => write!(f, "jump_if_true {target}"),
-            JumpIfFalse(target) => write!(f, "jump_if_false {target}"),
-            PopJumpIfTrue(target) => write!(f, "pop_jump_if_true {target}"),
-            PopJumpIfFalse(target) => write!(f, "pop_jump_if_false {target}"),
-            Jump(target) => write!(f, "jump {target}"),
-            BeginFunction(size) => write!(f, "function {size}"),
-            Return => write!(f, "return"),
-            BuildFunction(meta_index) => write!(f, "build_function {meta_index}"),
-            End => write!(f, "end"),
-            Pop2 => write!(f, "pop2"),
-            BuildClass(meta_index) => write!(f, "build_class {meta_index}"),
-            PrintStack => write!(f, "print_stack"),
-            BoundMethodGetInstance => write!(f, "bound_method_get_instance"),
-            Super(name) => write!(f, "super {name}"),
-        }
-    }
-}
 
 struct Compiler<'a> {
     gc: &'a Gc,
@@ -468,10 +366,10 @@ impl<'a> Compiler<'a> {
                 for arg in *arguments {
                     self.compile_expr(arg);
                 }
-                self.code.push(Call {
+                self.code.push(Call(CallInner {
                     argument_count: arguments.len().try_into().unwrap(),
                     stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
-                });
+                }));
                 self.code.push(Pop2);
             }
             Expression::Attribute { lhs, attribute } => {

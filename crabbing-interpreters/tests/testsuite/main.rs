@@ -65,6 +65,11 @@ impl From<Interpreter> for Command {
                 command.arg("--loop=bytecode");
                 command
             }
+            Interpreter::Native(Loop::Threaded) => {
+                let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
+                command.arg("--loop=threaded");
+                command
+            }
             #[cfg(feature = "miri_tests")]
             Interpreter::Miri(Loop::Ast) => {
                 let mut command = Command::new("cargo");
@@ -89,6 +94,14 @@ impl From<Interpreter> for Command {
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Threaded) => {
+                let mut command = Command::new("cargo");
+                command
+                    .args(&["miri", "run", "-q", "--", "--loop=threaded"])
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                command
+            }
         }
     }
 }
@@ -98,6 +111,7 @@ impl From<Interpreter> for Command {
 #[case::native_ast(Interpreter::Native(Loop::Ast))]
 #[case::native_closures(Interpreter::Native(Loop::Closures))]
 #[case::native_bytecode(Interpreter::Native(Loop::Bytecode))]
+#[case::native_threaded(Interpreter::Native(Loop::Threaded))]
 #[cfg_attr(feature = "miri_tests", case::miri_ast(Interpreter::Miri(Loop::Ast)))]
 #[cfg_attr(
     feature = "miri_tests",
@@ -106,6 +120,10 @@ impl From<Interpreter> for Command {
 #[cfg_attr(
     feature = "miri_tests",
     case::miri_bytecode(Interpreter::Miri(Loop::Bytecode))
+)]
+#[cfg_attr(
+    feature = "miri_tests",
+    case::miri_threaded(Interpreter::Miri(Loop::Threaded))
 )]
 fn interpreter(#[case] interpreter: Interpreter) {}
 
@@ -200,7 +218,7 @@ fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) 
     #[cfg(not(feature = "miri_tests"))]
     let is_miri = false;
 
-    if (is_miri || matches!(interpreter.loop_(), Loop::Bytecode))
+    if (is_miri || matches!(interpreter.loop_(), Loop::Bytecode | Loop::Threaded))
         && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
     {
         return;
