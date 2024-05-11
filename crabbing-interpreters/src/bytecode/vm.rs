@@ -243,18 +243,17 @@ pub(crate) fn execute_bytecode<'a>(
             vm.push_stack(vm.get_constant(i));
         }
         UnaryMinus => {
-            let value = match vm.pop_stack() {
-                Number(x) => Number(-x),
-                value => {
+            match vm.pop_stack() {
+                Number(x) => vm.push_stack(Number(-x)),
+                value => outline! {
                     let expr = vm.error_location();
                     Err(Box::new(Error::InvalidUnaryOp {
                         value,
                         at: expr,
                         op: expr.0,
-                    }))?
-                }
+                    }))
+                }?,
             };
-            vm.push_stack(value);
         }
         UnaryNot => {
             let value = vm.pop_stack();
@@ -270,15 +269,15 @@ pub(crate) fn execute_bytecode<'a>(
             (Number(lhs), Number(rhs)) => Ok(Number(lhs + rhs)),
             (String(lhs), String(rhs)) =>
                 Ok(String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}")))),
-            _ => {
+            _ => outline! {
                 let expr = vm.error_location();
                 Err(Box::new(Error::InvalidBinaryOp {
                     at: expr,
                     lhs,
                     op: expr.op,
                     rhs,
-                }))?
-            }
+                }))
+            }?,
         })?,
         Subtract => number_binop(vm, |lhs, rhs| Number(lhs - rhs))?,
         Multiply => number_binop(vm, |lhs, rhs| Number(lhs * rhs))?,
@@ -369,11 +368,11 @@ pub(crate) fn execute_bytecode<'a>(
             match callee {
                 Function(function) => {
                     if function.parameters.len() != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
+                        outline!(Err(Box::new(Error::ArityMismatch {
                             callee,
                             expected: function.parameters.len(),
                             at: vm.error_location(),
-                        }))?
+                        })))?
                     }
                     vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
                     vm.call_sp += 1;
@@ -383,11 +382,11 @@ pub(crate) fn execute_bytecode<'a>(
                 }
                 BoundMethod(method, _instance) => {
                     if method.parameters.len() - 1 != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
+                        outline!(Err(Box::new(Error::ArityMismatch {
                             callee,
                             expected: method.parameters.len() - 1,
                             at: vm.error_location(),
-                        }))?
+                        })))?
                     }
                     vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
                     vm.call_sp += 1;
@@ -400,14 +399,16 @@ pub(crate) fn execute_bytecode<'a>(
                     let mut args: Vec<_> = (0..argument_count).map(|_| vm.pop_stack()).collect();
                     args.reverse();
                     let value = native_fn(args).map_err(|err| {
-                        Box::new(match err {
-                            NativeError::Error(err) => err,
-                            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                                callee,
-                                expected,
-                                at: vm.error_location(),
-                            },
-                        })
+                        outline! {
+                            Box::new(match err {
+                                NativeError::Error(err) => err,
+                                NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                                    callee,
+                                    expected,
+                                    at: vm.error_location(),
+                                },
+                            })
+                        }
                     })?;
                     vm.push_stack(value);
                 }
@@ -422,11 +423,11 @@ pub(crate) fn execute_bytecode<'a>(
                     match class.lookup_method(interned::INIT) {
                         Some(Value::Function(init)) => {
                             if init.parameters.len() - 1 != argument_count.cast() {
-                                Err(Box::new(Error::ArityMismatch {
+                                outline!(Err(Box::new(Error::ArityMismatch {
                                     callee,
                                     expected: init.parameters.len() - 1,
                                     at: vm.error_location(),
-                                }))?
+                                })))?
                             }
                             vm.stack[vm.sp - 1 - argument_count.cast()] =
                                 BoundMethod(init, instance);
@@ -438,17 +439,17 @@ pub(crate) fn execute_bytecode<'a>(
                         }
                         Some(_) => unreachable!(),
                         None if argument_count == 0 => vm.push_stack(Value::Instance(instance)),
-                        None => Err(Box::new(Error::ArityMismatch {
+                        None => outline!(Err(Box::new(Error::ArityMismatch {
                             callee,
                             expected: 0,
                             at: vm.error_location(),
-                        }))?,
+                        })))?,
                     }
                 }
-                _ => Err(Box::new(Error::Uncallable {
+                _ => outline!(Err(Box::new(Error::Uncallable {
                     callee,
                     at: vm.error_location(),
-                }))?,
+                })))?,
             }
         }
         Print => outline! {
@@ -651,13 +652,14 @@ fn number_binop<'a, 'b>(
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.pop_stack();
     let lhs = vm.pop_stack();
-    let result = match (lhs, rhs) {
-        (Number(lhs), Number(rhs)) => op(lhs, rhs),
-        _ => {
-            let expr = vm.error_location();
-            Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+    match (lhs, rhs) {
+        (Number(lhs), Number(rhs)) => {
+            vm.push_stack(op(lhs, rhs));
+            Ok(())
         }
-    };
-    vm.push_stack(result);
-    Ok(())
+        _ => outline! {
+            let expr = vm.error_location();
+            Err(Box::new(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs }))
+        },
+    }
 }
