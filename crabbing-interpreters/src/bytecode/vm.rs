@@ -230,7 +230,7 @@ pub(crate) fn execute_bytecode<'a>(
 
     #[cfg(feature = "count_bytecode_execution")]
     {
-        vm.execution_counts[usize::try_from(bytecode.discriminant()).unwrap()] += 1;
+        vm.execution_counts[bytecode.discriminant()] += 1;
     }
 
     let previous_pc = vm.pc;
