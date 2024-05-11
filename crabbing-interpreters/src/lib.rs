@@ -30,6 +30,7 @@ use itertools::Itertools as _;
 
 use crate::bytecode::compile_program;
 use crate::bytecode::run_bytecode;
+use crate::bytecode::Bytecode;
 use crate::bytecode::CompiledBytecodes;
 use crate::bytecode::Vm;
 use crate::closure_compiler::compile_block;
@@ -184,6 +185,8 @@ struct Args {
     stop_at: Option<StopAt>,
     #[arg(short, long, value_enum, default_value_t)]
     r#loop: Loop,
+    #[arg(long)]
+    show_bytecode_execution_counts: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -411,6 +414,23 @@ pub fn run<'a>(
                 );
                 let mut error = None;
                 compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes, &mut error);
+
+                if args.show_bytecode_execution_counts {
+                    let max_len = Bytecode::all_discriminants()
+                        .map(Bytecode::name)
+                        .map(str::len)
+                        .into_iter()
+                        .max()
+                        .unwrap();
+                    eprintln!("Bytecode execution counts");
+                    for (discriminant, count) in vm.execution_counts().iter().enumerate() {
+                        eprintln!(
+                            "{:>max_len$} ({discriminant:>2}): {count:>12}",
+                            Bytecode::name(discriminant)
+                        );
+                    }
+                }
+
                 match error {
                     Some(error) => Err(error.into()),
                     None => Ok(Value::Nil),

@@ -57,6 +57,7 @@ pub(crate) struct Vm<'a, 'b> {
     call_stack: Box<[(usize, u32, Cells<'a>); ENV_SIZE]>,
     call_sp: usize,
     cell_vars: Cells<'a>,
+    execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
 }
 
 impl<'a, 'b> Vm<'a, 'b> {
@@ -87,6 +88,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             call_stack,
             call_sp: 0,
             cell_vars: global_cells,
+            execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
         }
     }
 
@@ -96,6 +98,10 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn pc(&self) -> usize {
         self.pc
+    }
+
+    pub(crate) fn execution_counts(&self) -> &[u64; Bytecode::all_discriminants().len()] {
+        &self.execution_counts
     }
 
     fn collect_if_necessary(&self) {
@@ -207,6 +213,11 @@ pub(crate) fn execute_bytecode<'a>(
             pc = vm.pc,
             sp = vm.sp,
         );
+    }
+
+    #[cfg(feature = "count_bytecode_execution")]
+    {
+        vm.execution_counts[usize::try_from(bytecode.discriminant()).unwrap()] += 1;
     }
 
     let previous_pc = vm.pc;

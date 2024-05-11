@@ -36,6 +36,26 @@ macro_rules! bytecode {
         }
 
         impl $name {
+            #[cfg_attr(not(feature = "count_bytecode_execution"), expect(unused))]
+            pub(crate) const fn discriminant(self) -> usize {
+                match self {
+                    $( $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => ${index()}, )*
+                }
+            }
+
+            pub(crate) const fn all_discriminants() -> [usize; ${count($variant_name)}] {
+                [
+                    $( ${ignore($variant_name)} ${index()} ),*
+                ]
+            }
+
+            pub(crate) const fn name(discriminant: usize) -> &'static str {
+                match discriminant {
+                    $( ${index()} => stringify!($variant_name), )*
+                    _ => unreachable!(),
+                }
+            }
+
             pub(crate) fn compile(self) -> CompiledBytecode {
                 match self {
                     $(
