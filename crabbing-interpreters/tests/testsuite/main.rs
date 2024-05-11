@@ -239,3 +239,20 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
         assert_cmd_snapshot!(format!("scope-{}", path.display()), command());
     }
 }
+
+#[test]
+#[ignore]
+fn test_that_threaded_interpreter_is_properly_tailrecursive() {
+    assert_cmd_snapshot!(Command::new("cargo")
+        .args([
+            "run",
+            "--profile=perf",
+            "--quiet",
+            "--features=count_bytecode_execution",
+            "--",
+            "--loop=threaded",
+            "--show-bytecode-execution-counts",
+            "tests/tailrec/test_tailrec.lox",
+        ])
+        .stdout(Stdio::null()));
+}

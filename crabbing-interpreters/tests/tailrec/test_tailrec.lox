@@ -1,0 +1,64 @@
+fun f() {}
+
+for (var i = 0; i < 1000000; i = i + 1) {
+    nil;
+    -1;
+    !nil;
+    "a" == "b";
+    "a" != "b";
+    42 < 27;
+    27 <= 27;
+    42 > 27;
+    27 >= 27;
+    1 + 2;
+    "a" + "b";
+    2 - 1;
+    4 * 4;
+    4 / 2;
+    2 ** 2;
+    i;
+    f;
+    f = 42;
+
+    while (false) {}
+
+    if (false) {}
+    if (true) {}
+    if (false) {} else {}
+    if (true) {} else {}
+
+    var j = 0;
+    fun g() {
+        i * 2;
+        j;
+    }
+    g();
+
+    class C {
+        method() {}
+    }
+    print 42;
+    var x = C();
+    x.i = 42;
+    x.i;
+    x.method();
+
+    class D < C {
+        method() {
+            super.method();
+        }
+    }
+    var d = D();
+    d.method();
+    clock();
+}
+
+fun f() {
+    i = 42;
+    i;
+}
+
+var i = 0;
+for (var i = 0; i < 1000000; i = i + 1) {
+    f();
+}

@@ -33,7 +33,7 @@ jobs:
 
           # ignore unreferenced snapshots here because miri snapshots would be
           # rejected here
-          cargo insta test --unreferenced=ignore
+          cargo insta test --unreferenced=ignore -- --include-ignored
       - name: miri tests
         run: |
           set -x
@@ -42,4 +42,8 @@ jobs:
           ulimit -a
 
           cargo miri test --lib
-          cargo insta test --features=miri_tests --unreferenced=reject
+          cargo insta test \
+            --features=miri_tests \
+            --unreferenced=reject \
+            -- \
+            --include-ignored
