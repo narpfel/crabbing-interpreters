@@ -21,6 +21,7 @@ fn test_cases(
     #[exclude("/scanning/")]
     #[exclude("/expressions/")]
     #[exclude("/benchmark/")]
+    #[exclude("/stack_overflow.lox$")]
     path: PathBuf,
 ) {
 }
@@ -41,16 +42,6 @@ enum Interpreter {
     Miri(Loop),
 }
 
-impl Interpreter {
-    fn loop_(self) -> Loop {
-        match self {
-            Interpreter::Native(loop_) => loop_,
-            #[cfg(feature = "miri_tests")]
-            Interpreter::Miri(loop_) => loop_,
-        }
-    }
-}
-
 impl From<Interpreter> for Command {
     fn from(interpreter: Interpreter) -> Self {
         match interpreter {
@@ -63,6 +54,11 @@ impl From<Interpreter> for Command {
             Interpreter::Native(Loop::Bytecode) => {
                 let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
                 command.arg("--loop=bytecode");
+                command
+            }
+            Interpreter::Native(Loop::Threaded) => {
+                let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
+                command.arg("--loop=threaded");
                 command
             }
             #[cfg(feature = "miri_tests")]
@@ -89,6 +85,14 @@ impl From<Interpreter> for Command {
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
+            #[cfg(feature = "miri_tests")]
+            Interpreter::Miri(Loop::Threaded) => {
+                let mut command = Command::new("cargo");
+                command
+                    .args(&["miri", "run", "-q", "--", "--loop=threaded"])
+                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                command
+            }
         }
     }
 }
@@ -98,6 +102,7 @@ impl From<Interpreter> for Command {
 #[case::native_ast(Interpreter::Native(Loop::Ast))]
 #[case::native_closures(Interpreter::Native(Loop::Closures))]
 #[case::native_bytecode(Interpreter::Native(Loop::Bytecode))]
+#[case::native_threaded(Interpreter::Native(Loop::Threaded))]
 #[cfg_attr(feature = "miri_tests", case::miri_ast(Interpreter::Miri(Loop::Ast)))]
 #[cfg_attr(
     feature = "miri_tests",
@@ -106,6 +111,10 @@ impl From<Interpreter> for Command {
 #[cfg_attr(
     feature = "miri_tests",
     case::miri_bytecode(Interpreter::Miri(Loop::Bytecode))
+)]
+#[cfg_attr(
+    feature = "miri_tests",
+    case::miri_threaded(Interpreter::Miri(Loop::Threaded))
 )]
 fn interpreter(#[case] interpreter: Interpreter) {}
 
@@ -193,19 +202,6 @@ fn tests(_filter_output: OutputFilter, path: PathBuf, interpreter: Interpreter) 
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
     );
 
-    // FIXME: output is different in miri as the interpreter hard crashes
-    // FIXME: output is different in the bytecode loop
-    #[cfg(feature = "miri_tests")]
-    let is_miri = matches!(interpreter, Interpreter::Miri(_));
-    #[cfg(not(feature = "miri_tests"))]
-    let is_miri = false;
-
-    if (is_miri || matches!(interpreter.loop_(), Loop::Bytecode))
-        && path == Path::new("craftinginterpreters/test/limit/stack_overflow.lox")
-    {
-        return;
-    }
-
     assert_cmd_snapshot!(
         path.display().to_string(),
         Command::from(interpreter).current_dir("..").arg(path),
@@ -242,4 +238,21 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
     {
         assert_cmd_snapshot!(format!("scope-{}", path.display()), command());
     }
+}
+
+#[test]
+#[ignore]
+fn test_that_threaded_interpreter_is_properly_tailrecursive() {
+    assert_cmd_snapshot!(Command::new("cargo")
+        .args([
+            "run",
+            "--profile=perf",
+            "--quiet",
+            "--features=count_bytecode_execution",
+            "--",
+            "--loop=threaded",
+            "--show-bytecode-execution-counts",
+            "tests/tailrec/test_tailrec.lox",
+        ])
+        .stdout(Stdio::null()));
 }

@@ -1,6 +1,7 @@
 #![feature(closure_lifetime_binder)]
 #![feature(debug_closure_helpers)]
 #![feature(lint_reasons)]
+#![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
 #![feature(slice_ptr_get)]
@@ -25,9 +26,13 @@ use clap::Parser;
 use clap::ValueEnum;
 pub(crate) use crabbing_interpreters_lex as lex;
 pub use crabbing_interpreters_lex::lex;
+use itertools::Itertools as _;
 
 use crate::bytecode::compile_program;
 use crate::bytecode::run_bytecode;
+use crate::bytecode::Bytecode;
+use crate::bytecode::CompiledBytecodes;
+use crate::bytecode::Vm;
 use crate::closure_compiler::compile_block;
 use crate::closure_compiler::State;
 use crate::environment::Environment;
@@ -180,6 +185,8 @@ struct Args {
     stop_at: Option<StopAt>,
     #[arg(short, long, value_enum, default_value_t)]
     r#loop: Loop,
+    #[arg(long)]
+    show_bytecode_execution_counts: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -194,6 +201,7 @@ pub enum Loop {
     Ast,
     Closures,
     Bytecode,
+    Threaded,
 }
 
 fn repl() -> Result<(), Box<dyn Report>> {
@@ -338,6 +346,13 @@ pub fn run<'a>(
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         let (bytecode, constants, metadata, error_locations) =
             time("cmp", args.times, || compile_program(gc, program.stmts));
+        let compiled_bytecodes = time("thr", args.times, || {
+            bytecode
+                .iter()
+                .map(|bytecode| bytecode.compile())
+                .collect_vec()
+        });
+        let compiled_bytecodes = CompiledBytecodes(&compiled_bytecodes);
 
         if args.bytecode {
             println!("Interned strings");
@@ -380,14 +395,47 @@ pub fn run<'a>(
                 offset: 0,
                 cell_vars: global_cells,
             }),
-            Loop::Bytecode => run_bytecode(
+            Loop::Bytecode => run_bytecode(&mut Vm::new(
                 &bytecode,
                 &constants,
                 &metadata,
                 &error_locations,
                 &mut stack,
                 global_cells,
-            ),
+            )),
+            Loop::Threaded => {
+                let mut vm = Vm::new(
+                    &bytecode,
+                    &constants,
+                    &metadata,
+                    &error_locations,
+                    &mut stack,
+                    global_cells,
+                );
+                let mut error = None;
+                compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes, &mut error);
+
+                if args.show_bytecode_execution_counts {
+                    let max_len = Bytecode::all_discriminants()
+                        .map(Bytecode::name)
+                        .map(str::len)
+                        .into_iter()
+                        .max()
+                        .unwrap();
+                    eprintln!("Bytecode execution counts");
+                    for (discriminant, count) in vm.execution_counts().iter().enumerate() {
+                        eprintln!(
+                            "{:>max_len$} ({discriminant:>2}): {count:>12}",
+                            Bytecode::name(discriminant)
+                        );
+                    }
+                }
+
+                match error {
+                    Some(error) => Err(error.into()),
+                    None => Ok(Value::Nil),
+                }
+            }
         }) {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,

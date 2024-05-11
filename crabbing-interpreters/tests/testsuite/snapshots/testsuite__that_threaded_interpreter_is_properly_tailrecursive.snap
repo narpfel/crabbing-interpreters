@@ -1,0 +1,63 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: cargo
+  args:
+    - run
+    - "--profile=perf"
+    - "--quiet"
+    - "--features=count_bytecode_execution"
+    - "--"
+    - "--loop=threaded"
+    - "--show-bytecode-execution-counts"
+    - tests/tailrec/test_tailrec.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Bytecode execution counts
+                   Pop ( 0):     32000000
+                 Const ( 1):     47000005
+            UnaryMinus ( 2):      1000000
+              UnaryNot ( 3):      1000000
+                 Equal ( 4):      1000000
+              NotEqual ( 5):      1000000
+                  Less ( 6):      3000002
+             LessEqual ( 7):      1000000
+               Greater ( 8):      1000000
+          GreaterEqual ( 9):      1000000
+                   Add (10):      4000000
+              Subtract (11):      1000000
+              Multiply (12):      2000000
+                Divide (13):      1000000
+                 Power (14):      1000000
+                 Local (15):     11000001
+                Global (16):      3000000
+                  Cell (17):      6000001
+                   Dup (18):      5000000
+             StoreAttr (19):      1000000
+              LoadAttr (20):      3000000
+            StoreLocal (21):      9000001
+           StoreGlobal (22):      1000003
+             StoreCell (23):      1000000
+            DefineCell (24):      1000001
+                  Call (25):      8000000
+                 Print (26):      1000000
+          GlobalByName (27):      1000000
+     StoreGlobalByName (28):      1000000
+            JumpIfTrue (29):      3000002
+           JumpIfFalse (30):      2000000
+         PopJumpIfTrue (31):      1000000
+        PopJumpIfFalse (32):      2000000
+                  Jump (33):      1000002
+         BeginFunction (34):      3000002
+                Return (35):      5000000
+         BuildFunction (36):      3000002
+                   End (37):            1
+                  Pop2 (38):      8000000
+            BuildClass (39):      2000000
+            PrintStack (40):            0
+BoundMethodGetInstance (41):      3000000
+                 Super (42):      1000000

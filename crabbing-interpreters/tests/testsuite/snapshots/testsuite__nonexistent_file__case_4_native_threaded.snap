@@ -3,13 +3,12 @@ source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args:
-    - craftinginterpreters/test/limit/stack_overflow.lox
+    - "--loop=threaded"
+    - nonexistent_file
 ---
 success: false
-exit_code: -1
+exit_code: 74
 ----- stdout -----
 
 ----- stderr -----
-
-thread 'main' has overflowed its stack
-fatal runtime error: stack overflow
+No such file or directory (os error 2): `nonexistent_file`

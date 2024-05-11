@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+  stdin: 1 + 2;
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[38;2;170;034;255m[1m=> 3[0m
+[0mλ» [1m[0m
+----- stderr -----

@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: cargo
+  args:
+    - miri
+    - run
+    - "-q"
+    - "--"
+    - "--loop=threaded"
+    - nonexistent_file
+  env:
+    MIRIFLAGS: "-Zmiri-disable-isolation"
+---
+success: false
+exit_code: 74
+----- stdout -----
+
+----- stderr -----
+entity not found (os error 2): `nonexistent_file`
