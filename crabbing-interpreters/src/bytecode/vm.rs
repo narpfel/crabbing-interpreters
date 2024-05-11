@@ -200,6 +200,19 @@ pub fn run_bytecode<'a>(
     }
 }
 
+macro_rules! outline {
+    ($($stmt:stmt);* $(;)?) => {
+        #[allow(clippy::redundant_closure_call)]
+        (
+            #[cold]
+            #[inline(never)]
+            || {
+                $( $stmt )*
+            }
+        )()
+    };
+}
+
 #[inline(always)]
 pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
@@ -438,10 +451,10 @@ pub(crate) fn execute_bytecode<'a>(
                 }))?,
             }
         }
-        Print => {
+        Print => outline! {
             let value = vm.pop_stack();
             println!("{value}");
-        }
+        },
         GlobalByName(name) => {
             let variable = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
                 let expr: ExpressionTypes::Name = vm.error_location();
