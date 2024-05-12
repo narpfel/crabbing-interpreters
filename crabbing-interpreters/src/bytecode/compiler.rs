@@ -103,7 +103,7 @@ pub(crate) fn compile_program<'a>(
     let mut compiler = Compiler {
         gc,
         code: Vec::new(),
-        constants: vec![Value::Nil, Value::Bool(false), Value::Bool(true)],
+        constants: Vec::new(),
         metadata: Vec::new(),
         error_locations: Vec::new(),
     };
