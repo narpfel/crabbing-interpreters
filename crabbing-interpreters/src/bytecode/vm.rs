@@ -618,6 +618,10 @@ pub(crate) fn execute_bytecode<'a>(
                 })?;
             vm.push_stack(value);
         }
+        ConstNil => vm.push_stack(Value::Nil),
+        ConstTrue => vm.push_stack(Value::Bool(true)),
+        ConstFalse => vm.push_stack(Value::Bool(false)),
+        ConstNumber(number) => vm.push_stack(Value::Number(number.into())),
     }
     vm.pc += 1;
     if cfg!(miri) || previous_pc > vm.pc {

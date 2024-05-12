@@ -18,10 +18,6 @@ use crate::scope::Target;
 use crate::scope::Variable;
 use crate::value::Value;
 
-const NIL_CONSTANT: u32 = 0;
-const FALSE_CONSTANT: u32 = 1;
-const TRUE_CONSTANT: u32 = 2;
-
 struct Compiler<'a> {
     gc: &'a Gc,
     code: Vec<Bytecode>,
@@ -107,7 +103,7 @@ pub(crate) fn compile_program<'a>(
     let mut compiler = Compiler {
         gc,
         code: Vec::new(),
-        constants: vec![Value::Nil, Value::Bool(false), Value::Bool(true)],
+        constants: Vec::new(),
         metadata: Vec::new(),
         error_locations: Vec::new(),
     };
@@ -144,7 +140,7 @@ impl<'a> Compiler<'a> {
                     self.compile_expr(initialiser);
                 }
                 else {
-                    self.code.push(Const(NIL_CONSTANT));
+                    self.code.push(ConstNil);
                 }
                 self.compile_define(variable);
             }
@@ -215,7 +211,7 @@ impl<'a> Compiler<'a> {
             }
             Statement::Function { target, function } => {
                 if target.is_cell() {
-                    self.code.push(Const(NIL_CONSTANT));
+                    self.code.push(ConstNil);
                     self.compile_define(target);
                 }
                 self.compile_function(function, FunctionKind::Function);
@@ -226,7 +222,7 @@ impl<'a> Compiler<'a> {
                     self.compile_expr(expr);
                 }
                 else {
-                    self.code.push(Const(NIL_CONSTANT));
+                    self.code.push(ConstNil);
                 }
                 self.code.push(Return);
             }
@@ -236,7 +232,7 @@ impl<'a> Compiler<'a> {
             }
             Statement::Class { target, base, methods } => {
                 if target.is_cell() {
-                    self.code.push(Const(NIL_CONSTANT));
+                    self.code.push(ConstNil);
                     self.compile_define(target);
                 }
                 let base_error_location = if let Some(base) = base {
@@ -266,21 +262,20 @@ impl<'a> Compiler<'a> {
         match expr {
             Expression::Literal(literal) => {
                 // FIXME: deduplicate constants
-                let constant = match literal.kind {
+                match literal.kind {
                     LiteralKind::Number(x) => {
-                        self.constants.push(Value::Number(x));
-                        (self.constants.len() - 1).try_into().unwrap()
+                        self.code.push(ConstNumber(x.into()));
                     }
                     LiteralKind::String(s) => {
                         self.constants
                             .push(Value::String(GcStr::new_in(self.gc, s)));
-                        (self.constants.len() - 1).try_into().unwrap()
+                        self.code
+                            .push(Const((self.constants.len() - 1).try_into().unwrap()));
                     }
-                    LiteralKind::True => TRUE_CONSTANT,
-                    LiteralKind::False => FALSE_CONSTANT,
-                    LiteralKind::Nil => NIL_CONSTANT,
-                };
-                self.code.push(Const(constant));
+                    LiteralKind::True => self.code.push(ConstTrue),
+                    LiteralKind::False => self.code.push(ConstFalse),
+                    LiteralKind::Nil => self.code.push(ConstNil),
+                }
             }
             Expression::Unary(operator, operand) => {
                 self.compile_expr(operand);
@@ -435,7 +430,7 @@ impl<'a> Compiler<'a> {
         }
 
         if self.code.last() != Some(&Return) {
-            self.code.push(Const(NIL_CONSTANT));
+            self.code.push(ConstNil);
             self.code.push(Return);
         }
         let code_size = (self.code.len() - begin_index - 1).try_into().unwrap();
