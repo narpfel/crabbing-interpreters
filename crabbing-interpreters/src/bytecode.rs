@@ -110,6 +110,28 @@ pub struct CallInner {
     pub stack_size_at_callsite: u32,
 }
 
+/// A wrapper around the bytes of an [`f64`]. We do this to keep [`Bytecode`] smaller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Number([u8; 8]);
+
+impl From<f64> for Number {
+    fn from(value: f64) -> Self {
+        Self(value.to_ne_bytes())
+    }
+}
+
+impl From<Number> for f64 {
+    fn from(Number(bytes): Number) -> Self {
+        Self::from_ne_bytes(bytes)
+    }
+}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", f64::from(*self))
+    }
+}
+
 bytecode! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     pub enum Bytecode {
@@ -157,6 +179,10 @@ bytecode! {
         PrintStack,
         BoundMethodGetInstance,
         Super(InternedString),
+        ConstNil,
+        ConstTrue,
+        ConstFalse,
+        ConstNumber(Number),
     }
 }
 
@@ -208,6 +234,10 @@ impl fmt::Display for Bytecode {
             PrintStack => write!(f, "print_stack"),
             BoundMethodGetInstance => write!(f, "bound_method_get_instance"),
             Super(name) => write!(f, "super {name}"),
+            ConstNil => write!(f, "const_nil"),
+            ConstTrue => write!(f, "const_true"),
+            ConstFalse => write!(f, "const_false"),
+            ConstNumber(number) => write!(f, "const_number {number}"),
         }
     }
 }

@@ -19,7 +19,7 @@ exit_code: 0
 ----- stderr -----
 Bytecode execution counts
                    Pop ( 0):     32000000
-                 Const ( 1):     47000005
+                 Const ( 1):      6000000
             UnaryMinus ( 2):      1000000
               UnaryNot ( 3):      1000000
                  Equal ( 4):      1000000
@@ -61,3 +61,7 @@ Bytecode execution counts
             PrintStack (40):            0
 BoundMethodGetInstance (41):      3000000
                  Super (42):      1000000
+              ConstNil (43):      7000000
+             ConstTrue (44):      2000000
+            ConstFalse (45):      3000000
+           ConstNumber (46):     29000005
