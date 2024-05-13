@@ -27,7 +27,7 @@ pub enum Value<'a> {
     NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
     Class(Class<'a>),
     Instance(Instance<'a>),
-    BoundMethod(Function<'a>, Instance<'a>),
+    BoundMethod(BoundMethod<'a>),
 }
 
 impl Value<'_> {
@@ -41,7 +41,7 @@ impl Value<'_> {
             Value::NativeFunction(_) => "NativeFunction",
             Value::Class(_) => "Class",
             Value::Instance(_) => "Instance",
-            Value::BoundMethod(_, _) => "BoundMethod",
+            Value::BoundMethod(_) => "BoundMethod",
         }
     }
 
@@ -73,10 +73,7 @@ unsafe impl Trace for Value<'_> {
             Value::NativeFunction(_) => (),
             Value::Class(class) => class.trace(),
             Value::Instance(instance) => instance.trace(),
-            Value::BoundMethod(function, instance) => {
-                function.trace();
-                instance.trace();
-            }
+            Value::BoundMethod(bound_method) => bound_method.trace(),
         }
     }
 }
@@ -92,11 +89,7 @@ impl Display for Value<'_> {
             Value::NativeFunction(_) => write!(f, "<native fn>"),
             Value::Class(class) => write!(f, "{class:?}"),
             Value::Instance(instance) => write!(f, "{instance:?}"),
-            Value::BoundMethod(method, instance) => write!(
-                f,
-                "<bound method {name} of {instance:?}>",
-                name = method.name,
-            ),
+            Value::BoundMethod(bound_method) => write!(f, "{bound_method:?}"),
         }
     }
 }
@@ -187,6 +180,31 @@ impl Debug for Instance<'_> {
             "<{} instance at {:p}>",
             self.class.name,
             Self::as_ptr(self),
+        )
+    }
+}
+
+pub type BoundMethod<'a> = GcRef<'a, BoundMethodInner<'a>>;
+
+pub struct BoundMethodInner<'a> {
+    pub(crate) method: Function<'a>,
+    pub(crate) instance: Instance<'a>,
+}
+
+unsafe impl Trace for BoundMethodInner<'_> {
+    fn trace(&self) {
+        self.method.trace();
+        self.instance.trace();
+    }
+}
+
+impl Debug for BoundMethod<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "<bound method {name} of {instance:?}>",
+            name = self.method.name,
+            instance = self.instance,
         )
     }
 }

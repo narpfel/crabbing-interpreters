@@ -14,6 +14,7 @@ use crate::eval::ControlFlow;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
+use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -25,6 +26,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
@@ -36,6 +38,7 @@ pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
     pub(crate) offset: usize,
     pub(crate) cell_vars: Cells<'a>,
+    pub(crate) trace_call_stack: &'b dyn Fn(),
 }
 
 type ExecResult<'a> = Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>>;
@@ -50,7 +53,9 @@ pub(crate) fn compile_block<'a>(bump: &'a Bump, block: &'a [Statement<'a>]) -> &
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
             for stmt in stmts {
                 stmt(state)?;
-                state.env.collect_if_necessary(Value::Nil, state.cell_vars);
+                state
+                    .env
+                    .collect_if_necessary(Value::Nil, state.cell_vars, state.trace_call_stack);
             }
             Ok(Value::Nil)
         },
@@ -473,10 +478,16 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 Ok(())
                             },
                         )?;
+                        let trace_call_stack = state.trace_call_stack;
+                        let trace_call_stack = &move || {
+                            trace_call_stack();
+                            callee.trace();
+                        };
                         match (function.compiled_body)(&mut State {
                             env: state.env,
                             offset: state.offset + stack_size_at_callsite,
                             cell_vars: function.cells,
+                            trace_call_stack,
                         }) {
                             Ok(_) => Ok(Value::Nil),
                             Err(ControlFlow::Return(value)) => Ok(value),
@@ -549,8 +560,11 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             Ok(instance)
                         }
 
-                        Value::BoundMethod(method, instance) =>
-                            eval_method_call(state, &method, Value::Instance(instance)),
+                        Value::BoundMethod(bound_method) => eval_method_call(
+                            state,
+                            &bound_method.method,
+                            Value::Instance(bound_method.instance),
+                        ),
                         _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
                     }
                 },
@@ -574,7 +588,10 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     .lookup_method(attr_id)
                                     .map(|method| match method {
                                         Value::Function(method) =>
-                                            Value::BoundMethod(method, instance),
+                                            Value::BoundMethod(GcRef::new_in(
+                                                state.env.gc,
+                                                BoundMethodInner { method, instance },
+                                            )),
                                         _ => unreachable!(),
                                     })
                             })
@@ -605,7 +622,10 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                         Value::Instance(instance) => super_class
                             .lookup_method(attr_id)
                             .map(|method| match method {
-                                Value::Function(method) => Value::BoundMethod(method, instance),
+                                Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                                    state.env.gc,
+                                    BoundMethodInner { method, instance },
+                                )),
                                 _ => unreachable!(),
                             })
                             .ok_or_else(|| {

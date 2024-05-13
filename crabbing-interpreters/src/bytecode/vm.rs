@@ -19,10 +19,12 @@ use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace;
 use crate::interner::interned;
+use crate::interner::InternedString;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
 use crate::scope::Target;
+use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
@@ -312,36 +314,47 @@ pub(crate) fn execute_bytecode<'a>(
             };
         }
         LoadAttr(name) => {
-            let value = vm.pop_stack();
-            let value = match value {
-                Instance(instance) => instance
-                    .attributes
-                    .borrow()
-                    .get(&name)
-                    .copied()
-                    .or_else(|| {
-                        instance
-                            .class
-                            .lookup_method(name)
-                            .map(|method| match method {
-                                Value::Function(method) => Value::BoundMethod(method, instance),
-                                _ => unreachable!(),
-                            })
-                    })
-                    .ok_or_else(|| {
-                        let expr = vm.error_location();
-                        Box::new(Error::UndefinedProperty {
-                            at: expr,
-                            lhs: value,
-                            attribute: expr.attribute,
+            #[inline(never)]
+            fn load_attr<'a>(
+                vm: &mut Vm<'a, '_>,
+                name: InternedString,
+            ) -> Result<(), Box<Error<'a>>> {
+                let value = vm.pop_stack();
+                let value = match value {
+                    Instance(instance) => instance
+                        .attributes
+                        .borrow()
+                        .get(&name)
+                        .copied()
+                        .or_else(|| {
+                            instance
+                                .class
+                                .lookup_method(name)
+                                .map(|method| match method {
+                                    Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                                        vm.env.gc,
+                                        BoundMethodInner { method, instance },
+                                    )),
+                                    _ => unreachable!(),
+                                })
                         })
-                    })?,
-                _ => Err(Box::new(Error::NoProperty {
-                    lhs: value,
-                    at: vm.error_location(),
-                }))?,
-            };
-            vm.push_stack(value);
+                        .ok_or_else(|| {
+                            let expr = vm.error_location();
+                            Box::new(Error::UndefinedProperty {
+                                at: expr,
+                                lhs: value,
+                                attribute: expr.attribute,
+                            })
+                        })?,
+                    _ => Err(Box::new(Error::NoProperty {
+                        lhs: value,
+                        at: vm.error_location(),
+                    }))?,
+                };
+                vm.push_stack(value);
+                Ok(())
+            }
+            load_attr(vm, name)?
         }
         StoreLocal(slot) => {
             let value = vm.pop_stack();
@@ -381,7 +394,8 @@ pub(crate) fn execute_bytecode<'a>(
                     vm.offset += stack_size_at_callsite;
                     vm.cell_vars = function.cells;
                 }
-                BoundMethod(method, _instance) => {
+                BoundMethod(bound_method) => {
+                    let method = bound_method.method;
                     if method.parameters.len() - 1 != argument_count.cast() {
                         Err(Box::new(Error::ArityMismatch {
                             callee,
@@ -429,7 +443,10 @@ pub(crate) fn execute_bytecode<'a>(
                                 }))?
                             }
                             vm.stack[vm.sp - 1 - argument_count.cast()] =
-                                BoundMethod(init, instance);
+                                BoundMethod(GcRef::new_in(
+                                    vm.env.gc,
+                                    BoundMethodInner { method: init, instance },
+                                ));
                             vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
                             vm.call_sp += 1;
                             vm.pc = init.code_ptr - 1;
@@ -589,7 +606,7 @@ pub(crate) fn execute_bytecode<'a>(
             vm.print_stack();
         }
         b @ BoundMethodGetInstance => match vm.peek_stack() {
-            BoundMethod(_, instance) => vm.push_stack(Value::Instance(instance)),
+            BoundMethod(bound_method) => vm.push_stack(Value::Instance(bound_method.instance)),
             value =>
                 unreachable!("invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"),
         },
@@ -605,7 +622,10 @@ pub(crate) fn execute_bytecode<'a>(
             let value = super_class
                 .lookup_method(name)
                 .map(|method| match method {
-                    Value::Function(method) => Value::BoundMethod(method, this),
+                    Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                        vm.env.gc,
+                        BoundMethodInner { method, instance: this },
+                    )),
                     _ => unreachable!(),
                 })
                 .ok_or_else(|| {
