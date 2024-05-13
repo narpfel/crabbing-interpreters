@@ -14,6 +14,7 @@ use crate::eval::ControlFlow;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
+use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -37,6 +38,7 @@ pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
     pub(crate) offset: usize,
     pub(crate) cell_vars: Cells<'a>,
+    pub(crate) trace_call_stack: &'b dyn Fn(),
 }
 
 type ExecResult<'a> = Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>>;
@@ -51,7 +53,9 @@ pub(crate) fn compile_block<'a>(bump: &'a Bump, block: &'a [Statement<'a>]) -> &
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
             for stmt in stmts {
                 stmt(state)?;
-                state.env.collect_if_necessary(Value::Nil, state.cell_vars);
+                state
+                    .env
+                    .collect_if_necessary(Value::Nil, state.cell_vars, state.trace_call_stack);
             }
             Ok(Value::Nil)
         },
@@ -474,10 +478,16 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 Ok(())
                             },
                         )?;
+                        let trace_call_stack = state.trace_call_stack;
+                        let trace_call_stack = &move || {
+                            trace_call_stack();
+                            callee.trace();
+                        };
                         match (function.compiled_body)(&mut State {
                             env: state.env,
                             offset: state.offset + stack_size_at_callsite,
                             cell_vars: function.cells,
+                            trace_call_stack,
                         }) {
                             Ok(_) => Ok(Value::Nil),
                             Err(ControlFlow::Return(value)) => Ok(value),

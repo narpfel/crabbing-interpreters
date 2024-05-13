@@ -152,11 +152,17 @@ impl<'a> Environment<'a> {
         self.global_cells.trace();
     }
 
-    pub(crate) fn collect_if_necessary(&self, last_value: Value<'a>, cell_vars: Cells<'a>) {
+    pub(crate) fn collect_if_necessary(
+        &self,
+        last_value: Value<'a>,
+        cell_vars: Cells<'a>,
+        trace_call_stack: &dyn Fn(),
+    ) {
         if self.gc.collection_necessary() {
             self.trace();
             last_value.trace();
             cell_vars.trace();
+            trace_call_stack();
             unsafe {
                 self.gc.sweep();
             }

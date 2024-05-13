@@ -262,7 +262,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
             (0..program.global_cell_count)
                 .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
         );
-        let result = execute(&mut globals, 0, program.stmts, global_cells);
+        let result = execute(&mut globals, 0, program.stmts, global_cells, &|| ());
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
@@ -389,11 +389,12 @@ pub fn run<'a>(
         }
 
         match time("exe", args.times, || match args.r#loop {
-            Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells),
+            Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells, &|| ()),
             Loop::Closures => execute_closures(&mut State {
                 env: &mut stack,
                 offset: 0,
                 cell_vars: global_cells,
+                trace_call_stack: &|| (),
             }),
             Loop::Bytecode => run_bytecode(&mut Vm::new(
                 &bytecode,
