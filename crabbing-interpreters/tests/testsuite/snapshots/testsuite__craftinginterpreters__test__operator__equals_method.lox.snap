@@ -9,6 +9,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 true
-true
+false
 
 ----- stderr -----

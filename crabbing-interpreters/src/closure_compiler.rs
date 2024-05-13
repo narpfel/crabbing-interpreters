@@ -25,6 +25,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
@@ -549,8 +550,11 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             Ok(instance)
                         }
 
-                        Value::BoundMethod(method, instance) =>
-                            eval_method_call(state, &method, Value::Instance(instance)),
+                        Value::BoundMethod(bound_method) => eval_method_call(
+                            state,
+                            &bound_method.method,
+                            Value::Instance(bound_method.instance),
+                        ),
                         _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
                     }
                 },
@@ -574,7 +578,10 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     .lookup_method(attr_id)
                                     .map(|method| match method {
                                         Value::Function(method) =>
-                                            Value::BoundMethod(method, instance),
+                                            Value::BoundMethod(GcRef::new_in(
+                                                state.env.gc,
+                                                BoundMethodInner { method, instance },
+                                            )),
                                         _ => unreachable!(),
                                     })
                             })
@@ -605,7 +612,10 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                         Value::Instance(instance) => super_class
                             .lookup_method(attr_id)
                             .map(|method| match method {
-                                Value::Function(method) => Value::BoundMethod(method, instance),
+                                Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                                    state.env.gc,
+                                    BoundMethodInner { method, instance },
+                                )),
                                 _ => unreachable!(),
                             })
                             .ok_or_else(|| {

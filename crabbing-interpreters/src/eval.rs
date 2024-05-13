@@ -32,6 +32,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
@@ -379,8 +380,11 @@ pub fn eval<'a>(
                     instance
                 }
                 // FIXME: When explicitly calling `init`, the instance should be returned
-                Value::BoundMethod(method, instance) =>
-                    eval_method_call(env, &method, Value::Instance(instance))?,
+                Value::BoundMethod(bound_method) => eval_method_call(
+                    env,
+                    &bound_method.method,
+                    Value::Instance(bound_method.instance),
+                )?,
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
@@ -408,7 +412,10 @@ pub fn eval<'a>(
                             .class
                             .lookup_method(attribute.id())
                             .map(|method| match method {
-                                Value::Function(method) => Value::BoundMethod(method, instance),
+                                Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                                    env.gc,
+                                    BoundMethodInner { method, instance },
+                                )),
                                 _ => unreachable!(),
                             })
                     })
@@ -430,7 +437,10 @@ pub fn eval<'a>(
                 Value::Instance(instance) => super_
                     .lookup_method(attribute.id())
                     .map(|method| match method {
-                        Value::Function(method) => Value::BoundMethod(method, instance),
+                        Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                            env.gc,
+                            BoundMethodInner { method, instance },
+                        )),
                         _ => unreachable!(),
                     })
                     .ok_or_else(|| Error::UndefinedSuperProperty {
