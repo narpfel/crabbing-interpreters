@@ -17,7 +17,6 @@ use crate::scope::Variable;
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<Value<'a>>>>]>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-#[repr(align(16))]
 pub enum Value<'a> {
     Number(f64),
     String(GcStr<'a>),
