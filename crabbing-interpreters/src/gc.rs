@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr;
 use std::ptr::NonNull;
+use std::ptr::Pointee;
 
 #[cfg(not(miri))]
 const COLLECTION_INTERVAL: usize = 100_000;
@@ -83,6 +84,16 @@ where
             State::VisitingChildren => (),
             State::Done => (),
         }
+    }
+}
+
+unsafe impl<T> Trace for GcThin<'_, T>
+where
+    T: Trace + ?Sized,
+    <T as Pointee>::Metadata: IsUsize,
+{
+    fn trace(&self) {
+        self.as_gc_ref().trace();
     }
 }
 
@@ -395,28 +406,67 @@ where
     }
 }
 
+trait IsUsize {}
+
+impl IsUsize for usize {}
+
+struct GcThin<'a, T: ?Sized>(NonNull<()>, PhantomData<GcRef<'a, T>>);
+
+impl<T> Clone for GcThin<'_, T>
+where
+    T: ?Sized,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for GcThin<'_, T> where T: ?Sized {}
+
+impl<'a, T> GcThin<'a, T>
+where
+    T: ?Sized,
+    <T as Pointee>::Metadata: IsUsize,
+{
+    fn from_ref(gc_ref: GcRef<'a, T>) -> Self {
+        let (ptr, _metadata) = NonNull::from(gc_ref.value()).to_raw_parts();
+        Self(ptr.cast(), PhantomData)
+    }
+
+    fn as_gc_ref(self) -> GcRef<'a, T> {
+        let head_ptr: NonNull<Cell<GcHead>> = self.0.cast();
+        unsafe {
+            let length = head_ptr.as_ref().get().length;
+            // SAFETY: this pointer cast is safe because we restrict `<T as Pointee>::Metadata` to
+            // be `usize`
+            let ptr = NonNull::from_raw_parts(self.0, *ptr::from_ref(&length).cast());
+            GcRef(ptr.as_ptr(), PhantomData)
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
-pub struct GcStr<'a>(GcRef<'a, [u8]>);
+pub struct GcStr<'a>(GcThin<'a, [u8]>);
 
 impl<'a> GcStr<'a> {
     pub(crate) fn new_in(gc: &'a Gc, s: &str) -> Self {
-        Self(GcRef::from_iter_in(gc, s.bytes()))
+        Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())))
     }
 
     fn str(&self) -> &'a str {
-        unsafe { std::str::from_utf8_unchecked(&self.0.value().value) }
+        unsafe { std::str::from_utf8_unchecked(&self.0.as_gc_ref().value().value) }
     }
 }
 
 impl PartialEq for GcStr<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.value().value == other.0.value().value
+        self.str() == other.str()
     }
 }
 
 impl PartialOrd for GcStr<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.value().value.partial_cmp(&other.0.value().value)
+        self.str().partial_cmp(other.str())
     }
 }
 
