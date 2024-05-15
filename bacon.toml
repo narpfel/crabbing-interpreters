@@ -40,11 +40,17 @@ allow_warnings = true
 env.RUSTFLAGS = ""
 
 [jobs.doc]
-command = ["cargo", "doc", "--profile=clif", "--color", "always", "--no-deps"]
+command = [
+    "cargo", "doc", "--profile=clif", "--color", "always",
+    "--no-deps", "--document-private-items",
+]
 need_stdout = false
 
 [jobs.doc-open]
-command = ["cargo", "doc", "--profile=clif", "--color", "always", "--no-deps", "--open"]
+command = [
+    "cargo", "doc", "--profile=clif", "--color", "always",
+    "--no-deps", "--open", "--document-private-items",
+]
 need_stdout = false
 on_success = "back"
 
