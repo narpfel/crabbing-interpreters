@@ -386,7 +386,6 @@ pub fn eval<'a>(
                     }
                     instance
                 }
-                // FIXME: When explicitly calling `init`, the instance should be returned
                 Value::BoundMethod(bound_method) => eval_method_call(
                     env,
                     &bound_method.method,
