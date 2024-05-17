@@ -179,24 +179,23 @@ pub fn eval<'a>(
     expr: &Expression<'a>,
     trace_call_stack: &dyn Fn(),
 ) -> Result<Value<'a>, Box<Error<'a>>> {
-    use Value::*;
     Ok(match expr {
         Expression::Literal(lit) => match lit.kind {
-            LiteralKind::Number(n) => Number(n),
-            LiteralKind::String(s) => String(GcStr::new_in(env.gc, s)),
-            LiteralKind::True => Bool(true),
-            LiteralKind::False => Bool(false),
-            LiteralKind::Nil => Nil,
+            LiteralKind::Number(n) => Value::Number(n),
+            LiteralKind::String(s) => Value::String(GcStr::new_in(env.gc, s)),
+            LiteralKind::True => Value::Bool(true),
+            LiteralKind::False => Value::Bool(false),
+            LiteralKind::Nil => Value::Nil,
         },
         Expression::Unary(op, inner_expr) => {
             use UnaryOpKind::*;
             let value = eval(env, cell_vars, offset, inner_expr, trace_call_stack)?;
             match op.kind {
                 Minus => match value {
-                    Number(n) => Number(-n),
+                    Value::Number(n) => Value::Number(-n),
                     _ => Err(Error::InvalidUnaryOp { op: *op, value, at: expr.into_variant() })?,
                 },
-                Not => Bool(!value.is_truthy()),
+                Not => Value::Bool(!value.is_truthy()),
             }
         }
         Expression::Assign { target, value, .. } => {
@@ -253,20 +252,20 @@ pub fn eval<'a>(
                     let rhs = eval(env, cell_vars, offset, rhs, trace_call_stack)?;
                     match (&lhs, op.kind, &rhs) {
                         (_, And | Or, _) => unreachable!(),
-                        (_, EqualEqual, _) => Bool(lhs == rhs),
-                        (_, NotEqual, _) => Bool(lhs != rhs),
-                        (String(lhs), Plus, String(rhs)) =>
-                            String(GcStr::new_in(env.gc, &format!("{lhs}{rhs}"))),
-                        (Number(lhs), _, Number(rhs)) => match op.kind {
-                            Plus => Number(lhs + rhs),
-                            Less => Bool(lhs < rhs),
-                            LessEqual => Bool(lhs <= rhs),
-                            Greater => Bool(lhs > rhs),
-                            GreaterEqual => Bool(lhs >= rhs),
-                            Minus => Number(lhs - rhs),
-                            Times => Number(lhs * rhs),
-                            Divide => Number(lhs / rhs),
-                            Power => Number(lhs.powf(*rhs)),
+                        (_, EqualEqual, _) => Value::Bool(lhs == rhs),
+                        (_, NotEqual, _) => Value::Bool(lhs != rhs),
+                        (Value::String(lhs), Plus, Value::String(rhs)) =>
+                            Value::String(GcStr::new_in(env.gc, &format!("{lhs}{rhs}"))),
+                        (Value::Number(lhs), _, Value::Number(rhs)) => match op.kind {
+                            Plus => Value::Number(lhs + rhs),
+                            Less => Value::Bool(lhs < rhs),
+                            LessEqual => Value::Bool(lhs <= rhs),
+                            Greater => Value::Bool(lhs > rhs),
+                            GreaterEqual => Value::Bool(lhs >= rhs),
+                            Minus => Value::Number(lhs - rhs),
+                            Times => Value::Number(lhs * rhs),
+                            Divide => Value::Number(lhs / rhs),
+                            Power => Value::Number(lhs.powf(*rhs)),
                             EqualEqual | NotEqual | Assign | And | Or => unreachable!(),
                         },
                         _ => Err(Error::InvalidBinaryOp {
