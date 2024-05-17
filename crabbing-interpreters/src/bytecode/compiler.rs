@@ -16,12 +16,13 @@ use crate::scope::Function;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::nanboxed;
 use crate::value::Value;
 
 struct Compiler<'a> {
     gc: &'a Gc,
     code: Vec<Bytecode>,
-    constants: Vec<Value<'a>>,
+    constants: Vec<nanboxed::Value<'a>>,
     metadata: Vec<Metadata<'a>>,
     error_locations: Vec<ContainingExpression<'a>>,
 }
@@ -96,7 +97,7 @@ pub(crate) fn compile_program<'a>(
     program: &'a [Statement<'a>],
 ) -> (
     Vec<Bytecode>,
-    Vec<Value<'a>>,
+    Vec<nanboxed::Value<'a>>,
     Vec<Metadata<'a>>,
     Vec<ContainingExpression<'a>>,
 ) {
@@ -268,7 +269,7 @@ impl<'a> Compiler<'a> {
                     }
                     LiteralKind::String(s) => {
                         self.constants
-                            .push(Value::String(GcStr::new_in(self.gc, s)));
+                            .push(Value::String(GcStr::new_in(self.gc, s)).into_nanboxed());
                         self.code
                             .push(Const((self.constants.len() - 1).try_into().unwrap()));
                     }

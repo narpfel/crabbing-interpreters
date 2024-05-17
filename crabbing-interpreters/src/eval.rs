@@ -33,6 +33,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
@@ -207,7 +208,7 @@ pub fn eval<'a>(
                         let slot = env.get_global_slot_by_name(variable.name)?;
                         variable.set_target(Target::GlobalBySlot(slot));
                     }
-                    env.set(cell_vars, offset, variable.target(), value);
+                    env.set(cell_vars, offset, variable.target(), value.into_nanboxed());
                 }
                 AssignmentTarget::Attribute { lhs, attribute } => {
                     let target_value = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
@@ -216,7 +217,7 @@ pub fn eval<'a>(
                             instance
                                 .attributes
                                 .borrow_mut()
-                                .insert(attribute.id(), value);
+                                .insert(attribute.id(), value.into_nanboxed());
                         }
                         _ => Err(Error::NoFields {
                             lhs: target_value,
@@ -305,7 +306,7 @@ pub fn eval<'a>(
                         function.cells,
                         offset + stack_size_at_callsite,
                         param.target(),
-                        arg,
+                        arg.into_nanboxed(),
                     );
                     Ok(())
                 })?;
@@ -336,7 +337,7 @@ pub fn eval<'a>(
                     method.cells,
                     offset + stack_size_at_callsite,
                     method.parameters[0].target(),
-                    instance,
+                    instance.into_nanboxed(),
                 );
                 let parameters = method.parameters.iter().skip(1);
                 eval_call(env, method, parameters)
@@ -372,7 +373,10 @@ pub fn eval<'a>(
                             attributes: RefCell::new(HashMap::default()),
                         },
                     ));
-                    match class.lookup_method(interned::INIT) {
+                    match class
+                        .lookup_method(interned::INIT)
+                        .map(nanboxed::Value::parse)
+                    {
                         Some(Value::Function(init)) => {
                             eval_method_call(env, &init, instance)?;
                         }
@@ -396,14 +400,14 @@ pub fn eval<'a>(
         }
         Expression::Grouping { expr, .. } => eval(env, cell_vars, offset, expr, trace_call_stack)?,
         Expression::Name(variable) => match variable.target() {
-            Target::Local(slot) => env.get(cell_vars, offset, Slot::Local(slot)),
+            Target::Local(slot) => env.get(cell_vars, offset, Slot::Local(slot)).parse(),
             Target::GlobalByName => {
                 let (slot, value) = env.get_global_by_name(variable.name)?;
                 variable.set_target(Target::GlobalBySlot(slot));
-                value
+                value.parse()
             }
-            Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot)),
-            Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot)),
+            Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot)).parse(),
+            Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot)).parse(),
         },
         Expression::Attribute { lhs, attribute } => {
             let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
@@ -412,18 +416,18 @@ pub fn eval<'a>(
                     .attributes
                     .borrow()
                     .get(&attribute.id())
-                    .cloned()
+                    .copied()
+                    .map(nanboxed::Value::parse)
                     .or_else(|| {
-                        instance
-                            .class
-                            .lookup_method(attribute.id())
-                            .map(|method| match method {
+                        instance.class.lookup_method(attribute.id()).map(|method| {
+                            match method.parse() {
                                 Value::Function(method) => Value::BoundMethod(GcRef::new_in(
                                     env.gc,
                                     BoundMethodInner { method, instance },
                                 )),
                                 _ => unreachable!(),
-                            })
+                            }
+                        })
                     })
                     .ok_or_else(|| Error::UndefinedProperty {
                         lhs,
@@ -454,7 +458,7 @@ pub fn eval<'a>(
             match this {
                 Value::Instance(instance) => super_
                     .lookup_method(attribute.id())
-                    .map(|method| match method {
+                    .map(|method| match method.parse() {
                         Value::Function(method) => Value::BoundMethod(GcRef::new_in(
                             env.gc,
                             BoundMethodInner { method, instance },
@@ -494,7 +498,7 @@ pub fn execute<'a>(
                 else {
                     Value::Nil
                 };
-                env.define(cell_vars, offset, variable.target(), value);
+                env.define(cell_vars, offset, variable.target(), value.into_nanboxed());
                 Value::Nil
             }
             Statement::Block(block) => execute(env, offset, block, cell_vars, trace_call_stack)?,
@@ -565,7 +569,12 @@ pub fn execute<'a>(
             Statement::Function { target, function } => {
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
-                env.define(cell_vars, offset, target.target(), Value::Nil);
+                env.define(
+                    cell_vars,
+                    offset,
+                    target.target(),
+                    Value::Nil.into_nanboxed(),
+                );
                 let function = eval_function(env.gc, cell_vars, function);
                 env.set(cell_vars, offset, target.target(), function);
                 Value::Nil
@@ -594,7 +603,12 @@ pub fn execute<'a>(
                         },
                     )
                     .transpose()?;
-                env.define(cell_vars, offset, target.target(), Value::Nil);
+                env.define(
+                    cell_vars,
+                    offset,
+                    target.target(),
+                    Value::Nil.into_nanboxed(),
+                );
                 let methods: HashMap<_, _> = methods
                     .iter()
                     .map(|method| (method.name.id(), eval_function(env.gc, cell_vars, method)))
@@ -603,11 +617,16 @@ pub fn execute<'a>(
                     env.gc,
                     ClassInner { name: target.name.slice(), base, methods },
                 );
-                env.set(cell_vars, offset, target.target(), Value::Class(class));
+                env.set(
+                    cell_vars,
+                    offset,
+                    target.target(),
+                    Value::Class(class).into_nanboxed(),
+                );
                 if let Some(base) = class.base {
-                    let base = Value::Class(base);
+                    let base = Value::Class(base).into_nanboxed();
                     class.methods.values().for_each(|method| {
-                        let Value::Function(method) = method
+                        let Value::Function(method) = method.parse()
                         else {
                             unreachable!()
                         };
@@ -618,7 +637,7 @@ pub fn execute<'a>(
             }
         };
 
-        env.collect_if_necessary(last_value, cell_vars, trace_call_stack);
+        env.collect_if_necessary(last_value.into_nanboxed(), cell_vars, trace_call_stack);
     }
     Ok(last_value)
 }
@@ -627,7 +646,7 @@ pub(crate) fn eval_function<'a>(
     gc: &'a Gc,
     cell_vars: Cells<'a>,
     function: &crate::scope::Function<'a>,
-) -> Value<'a> {
+) -> nanboxed::Value<'a> {
     let crate::scope::Function {
         name,
         parameters,
@@ -640,7 +659,7 @@ pub(crate) fn eval_function<'a>(
         gc,
         cells.iter().map(|cell| match cell {
             Some(idx) => Cell::new(cell_vars[*idx].get()),
-            None => Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil))),
+            None => Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed()))),
         }),
     );
 
@@ -655,6 +674,7 @@ pub(crate) fn eval_function<'a>(
             code_ptr: 0,
         },
     ))
+    .into_nanboxed()
 }
 
 #[cfg(test)]

@@ -15,9 +15,10 @@ use crate::interner::InternedString;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
+use crate::value::nanboxed::Value;
 use crate::value::Cells;
 use crate::value::NativeError;
-use crate::value::Value;
+use crate::value::Value as Unboxed;
 
 #[cfg(not(miri))]
 pub(crate) const ENV_SIZE: usize = 100_000;
@@ -39,21 +40,22 @@ impl<'a> Environment<'a> {
         globals: HashMap<InternedString, usize>,
         global_cells: Cells<'a>,
     ) -> Self {
-        let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Value::Nil; ENV_SIZE]
+        let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Unboxed::Nil.into_nanboxed(); ENV_SIZE]
             .into_boxed_slice()
             .try_into()
             .unwrap();
         let mut is_global_defined = vec![false; globals.len()].into_boxed_slice();
         if let Some(&slot) = globals.get(&interned::CLOCK) {
-            stack[slot] = Value::NativeFunction(|arguments| {
+            stack[slot] = Unboxed::NativeFunction(|arguments| {
                 if !arguments.is_empty() {
                     return Err(NativeError::ArityMismatch { expected: 0 });
                 }
                 static START_TIME: OnceLock<Instant> = OnceLock::new();
-                Ok(Value::Number(
+                Ok(Unboxed::Number(
                     START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
                 ))
-            });
+            })
+            .into_nanboxed();
             is_global_defined[slot] = true;
         }
         Self {

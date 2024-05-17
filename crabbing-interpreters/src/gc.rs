@@ -279,6 +279,14 @@ impl<'gc, T> GcRef<'gc, T> {
     pub(crate) fn as_ptr(this: &Self) -> *const T {
         &GcRef::value(this).value
     }
+
+    pub(crate) unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
+        Self(ptr.as_ptr().cast(), PhantomData)
+    }
+
+    pub(crate) fn as_inner(this: Self) -> *const () {
+        this.0.cast()
+    }
 }
 
 impl<'gc, T> GcRef<'gc, T>
@@ -433,6 +441,14 @@ where
         Self(ptr.cast(), PhantomData)
     }
 
+    fn as_inner(this: Self) -> *const () {
+        this.0.as_ptr()
+    }
+
+    unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
+        Self(ptr, PhantomData)
+    }
+
     fn as_gc_ref(self) -> GcRef<'a, T> {
         let head_ptr: NonNull<Cell<GcHead>> = self.0.cast();
         unsafe {
@@ -451,6 +467,14 @@ pub struct GcStr<'a>(GcThin<'a, [u8]>);
 impl<'a> GcStr<'a> {
     pub(crate) fn new_in(gc: &'a Gc, s: &str) -> Self {
         Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())))
+    }
+
+    pub(crate) unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
+        Self(GcThin::from_ptr(ptr))
+    }
+
+    pub(crate) fn as_inner(this: Self) -> *const () {
+        GcThin::as_inner(this.0)
     }
 
     fn str(&self) -> &'a str {
