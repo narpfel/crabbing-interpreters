@@ -163,6 +163,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         self.error_location_at(self.pc)
     }
 
+    #[cold]
     fn error_location_at<ExpressionType>(&self, pc: usize) -> ExpressionType
     where
         ExpressionType: IntoEnum<Enum = Expression<'a>>,
