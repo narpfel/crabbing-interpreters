@@ -199,53 +199,53 @@ where
 {
     fn into_nanboxed(self) -> *const () {
         let pointer = self.payload();
-        let addr = u64::try_from(pointer.addr()).unwrap();
+        let addr = u64::try_from(pointer.addr().get()).unwrap();
         let addr = addr & (2_u64.pow(u32::try_from(NANBOX_TAG_OFFSET).unwrap()) - 1);
         let data = NAN_BITS | NanBoxTag::from(self).tag() | addr;
-        pointer.with_addr(usize::try_from(data).unwrap())
+        pointer.as_ptr().with_addr(usize::try_from(data).unwrap())
     }
 }
 
 trait NanBoxPayload {
-    fn payload(self) -> *const ();
+    fn payload(self) -> NonNull<()>;
 }
 
 impl NanBoxPayload for () {
-    fn payload(self) -> *const () {
-        std::ptr::dangling()
+    fn payload(self) -> NonNull<()> {
+        NonNull::dangling()
     }
 }
 
 impl NanBoxPayload for NaN {
-    fn payload(self) -> *const () {
-        std::ptr::dangling()
+    fn payload(self) -> NonNull<()> {
+        NonNull::dangling()
     }
 }
 
 impl NanBoxPayload for bool {
-    fn payload(self) -> *const () {
-        std::ptr::dangling()
+    fn payload(self) -> NonNull<()> {
+        NonNull::dangling()
     }
 }
 
 impl NanBoxPayload for GcStr<'_> {
-    fn payload(self) -> *const () {
+    fn payload(self) -> NonNull<()> {
         GcStr::as_inner(self)
     }
 }
 
 impl<T> NanBoxPayload for GcRef<'_, T> {
-    fn payload(self) -> *const () {
+    fn payload(self) -> NonNull<()> {
         GcRef::as_inner(self)
     }
 }
 
 impl NanBoxPayload for for<'b> fn(Vec<Unboxed<'b>>) -> Result<Unboxed<'b>, NativeError<'b>> {
-    fn payload(self) -> *const () {
+    fn payload(self) -> NonNull<()> {
         #[expect(
             clippy::as_conversions,
             reason = "`as` is the only possible way to cast a `fn` pointer to a `*` pointer that preserves provenance"
         )]
-        (self as *const ())
+        NonNull::new(self as *mut ()).unwrap()
     }
 }
