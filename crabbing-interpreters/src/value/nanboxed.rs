@@ -244,8 +244,8 @@ impl NanBoxPayload for for<'b> fn(Vec<Unboxed<'b>>) -> Result<Unboxed<'b>, Nativ
     fn payload(self) -> *const () {
         #[expect(
             clippy::as_conversions,
-            reason = "`as` is the only possible way to get the address of a `fn` pointer"
+            reason = "`as` is the only possible way to cast a `fn` pointer to a `*` pointer that preserves provenance"
         )]
-        std::ptr::null::<()>().with_addr(self as usize)
+        (self as *const ())
     }
 }
