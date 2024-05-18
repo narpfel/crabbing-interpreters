@@ -6,6 +6,7 @@
 #![feature(ptr_metadata)]
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
+#![feature(strict_provenance)]
 #![warn(clippy::as_conversions)]
 
 use std::cell::Cell;
@@ -260,7 +261,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
         let global_cells = GcRef::from_iter_in(
             globals.gc,
             (0..program.global_cell_count)
-                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
+                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
         let result = execute(&mut globals, 0, program.stmts, global_cells, &|| ());
         match result {
@@ -338,7 +339,7 @@ pub fn run<'a>(
         let global_cells = GcRef::from_iter_in(
             gc,
             (0..program.global_cell_count)
-                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil)))),
+                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
         let mut stack = time("stk", args.times, || {
             Environment::new(gc, global_name_offsets, global_cells)
@@ -373,7 +374,7 @@ pub fn run<'a>(
 
             println!("Constants");
             for (i, constant) in constants.iter().enumerate() {
-                println!("{i:>DEBUG_INDENT$}:  {}", constant.lox_debug());
+                println!("{i:>DEBUG_INDENT$}:  {}", constant.parse().lox_debug());
             }
             println!();
 

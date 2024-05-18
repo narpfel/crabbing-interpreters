@@ -26,6 +26,7 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::ClassInner;
@@ -53,9 +54,11 @@ pub(crate) fn compile_block<'a>(bump: &'a Bump, block: &'a [Statement<'a>]) -> &
         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
             for stmt in stmts {
                 stmt(state)?;
-                state
-                    .env
-                    .collect_if_necessary(Value::Nil, state.cell_vars, state.trace_call_stack);
+                state.env.collect_if_necessary(
+                    Value::Nil.into_nanboxed(),
+                    state.cell_vars,
+                    state.trace_call_stack,
+                );
             }
             Ok(Value::Nil)
         },
@@ -94,7 +97,7 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                         state.cell_vars,
                         state.offset,
                         variable.target(),
-                        initialiser,
+                        initialiser.into_nanboxed(),
                     );
                     Ok(Value::Nil)
                 },
@@ -162,9 +165,12 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
             let function = *function;
             bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
-                    state
-                        .env
-                        .define(state.cell_vars, state.offset, target.target(), Value::Nil);
+                    state.env.define(
+                        state.cell_vars,
+                        state.offset,
+                        target.target(),
+                        Value::Nil.into_nanboxed(),
+                    );
                     let function = eval_function(state.env.gc, state.cell_vars, &function);
                     state
                         .env
@@ -211,9 +217,12 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                         }))?,
                         None => None,
                     };
-                    state
-                        .env
-                        .define(state.cell_vars, state.offset, target.target(), Value::Nil);
+                    state.env.define(
+                        state.cell_vars,
+                        state.offset,
+                        target.target(),
+                        Value::Nil.into_nanboxed(),
+                    );
                     let methods = methods
                         .iter()
                         .map(|method| {
@@ -231,12 +240,12 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                         state.cell_vars,
                         state.offset,
                         target.target(),
-                        Value::Class(class),
+                        Value::Class(class).into_nanboxed(),
                     );
                     if let Some(base) = class.base {
-                        let base = Value::Class(base);
+                        let base = Value::Class(base).into_nanboxed();
                         class.methods.values().for_each(|method| {
-                            let Value::Function(method) = method
+                            let Value::Function(method) = method.parse()
                             else {
                                 unreachable!()
                             };
@@ -371,28 +380,31 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     Ok(state
                         .env
-                        .get(state.cell_vars, state.offset, Slot::Local(slot)))
+                        .get(state.cell_vars, state.offset, Slot::Local(slot))
+                        .parse())
                 },
             ),
             Target::GlobalByName => bump.alloc(
                 // FIXME: optimisation missing
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     let (_, value) = state.env.get_global_by_name(variable.name)?;
-                    Ok(value)
+                    Ok(value.parse())
                 },
             ),
             Target::GlobalBySlot(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     Ok(state
                         .env
-                        .get(state.cell_vars, state.offset, Slot::Global(slot)))
+                        .get(state.cell_vars, state.offset, Slot::Global(slot))
+                        .parse())
                 },
             ),
             Target::Cell(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     Ok(state
                         .env
-                        .get(state.cell_vars, state.offset, Slot::Cell(slot)))
+                        .get(state.cell_vars, state.offset, Slot::Cell(slot))
+                        .parse())
                 },
             ),
         },
@@ -408,9 +420,12 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 let slot = state.env.get_global_slot_by_name(variable.name)?;
                                 variable.set_target(Target::GlobalBySlot(slot));
                             }
-                            state
-                                .env
-                                .set(state.cell_vars, state.offset, variable.target(), value);
+                            state.env.set(
+                                state.cell_vars,
+                                state.offset,
+                                variable.target(),
+                                value.into_nanboxed(),
+                            );
                             Ok(value)
                         },
                     )
@@ -426,7 +441,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     instance
                                         .attributes
                                         .borrow_mut()
-                                        .insert(attribute.id(), value);
+                                        .insert(attribute.id(), value.into_nanboxed());
                                 }
                                 _ => Err(Error::NoFields {
                                     lhs: target_value,
@@ -473,7 +488,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     function.cells,
                                     state.offset + stack_size_at_callsite,
                                     param.target(),
-                                    arg,
+                                    arg.into_nanboxed(),
                                 );
                                 Ok(())
                             },
@@ -506,7 +521,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 method.cells,
                                 state.offset + stack_size_at_callsite,
                                 method.parameters[0].target(),
-                                instance,
+                                instance.into_nanboxed(),
                             );
                             let parameters = method.parameters.iter().skip(1);
                             eval_call(state, method, parameters)
@@ -545,7 +560,10 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                     attributes: RefCell::new(HashMap::default()),
                                 },
                             ));
-                            match class.lookup_method(interned::INIT) {
+                            match class
+                                .lookup_method(interned::INIT)
+                                .map(nanboxed::Value::parse)
+                            {
                                 Some(Value::Function(init)) => {
                                     eval_method_call(state, &init, instance)?;
                                 }
@@ -581,19 +599,19 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             .attributes
                             .borrow()
                             .get(&attr_id)
-                            .cloned()
+                            .copied()
+                            .map(nanboxed::Value::parse)
                             .or_else(|| {
-                                instance
-                                    .class
-                                    .lookup_method(attr_id)
-                                    .map(|method| match method {
+                                instance.class.lookup_method(attr_id).map(|method| {
+                                    match method.parse() {
                                         Value::Function(method) =>
                                             Value::BoundMethod(GcRef::new_in(
                                                 state.env.gc,
                                                 BoundMethodInner { method, instance },
                                             )),
                                         _ => unreachable!(),
-                                    })
+                                    }
+                                })
                             })
                             .ok_or_else(|| {
                                 Box::new(Error::UndefinedProperty {
@@ -621,7 +639,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     match this {
                         Value::Instance(instance) => super_class
                             .lookup_method(attr_id)
-                            .map(|method| match method {
+                            .map(|method| match method.parse() {
                                 Value::Function(method) => Value::BoundMethod(GcRef::new_in(
                                     state.env.gc,
                                     BoundMethodInner { method, instance },

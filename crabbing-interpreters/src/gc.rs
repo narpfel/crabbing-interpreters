@@ -134,7 +134,7 @@ pub struct Gc {
 }
 
 impl Gc {
-    fn alloc<'a, T>(&'a self, value: T) -> *const GcValue<'a, T>
+    fn alloc<'a, T>(&'a self, value: T) -> NonNull<GcValue<'a, T>>
     where
         T: Trace,
     {
@@ -149,6 +149,7 @@ impl Gc {
             _gc: PhantomData,
             value,
         }));
+        let gc_value = NonNull::new(gc_value).unwrap();
 
         unsafe {
             self.adopt(gc_value);
@@ -156,15 +157,15 @@ impl Gc {
         gc_value
     }
 
-    unsafe fn adopt<'a, T>(&'a self, value: *mut GcValue<'a, T>)
+    unsafe fn adopt<'a, T>(&'a self, value: NonNull<GcValue<'a, T>>)
     where
         T: ?Sized,
     {
         self.allocation_count.set(self.allocation_count.get() + 1);
         let last = self.last.get();
         unsafe {
-            let value_ref = &*value;
-            let head_ptr = NonNull::new(ptr::addr_of_mut!((*value).head));
+            let value_ref = value.as_ref();
+            let head_ptr = NonNull::new(ptr::addr_of_mut!((*value.as_ptr()).head));
             let mut head = value_ref.head.get();
             debug_assert!(head.prev.is_none());
             debug_assert!(head.next.is_none());
@@ -243,8 +244,8 @@ where
 }
 
 impl<T> GcValue<'_, [T]> {
-    fn ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> *mut Self {
-        NonNull::from_raw_parts(memory.cast(), length).as_ptr()
+    fn ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> NonNull<Self> {
+        NonNull::from_raw_parts(memory.cast(), length)
     }
 }
 
@@ -264,7 +265,7 @@ enum State {
     Done,
 }
 
-pub struct GcRef<'gc, T>(*const GcValue<'gc, T>, PhantomData<&'gc GcValue<'gc, T>>)
+pub struct GcRef<'gc, T>(NonNull<GcValue<'gc, T>>, PhantomData<&'gc GcValue<'gc, T>>)
 where
     T: ?Sized;
 
@@ -279,6 +280,14 @@ impl<'gc, T> GcRef<'gc, T> {
     pub(crate) fn as_ptr(this: &Self) -> *const T {
         &GcRef::value(this).value
     }
+
+    pub(crate) unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
+        Self(ptr.cast(), PhantomData)
+    }
+
+    pub(crate) fn as_inner(this: Self) -> NonNull<()> {
+        this.0.cast()
+    }
 }
 
 impl<'gc, T> GcRef<'gc, T>
@@ -288,7 +297,7 @@ where
     fn value(&self) -> &'gc GcValue<'gc, T> {
         // SAFETY: This is safe for uncollected `GcRef`s. Callers of `Gc::sweep` must ensure that
         // no reachable `GcRef`s are collected.
-        unsafe { &*self.0 }
+        unsafe { self.0.as_ref() }
     }
 }
 
@@ -303,7 +312,8 @@ impl<'gc, T> GcRef<'gc, [T]> {
             let layout = Self::compute_layout(length);
             let memory = NonNull::new(std::alloc::alloc(layout))
                 .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-            let gc_value = Self::value_ptr_from_raw_parts(memory, length);
+            let nonnull_gc_value = Self::value_ptr_from_raw_parts(memory, length);
+            let gc_value = nonnull_gc_value.as_ptr();
 
             ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
                 prev: None,
@@ -311,7 +321,7 @@ impl<'gc, T> GcRef<'gc, [T]> {
                 length,
                 drop: |memory, length| {
                     let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
-                    ptr::drop_in_place(gc_value);
+                    ptr::drop_in_place(gc_value.as_ptr());
                     std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
                 },
                 state: State::Unvisited,
@@ -330,8 +340,8 @@ impl<'gc, T> GcRef<'gc, [T]> {
 
             // adopt after initialising the slice to prevent dropping uninitialised values when the
             // loop above panics
-            gc.adopt(gc_value);
-            Self(gc_value, PhantomData)
+            gc.adopt(nonnull_gc_value);
+            Self(nonnull_gc_value, PhantomData)
         }
     }
 
@@ -343,7 +353,7 @@ impl<'gc, T> GcRef<'gc, [T]> {
             .pad_to_align()
     }
 
-    fn value_ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> *mut GcValue<'gc, [T]> {
+    fn value_ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> NonNull<GcValue<'gc, [T]>> {
         GcValue::ptr_from_raw_parts(memory, length)
     }
 }
@@ -433,6 +443,14 @@ where
         Self(ptr.cast(), PhantomData)
     }
 
+    fn as_inner(this: Self) -> NonNull<()> {
+        this.0
+    }
+
+    unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
+        Self(ptr, PhantomData)
+    }
+
     fn as_gc_ref(self) -> GcRef<'a, T> {
         let head_ptr: NonNull<Cell<GcHead>> = self.0.cast();
         unsafe {
@@ -440,7 +458,7 @@ where
             // SAFETY: this pointer cast is safe because we restrict `<T as Pointee>::Metadata` to
             // be `usize`
             let ptr = NonNull::from_raw_parts(self.0, *ptr::from_ref(&length).cast());
-            GcRef(ptr.as_ptr(), PhantomData)
+            GcRef(ptr, PhantomData)
         }
     }
 }
@@ -451,6 +469,14 @@ pub struct GcStr<'a>(GcThin<'a, [u8]>);
 impl<'a> GcStr<'a> {
     pub(crate) fn new_in(gc: &'a Gc, s: &str) -> Self {
         Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())))
+    }
+
+    pub(crate) unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
+        Self(GcThin::from_ptr(ptr))
+    }
+
+    pub(crate) fn as_inner(this: Self) -> NonNull<()> {
+        GcThin::as_inner(this.0)
     }
 
     fn str(&self) -> &'a str {

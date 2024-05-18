@@ -13,8 +13,11 @@ use crate::gc::Trace;
 use crate::interner::InternedString;
 use crate::scope::Statement;
 use crate::scope::Variable;
+use crate::value::nanboxed::AsNanBoxed as _;
 
-pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<Value<'a>>>>]>;
+pub(crate) mod nanboxed;
+
+pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -29,7 +32,28 @@ pub enum Value<'a> {
     BoundMethod(BoundMethod<'a>),
 }
 
-impl Value<'_> {
+impl<'a> Value<'a> {
+    pub fn into_nanboxed(self) -> nanboxed::Value<'a> {
+        let data = match self {
+            Self::Number(number) =>
+                if number.is_nan() {
+                    nanboxed::NaN.into_nanboxed()
+                }
+                else {
+                    std::ptr::null::<()>().with_addr(usize::try_from(number.to_bits()).unwrap())
+                },
+            Self::String(s) => s.into_nanboxed(),
+            Self::Bool(b) => b.into_nanboxed(),
+            Self::Nil => ().into_nanboxed(),
+            Self::Function(function) => function.into_nanboxed(),
+            Self::NativeFunction(native_function) => native_function.into_nanboxed(),
+            Self::Class(class) => class.into_nanboxed(),
+            Self::Instance(instance) => instance.into_nanboxed(),
+            Self::BoundMethod(bmi) => bmi.into_nanboxed(),
+        };
+        nanboxed::Value::new(data)
+    }
+
     pub fn typ(&self) -> &'static str {
         match self {
             Value::Number(_) => "Number",
@@ -121,7 +145,7 @@ pub type Class<'a> = GcRef<'a, ClassInner<'a>>;
 pub struct ClassInner<'a> {
     pub(crate) name: &'a str,
     pub(crate) base: Option<Class<'a>>,
-    pub(crate) methods: HashMap<InternedString, Value<'a>>,
+    pub(crate) methods: HashMap<InternedString, nanboxed::Value<'a>>,
 }
 
 impl<'a> ClassInner<'a> {
@@ -131,7 +155,7 @@ impl<'a> ClassInner<'a> {
         })
     }
 
-    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<Value<'a>> {
+    pub(crate) fn lookup_method(&self, name: InternedString) -> Option<nanboxed::Value<'a>> {
         self.mro()
             .find_map(|class| class.methods.get(&name))
             .copied()
@@ -159,7 +183,7 @@ pub type Instance<'a> = GcRef<'a, InstanceInner<'a>>;
 
 pub struct InstanceInner<'a> {
     pub(crate) class: Class<'a>,
-    pub(crate) attributes: RefCell<HashMap<InternedString, Value<'a>>>,
+    pub(crate) attributes: RefCell<HashMap<InternedString, nanboxed::Value<'a>>>,
 }
 
 unsafe impl Trace for InstanceInner<'_> {
