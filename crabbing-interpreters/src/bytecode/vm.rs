@@ -117,7 +117,9 @@ impl<'a, 'b> Vm<'a, 'b> {
     }
 
     pub(crate) fn next_bytecode(&self) -> Bytecode {
-        self.bytecode[self.pc]
+        // SAFETY: `validate_bytecode` makes sure that `self.pc` is always in bounds for
+        // `self.bytecode`
+        unsafe { *self.bytecode.get_unchecked(self.pc) }
     }
 
     pub(crate) fn pc(&self) -> usize {
