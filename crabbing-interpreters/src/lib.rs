@@ -419,7 +419,7 @@ pub fn run<'a>(
                         &constants,
                         &metadata,
                         &error_locations,
-                        &mut stack,
+                        stack,
                         global_cells,
                     )?)?,
                     Loop::Threaded => {
@@ -428,7 +428,7 @@ pub fn run<'a>(
                             &constants,
                             &metadata,
                             &error_locations,
-                            &mut stack,
+                            stack,
                             global_cells,
                         )?;
                         let mut error = None;
