@@ -42,6 +42,7 @@ use crate::value::FunctionInner;
 use crate::value::InstanceInner;
 use crate::value::NativeError;
 use crate::value::Value;
+use crate::Report;
 use crate::Sliced;
 
 #[derive(Debug)]
@@ -53,6 +54,27 @@ pub enum ControlFlow<T, E> {
 impl<T, E> From<E> for ControlFlow<T, E> {
     fn from(value: E) -> Self {
         ControlFlow::Error(value)
+    }
+}
+
+impl<'a, T, E> From<E> for ControlFlow<T, Box<dyn Report + 'a>>
+where
+    E: Report + 'a,
+{
+    fn from(value: E) -> Self {
+        ControlFlow::Error(Box::new(value))
+    }
+}
+
+impl<'a, T, E> From<ControlFlow<T, E>> for ControlFlow<T, Box<dyn Report + 'a>>
+where
+    E: Report + 'a,
+{
+    fn from(value: ControlFlow<T, E>) -> Self {
+        match value {
+            ControlFlow::Return(value) => ControlFlow::Return(value),
+            ControlFlow::Error(error) => ControlFlow::Error(error.into()),
+        }
     }
 }
 

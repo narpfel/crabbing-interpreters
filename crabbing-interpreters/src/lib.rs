@@ -402,56 +402,64 @@ pub fn run<'a>(
             println!()
         }
 
-        match time("exe", args.times, || match args.r#loop {
-            Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells, &|| ()),
-            Loop::Closures => execute_closures(&mut State {
-                env: &mut stack,
-                offset: 0,
-                cell_vars: global_cells,
-                trace_call_stack: &|| (),
-            }),
-            Loop::Bytecode => run_bytecode(&mut Vm::new(
-                &bytecode,
-                &constants,
-                &metadata,
-                &error_locations,
-                &mut stack,
-                global_cells,
-            )),
-            Loop::Threaded => {
-                let mut vm = Vm::new(
-                    &bytecode,
-                    &constants,
-                    &metadata,
-                    &error_locations,
-                    &mut stack,
-                    global_cells,
-                );
-                let mut error = None;
-                compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes, &mut error);
+        let execution_result = time(
+            "exe",
+            args.times,
+            || -> Result<Value, ControlFlow<Value, Box<dyn Report>>> {
+                let result = match args.r#loop {
+                    Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells, &|| ())?,
+                    Loop::Closures => execute_closures(&mut State {
+                        env: &mut stack,
+                        offset: 0,
+                        cell_vars: global_cells,
+                        trace_call_stack: &|| (),
+                    })?,
+                    Loop::Bytecode => run_bytecode(&mut Vm::new(
+                        &bytecode,
+                        &constants,
+                        &metadata,
+                        &error_locations,
+                        &mut stack,
+                        global_cells,
+                    )?)?,
+                    Loop::Threaded => {
+                        let mut vm = Vm::new(
+                            &bytecode,
+                            &constants,
+                            &metadata,
+                            &error_locations,
+                            &mut stack,
+                            global_cells,
+                        )?;
+                        let mut error = None;
+                        compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes, &mut error);
 
-                if args.show_bytecode_execution_counts {
-                    let max_len = Bytecode::all_discriminants()
-                        .map(Bytecode::name)
-                        .map(str::len)
-                        .into_iter()
-                        .max()
-                        .unwrap();
-                    eprintln!("Bytecode execution counts");
-                    for (discriminant, count) in vm.execution_counts().iter().enumerate() {
-                        eprintln!(
-                            "{:>max_len$} ({discriminant:>2}): {count:>12}",
-                            Bytecode::name(discriminant)
-                        );
+                        if args.show_bytecode_execution_counts {
+                            let max_len = Bytecode::all_discriminants()
+                                .map(Bytecode::name)
+                                .map(str::len)
+                                .into_iter()
+                                .max()
+                                .unwrap();
+                            eprintln!("Bytecode execution counts");
+                            for (discriminant, count) in vm.execution_counts().iter().enumerate() {
+                                eprintln!(
+                                    "{:>max_len$} ({discriminant:>2}): {count:>12}",
+                                    Bytecode::name(discriminant),
+                                );
+                            }
+                        }
+
+                        match error {
+                            Some(error) => Err(error)?,
+                            None => Value::Nil,
+                        }
                     }
-                }
-
-                match error {
-                    Some(error) => Err(error.into()),
-                    None => Ok(Value::Nil),
-                }
-            }
-        }) {
+                };
+                Ok(result)
+            },
+        );
+        match execution_result {
             Ok(_) | Err(ControlFlow::Return(_)) => (),
             Err(ControlFlow::Error(err)) => Err(err)?,
         };
