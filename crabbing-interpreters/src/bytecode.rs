@@ -2,6 +2,7 @@ use std::fmt;
 use std::ops::Index;
 
 pub(crate) use crate::bytecode::compiler::compile_program;
+use crate::bytecode::compiler::Metadata;
 use crate::bytecode::vm::execute_bytecode;
 pub(crate) use crate::bytecode::vm::run_bytecode;
 pub(crate) use crate::bytecode::vm::Vm;
@@ -240,4 +241,85 @@ impl fmt::Display for Bytecode {
             ConstNumber(number) => write!(f, "const_number {number}"),
         }
     }
+}
+
+fn validate_bytecode(
+    bytecodes: &[Bytecode],
+    metadata: &[Metadata],
+) -> Result<(), vm::InvalidBytecode> {
+    let valid_jump_targets = 1..u32::try_from(bytecodes.len()).unwrap();
+
+    if !matches!(bytecodes.last(), Some(Bytecode::End)) {
+        return Err(vm::InvalidBytecode::NoEnd);
+    }
+
+    for (pc, &bytecode) in bytecodes.iter().enumerate() {
+        match bytecode {
+            Bytecode::JumpIfTrue(target)
+            | Bytecode::JumpIfFalse(target)
+            | Bytecode::PopJumpIfTrue(target)
+            | Bytecode::PopJumpIfFalse(target)
+            | Bytecode::Jump(target)
+            | Bytecode::BeginFunction(target) =>
+                if !valid_jump_targets.contains(&target) {
+                    return Err(vm::InvalidBytecode::JumpOutOfBounds);
+                },
+            Bytecode::BuildFunction(metadata_index) => {
+                let Metadata::Function { function: _, code_size } =
+                    metadata[usize::try_from(metadata_index).unwrap()]
+                else {
+                    unreachable!()
+                };
+                let code_ptr = u32::try_from(pc)
+                    .unwrap()
+                    .checked_sub(code_size)
+                    .ok_or(vm::InvalidBytecode::JumpOutOfBounds)?;
+                if !valid_jump_targets.contains(&code_ptr) {
+                    return Err(vm::InvalidBytecode::JumpOutOfBounds);
+                }
+            }
+            Bytecode::Pop
+            | Bytecode::Const(_)
+            | Bytecode::UnaryMinus
+            | Bytecode::UnaryNot
+            | Bytecode::Equal
+            | Bytecode::NotEqual
+            | Bytecode::Less
+            | Bytecode::LessEqual
+            | Bytecode::Greater
+            | Bytecode::GreaterEqual
+            | Bytecode::Add
+            | Bytecode::Subtract
+            | Bytecode::Multiply
+            | Bytecode::Divide
+            | Bytecode::Power
+            | Bytecode::Local(_)
+            | Bytecode::Global(_)
+            | Bytecode::Cell(_)
+            | Bytecode::Dup
+            | Bytecode::StoreAttr(_)
+            | Bytecode::LoadAttr(_)
+            | Bytecode::StoreLocal(_)
+            | Bytecode::StoreGlobal(_)
+            | Bytecode::StoreCell(_)
+            | Bytecode::DefineCell(_)
+            | Bytecode::Call(_)
+            | Bytecode::Print
+            | Bytecode::GlobalByName(_)
+            | Bytecode::StoreGlobalByName(_)
+            | Bytecode::Return
+            | Bytecode::End
+            | Bytecode::Pop2
+            | Bytecode::BuildClass(_)
+            | Bytecode::PrintStack
+            | Bytecode::BoundMethodGetInstance
+            | Bytecode::Super(_)
+            | Bytecode::ConstNil
+            | Bytecode::ConstTrue
+            | Bytecode::ConstFalse
+            | Bytecode::ConstNumber(_) => (),
+        }
+    }
+
+    Ok(())
 }

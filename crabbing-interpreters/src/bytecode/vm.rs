@@ -8,6 +8,7 @@ use Bytecode::*;
 
 use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
+use crate::bytecode::validate_bytecode;
 use crate::bytecode::Bytecode;
 use crate::bytecode::CallInner;
 use crate::environment::Environment;
@@ -32,6 +33,7 @@ use crate::value::InstanceInner;
 use crate::value::NativeError;
 use crate::value::Value;
 use crate::value::Value::*;
+use crate::Report;
 
 trait Cast {
     type Target;
@@ -44,6 +46,22 @@ impl Cast for u32 {
 
     fn cast(self) -> Self::Target {
         usize::try_from(self).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum InvalidBytecode {
+    NoEnd,
+    JumpOutOfBounds,
+}
+
+impl Report for InvalidBytecode {
+    fn print(&self) {
+        eprintln!("{self:?}")
+    }
+
+    fn exit_code(&self) -> i32 {
+        66
     }
 }
 
@@ -71,7 +89,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         error_locations: &'b [ContainingExpression<'a>],
         env: &'b mut Environment<'a>,
         global_cells: Cells<'a>,
-    ) -> Self {
+    ) -> Result<Self, InvalidBytecode> {
         let stack =
             Box::try_from(vec![Value::Nil.into_nanboxed(); ENV_SIZE].into_boxed_slice()).unwrap();
         let call_stack = Box::try_from(
@@ -79,7 +97,9 @@ impl<'a, 'b> Vm<'a, 'b> {
         )
         .unwrap();
 
-        Self {
+        validate_bytecode(bytecode, metadata)?;
+
+        Ok(Self {
             bytecode,
             constants,
             metadata,
@@ -93,7 +113,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             call_sp: 0,
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
-        }
+        })
     }
 
     pub(crate) fn next_bytecode(&self) -> Bytecode {
