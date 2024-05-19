@@ -80,7 +80,12 @@ macro_rules! bytecode {
                                 );
                                 match result {
                                     Err(value) => *error = value,
-                                    Ok(()) => compiled_program[vm.pc()](vm, compiled_program, error),
+                                    Ok(()) => {
+                                        // SAFETY: `compiled_program` has the same length as
+                                        // `vm.bytecode` and `vm.pc()` is always in bounds for that
+                                        let next_function = unsafe { compiled_program.get(vm.pc()) };
+                                        next_function(vm, compiled_program, error)
+                                    }
                                 }
                             }
                             $variant_name
@@ -94,6 +99,12 @@ macro_rules! bytecode {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompiledBytecodes<'a>(pub(crate) &'a [CompiledBytecode]);
+
+impl CompiledBytecodes<'_> {
+    unsafe fn get(self, index: usize) -> CompiledBytecode {
+        unsafe { *self.0.get_unchecked(index) }
+    }
+}
 
 impl Index<usize> for CompiledBytecodes<'_> {
     type Output = CompiledBytecode;
