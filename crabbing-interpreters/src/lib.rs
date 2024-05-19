@@ -209,7 +209,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
     let mut interner = Interner::default();
     let clock = interner.intern("clock");
-    let globals_names =
+    let mut globals_names =
         bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
     let gc = &Gc::default();
     let mut globals = Environment::new(
@@ -271,6 +271,19 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 },
             Err(ControlFlow::Error(err)) => err.print(),
         }
+        globals_names = bump.alloc_slice_copy(
+            &globals_names
+                .iter()
+                .chain(
+                    program
+                        .global_name_offsets
+                        .values()
+                        .map(|variable| variable.name),
+                )
+                .copied()
+                .unique_by(Name::id)
+                .collect_vec(),
+        );
     }
 }
 

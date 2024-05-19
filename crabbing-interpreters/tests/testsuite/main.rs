@@ -176,6 +176,7 @@ fn repl_produces_error_message(
 #[case::type_error_for_plus_mentions_strings("nil + 42;")]
 #[case::add_bools("true + false;")]
 #[case::var_statement_without_initialiser("var x; print x; print x == nil;")]
+#[case::use_variable_in_multiple_lines("var x = 42;\nprint x;")]
 fn repl(_filter_output: OutputFilter, #[by_ref] testname: &str, #[case] src: &str) {
     insta::allow_duplicates! {
         for interpreter in [
