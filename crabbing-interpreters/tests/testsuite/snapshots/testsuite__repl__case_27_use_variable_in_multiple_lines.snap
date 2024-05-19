@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args: []
+  stdin: "var x = 42;\nprint x;"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m[0mλ» [1m[0m42
+[0mλ» [1m[0m
+----- stderr -----
