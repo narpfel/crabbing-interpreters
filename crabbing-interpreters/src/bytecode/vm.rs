@@ -70,7 +70,7 @@ pub(crate) struct Vm<'a, 'b> {
     constants: &'b [nanboxed::Value<'a>],
     metadata: &'b [Metadata<'a>],
     error_locations: &'b [ContainingExpression<'a>],
-    env: &'b mut Environment<'a>,
+    env: Environment<'a>,
     pc: usize,
     stack: Box<[nanboxed::Value<'a>; ENV_SIZE]>,
     sp: usize,
@@ -87,7 +87,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         constants: &'b [nanboxed::Value<'a>],
         metadata: &'b [Metadata<'a>],
         error_locations: &'b [ContainingExpression<'a>],
-        env: &'b mut Environment<'a>,
+        env: Environment<'a>,
         global_cells: Cells<'a>,
     ) -> Result<Self, InvalidBytecode> {
         let stack =
