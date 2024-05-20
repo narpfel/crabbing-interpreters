@@ -173,6 +173,7 @@ bytecode! {
         StoreCell(u32),
         DefineCell(u32),
         Call(CallInner),
+        ShortCall(CallInner),
         Print,
         GlobalByName(InternedString),
         StoreGlobalByName(InternedString),
@@ -229,6 +230,10 @@ impl fmt::Display for Bytecode {
             DefineCell(slot) => write!(f, "define_cell {slot}"),
             Call(CallInner { argument_count, stack_size_at_callsite }) =>
                 write!(f, "call +{stack_size_at_callsite} arity={argument_count}"),
+            ShortCall(CallInner { argument_count, stack_size_at_callsite }) => write!(
+                f,
+                "call +{stack_size_at_callsite} arity={argument_count} (short)",
+            ),
             Print => write!(f, "print"),
             GlobalByName(string) => write!(f, "global_by_name {string}"),
             StoreGlobalByName(string) => write!(f, "store_global_by_name {string}"),
@@ -289,6 +294,13 @@ fn validate_bytecode(
                     return Err(vm::InvalidBytecode::JumpOutOfBounds);
                 }
             }
+            Bytecode::ShortCall(CallInner {
+                argument_count,
+                stack_size_at_callsite: _,
+            }) =>
+                if argument_count >= 256 {
+                    return Err(vm::InvalidBytecode::TooManyArgsInShortCall);
+                },
             Bytecode::Pop
             | Bytecode::Const(_)
             | Bytecode::UnaryMinus

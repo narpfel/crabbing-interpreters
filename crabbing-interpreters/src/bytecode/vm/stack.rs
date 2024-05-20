@@ -31,7 +31,11 @@ where
     }
 
     pub(super) fn peek(&self) -> T {
-        self.peek_at(0)
+        self.short_peek_at(0)
+    }
+
+    pub(super) fn short_peek_at(&self, index: u32) -> T {
+        self.peek_at(index)
     }
 
     pub(super) fn peek_at(&self, index: u32) -> T {

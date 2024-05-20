@@ -55,6 +55,7 @@ impl Cast for u32 {
 pub(crate) enum InvalidBytecode {
     NoEnd,
     JumpOutOfBounds,
+    TooManyArgsInShortCall,
 }
 
 impl Report for InvalidBytecode {
@@ -376,110 +377,15 @@ pub(crate) fn execute_bytecode<'a>(
             vm.cell_vars[slot.cast()].set(GcRef::new_in(vm.env.gc, Cell::new(value)));
         }
         Call(CallInner { argument_count, stack_size_at_callsite }) => {
-            let callee = vm.stack.peek_at(argument_count).parse();
-            match callee {
-                Function(function) => {
-                    if function.parameters.len() != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: function.parameters.len(),
-                            at: vm.error_location(),
-                        }))?
-                    }
-                    vm.call_stack.push(CallFrame {
-                        pc: vm.pc,
-                        offset: vm.offset,
-                        cells: vm.cell_vars,
-                    });
-                    vm.pc = function.code_ptr - 1;
-                    vm.offset += stack_size_at_callsite;
-                    vm.cell_vars = function.cells;
-                }
-                BoundMethod(bound_method) => {
-                    let method = bound_method.method;
-                    if method.parameters.len() - 1 != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: method.parameters.len() - 1,
-                            at: vm.error_location(),
-                        }))?
-                    }
-                    vm.call_stack.push(CallFrame {
-                        pc: vm.pc,
-                        offset: vm.offset,
-                        cells: vm.cell_vars,
-                    });
-                    vm.pc = method.code_ptr - 1;
-                    vm.offset += stack_size_at_callsite;
-                    vm.cell_vars = method.cells;
-                }
-                NativeFunction(native_fn) => {
-                    // FIXME: This can be more efficient
-                    let mut args: Vec<_> = (0..argument_count)
-                        .map(|_| vm.stack.pop().parse())
-                        .collect();
-                    args.reverse();
-                    let value = native_fn(args).map_err(|err| {
-                        Box::new(match err {
-                            NativeError::Error(err) => err,
-                            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                                callee,
-                                expected,
-                                at: vm.error_location(),
-                            },
-                        })
-                    })?;
-                    vm.stack.push(value.into_nanboxed());
-                }
-                Class(class) => {
-                    let instance = GcRef::new_in(
-                        vm.env.gc,
-                        InstanceInner {
-                            class,
-                            attributes: RefCell::new(HashMap::default()),
-                        },
-                    );
-                    match class
-                        .lookup_method(interned::INIT)
-                        .map(nanboxed::Value::parse)
-                    {
-                        Some(Value::Function(init)) => {
-                            if init.parameters.len() - 1 != argument_count.cast() {
-                                Err(Box::new(Error::ArityMismatch {
-                                    callee,
-                                    expected: init.parameters.len() - 1,
-                                    at: vm.error_location(),
-                                }))?
-                            }
-                            *vm.stack.peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
-                                vm.env.gc,
-                                BoundMethodInner { method: init, instance },
-                            ))
-                            .into_nanboxed();
-                            vm.call_stack.push(CallFrame {
-                                pc: vm.pc,
-                                offset: vm.offset,
-                                cells: vm.cell_vars,
-                            });
-                            vm.pc = init.code_ptr - 1;
-                            vm.offset += stack_size_at_callsite;
-                            vm.cell_vars = init.cells;
-                        }
-                        Some(_) => unreachable!(),
-                        None if argument_count == 0 =>
-                            vm.stack.push(Value::Instance(instance).into_nanboxed()),
-                        None => Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: 0,
-                            at: vm.error_location(),
-                        }))?,
-                    }
-                }
-                _ => Err(Box::new(Error::Uncallable {
-                    callee,
-                    at: vm.error_location(),
-                }))?,
-            }
+            execute_call(
+                vm,
+                argument_count,
+                stack_size_at_callsite,
+                BoundsCheckedPeek,
+            )?;
+        }
+        ShortCall(CallInner { argument_count, stack_size_at_callsite }) => {
+            execute_call(vm, argument_count, stack_size_at_callsite, ShortPeek)?;
         }
         Print => outline! {
             let value = vm.stack.pop().parse();
@@ -704,5 +610,149 @@ fn number_binop<'a, 'b>(
         }
     };
     vm.stack.push(result.into_nanboxed());
+    Ok(())
+}
+
+trait Peeker {
+    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    where
+        T: Copy;
+}
+
+struct ShortPeek;
+
+impl Peeker for ShortPeek {
+    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    where
+        T: Copy,
+    {
+        stack.short_peek_at(index)
+    }
+}
+
+struct BoundsCheckedPeek;
+
+impl Peeker for BoundsCheckedPeek {
+    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    where
+        T: Copy,
+    {
+        stack.peek_at(index)
+    }
+}
+
+#[inline(always)]
+fn execute_call<'a>(
+    vm: &mut Vm<'a, '_>,
+    argument_count: u32,
+    stack_size_at_callsite: u32,
+    peeker: impl Peeker,
+) -> Result<(), Option<Box<Error<'a>>>> {
+    let callee = peeker.peek_at(&vm.stack, argument_count).parse();
+
+    match callee {
+        Function(function) => {
+            if function.parameters.len() != argument_count.cast() {
+                Err(Box::new(Error::ArityMismatch {
+                    callee,
+                    expected: function.parameters.len(),
+                    at: vm.error_location(),
+                }))?
+            }
+            vm.call_stack.push(CallFrame {
+                pc: vm.pc,
+                offset: vm.offset,
+                cells: vm.cell_vars,
+            });
+            vm.pc = function.code_ptr - 1;
+            vm.offset += stack_size_at_callsite;
+            vm.cell_vars = function.cells;
+        }
+        BoundMethod(bound_method) => {
+            let method = bound_method.method;
+            if method.parameters.len() - 1 != argument_count.cast() {
+                Err(Box::new(Error::ArityMismatch {
+                    callee,
+                    expected: method.parameters.len() - 1,
+                    at: vm.error_location(),
+                }))?
+            }
+            vm.call_stack.push(CallFrame {
+                pc: vm.pc,
+                offset: vm.offset,
+                cells: vm.cell_vars,
+            });
+            vm.pc = method.code_ptr - 1;
+            vm.offset += stack_size_at_callsite;
+            vm.cell_vars = method.cells;
+        }
+        NativeFunction(native_fn) => {
+            // FIXME: This can be more efficient
+            let mut args: Vec<_> = (0..argument_count)
+                .map(|_| vm.stack.pop().parse())
+                .collect();
+            args.reverse();
+            let value = native_fn(args).map_err(|err| {
+                Box::new(match err {
+                    NativeError::Error(err) => err,
+                    NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                        callee,
+                        expected,
+                        at: vm.error_location(),
+                    },
+                })
+            })?;
+            vm.stack.push(value.into_nanboxed());
+        }
+        Class(class) => {
+            let instance = GcRef::new_in(
+                vm.env.gc,
+                InstanceInner {
+                    class,
+                    attributes: RefCell::new(HashMap::default()),
+                },
+            );
+            match class
+                .lookup_method(interned::INIT)
+                .map(nanboxed::Value::parse)
+            {
+                Some(Value::Function(init)) => {
+                    if init.parameters.len() - 1 != argument_count.cast() {
+                        Err(Box::new(Error::ArityMismatch {
+                            callee,
+                            expected: init.parameters.len() - 1,
+                            at: vm.error_location(),
+                        }))?
+                    }
+                    *vm.stack.peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
+                        vm.env.gc,
+                        BoundMethodInner { method: init, instance },
+                    ))
+                    .into_nanboxed();
+                    vm.call_stack.push(CallFrame {
+                        pc: vm.pc,
+                        offset: vm.offset,
+                        cells: vm.cell_vars,
+                    });
+                    vm.pc = init.code_ptr - 1;
+                    vm.offset += stack_size_at_callsite;
+                    vm.cell_vars = init.cells;
+                }
+                Some(_) => unreachable!(),
+                None if argument_count == 0 =>
+                    vm.stack.push(Value::Instance(instance).into_nanboxed()),
+                None => Err(Box::new(Error::ArityMismatch {
+                    callee,
+                    expected: 0,
+                    at: vm.error_location(),
+                }))?,
+            }
+        }
+        _ => Err(Box::new(Error::Uncallable {
+            callee,
+            at: vm.error_location(),
+        }))?,
+    }
+
     Ok(())
 }

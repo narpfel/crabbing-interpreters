@@ -362,10 +362,18 @@ impl<'a> Compiler<'a> {
                 for arg in *arguments {
                     self.compile_expr(arg);
                 }
-                self.code.push(Call(CallInner {
-                    argument_count: arguments.len().try_into().unwrap(),
+                let argument_count = arguments.len().try_into().unwrap();
+                let inner = CallInner {
+                    argument_count,
                     stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
-                }));
+                };
+                let call = if argument_count >= 256 {
+                    Call(inner)
+                }
+                else {
+                    ShortCall(inner)
+                };
+                self.code.push(call);
                 self.code.push(Pop2);
             }
             Expression::Attribute { lhs, attribute } => {
