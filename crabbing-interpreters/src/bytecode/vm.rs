@@ -35,6 +35,7 @@ use crate::value::Value;
 use crate::value::Value::*;
 use crate::Report;
 
+#[cfg_attr(feature = "mmap", path = "vm/mmap_stack.rs")]
 mod stack;
 
 trait Cast {

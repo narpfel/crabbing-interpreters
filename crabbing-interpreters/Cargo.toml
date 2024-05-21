@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-miri_tests = []
 count_bytecode_execution = []
+miri_tests = []
+mmap = ["dep:libc"]
 
 [dependencies]
 ariadne = { workspace = true }
@@ -15,6 +16,7 @@ crabbing-interpreters-derive-report = { path = "../crabbing-interpreters-derive-
 crabbing-interpreters-lex = { path = "../crabbing-interpreters-lex" }
 indexmap = { workspace = true }
 itertools = { workspace = true }
+libc = { workspace = true, optional = true }
 rustc-hash = { workspace = true }
 variant-types = { path = "../variant-types" }
 variant-types-derive = { path = "../variant-types-derive" }
