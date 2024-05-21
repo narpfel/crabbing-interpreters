@@ -91,6 +91,7 @@ where
     T: Copy,
 {
     pub(super) fn push(&mut self, value: T) {
+        debug_assert!(self.is_in_bounds(0));
         unsafe {
             self.pointer.write(value);
             self.pointer = self.pointer.add(1);
@@ -98,6 +99,7 @@ where
     }
 
     pub(super) fn pop(&mut self) -> T {
+        debug_assert!(self.is_in_bounds(-1));
         unsafe {
             self.pointer = self.pointer.sub(1);
             self.pointer.read()
@@ -110,33 +112,32 @@ where
 
     pub(super) fn short_peek_at(&self, index: u32) -> T {
         debug_assert!(index < 256);
-        debug_assert!(self.is_in_bounds(index));
-        unsafe { self.peek_at_unchecked(index) }
+        let offset = peek_offset(index);
+        unsafe { self.peek_at_unchecked(offset) }
     }
 
     pub(super) fn peek_at(&self, index: u32) -> T {
-        assert!(self.is_in_bounds(index));
-        unsafe { self.peek_at_unchecked(index) }
+        let offset = peek_offset(index);
+        assert!(self.is_in_bounds(offset));
+        unsafe { self.peek_at_unchecked(offset) }
     }
 
-    unsafe fn peek_at_unchecked(&self, index: u32) -> T {
-        debug_assert!(self.is_in_bounds(index));
-        let index = usize::try_from(index).unwrap();
-        unsafe { self.pointer.sub(1 + index).read() }
+    unsafe fn peek_at_unchecked(&self, offset: isize) -> T {
+        debug_assert!(self.is_in_bounds(offset));
+        unsafe { self.pointer.offset(offset).read() }
     }
 }
 
 impl<T> Stack<T> {
     pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
-        assert!(self.is_in_bounds(index));
-        let index = usize::try_from(index).unwrap();
-        unsafe { self.pointer.sub(1 + index).as_mut() }
+        let offset = peek_offset(index);
+        assert!(self.is_in_bounds(offset));
+        unsafe { self.pointer.offset(offset).as_mut() }
     }
 
     #[must_use]
-    fn is_in_bounds(&self, index: u32) -> bool {
-        let index = usize::try_from(index).unwrap();
-        let target_ptr = self.pointer.as_ptr().wrapping_sub(1 + index);
+    fn is_in_bounds(&self, offset: isize) -> bool {
+        let target_ptr = self.pointer.as_ptr().wrapping_offset(offset);
         self.useable_stack_start().as_ptr() <= target_ptr
             && target_ptr
                 < self
@@ -185,4 +186,8 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.used_stack()).finish()
     }
+}
+
+fn peek_offset(index: u32) -> isize {
+    -1 - isize::try_from(index).unwrap()
 }
