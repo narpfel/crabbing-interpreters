@@ -3,7 +3,7 @@ use std::fmt;
 use crate::environment::ENV_SIZE;
 use crate::gc::Trace;
 
-pub(super) struct Stack<T> {
+pub(crate) struct Stack<T> {
     stack: Box<[T; ENV_SIZE]>,
     pointer: usize,
 }

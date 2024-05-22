@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::bytecode::vm::stack::Stack;
 use crate::bytecode::Bytecode;
 use crate::bytecode::Bytecode::*;
 use crate::bytecode::CallInner;
@@ -367,7 +368,9 @@ impl<'a> Compiler<'a> {
                     argument_count,
                     stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
                 };
-                let call = if argument_count >= 256 {
+                let call = if usize::try_from(argument_count).unwrap()
+                    >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
+                {
                     Call(inner)
                 }
                 else {

@@ -5,9 +5,11 @@ pub(crate) use crate::bytecode::compiler::compile_program;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::vm::execute_bytecode;
 pub(crate) use crate::bytecode::vm::run_bytecode;
+use crate::bytecode::vm::stack::Stack;
 pub(crate) use crate::bytecode::vm::Vm;
 use crate::eval::Error;
 use crate::interner::InternedString;
+use crate::value::nanboxed;
 
 mod compiler;
 mod vm;
@@ -298,7 +300,9 @@ fn validate_bytecode(
                 argument_count,
                 stack_size_at_callsite: _,
             }) =>
-                if argument_count >= 256 {
+                if usize::try_from(argument_count).unwrap()
+                    >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
+                {
                     return Err(vm::InvalidBytecode::TooManyArgsInShortCall);
                 },
             Bytecode::Pop

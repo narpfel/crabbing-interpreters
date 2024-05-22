@@ -2,35 +2,14 @@ use std::fmt;
 use std::io;
 use std::ptr::NonNull;
 
-use crate::environment::ENV_SIZE;
 use crate::gc::Trace;
 
-pub(super) struct Stack<T> {
+pub(crate) struct Stack<T> {
     stack: NonNull<T>,
     pointer: NonNull<T>,
 }
 
 impl<T> Stack<T> {
-    #[cfg(not(miri))]
-    const GUARD_PAGE_COUNT_AFTER: usize = 1;
-    #[cfg(miri)]
-    const GUARD_PAGE_COUNT_AFTER: usize = 0;
-    #[cfg(not(miri))]
-    const GUARD_PAGE_COUNT_BEFORE: usize = 1;
-    #[cfg(miri)]
-    const GUARD_PAGE_COUNT_BEFORE: usize = 0;
-    const PAGE_SIZE: usize = 4096;
-    const SIZE_IN_BYTES: usize = Self::SIZE_IN_PAGES * Self::PAGE_SIZE;
-    const SIZE_IN_PAGES: usize = Self::GUARD_PAGE_COUNT_BEFORE
-        + Self::GUARD_PAGE_COUNT_AFTER
-        + Self::USEABLE_SIZE_IN_BYTES / Self::PAGE_SIZE;
-    const START_OFFSET: usize = Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT_BEFORE;
-    const USEABLE_SIZE_IN_BYTES: usize = ENV_SIZE.next_power_of_two() * std::mem::size_of::<T>();
-    const _ASSERT_CORRECT_ALIGNMENT: () = assert!(Self::PAGE_SIZE >= std::mem::align_of::<T>());
-    const _ASSERT_PAGE_SIZE_IS_MULTIPLE_OF_ELEMENT_SIZE: () =
-        assert!(Self::PAGE_SIZE % std::mem::size_of::<T>() == 0);
-    const _ASSERT_STACK_HAS_SIZE: () = assert!(Self::SIZE_IN_PAGES > 2);
-
     pub(super) fn new(_default_value: T) -> Self {
         let stack = unsafe {
             let ptr = libc::mmap(
@@ -55,7 +34,7 @@ impl<T> Stack<T> {
 
                 let result = libc::mprotect(
                     ptr.byte_add(Self::START_OFFSET + Self::USEABLE_SIZE_IN_BYTES),
-                    Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT_AFTER,
+                    Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT,
                     libc::PROT_NONE,
                 );
                 if result != 0 {
@@ -111,8 +90,8 @@ where
     }
 
     pub(super) fn short_peek_at(&self, index: u32) -> T {
-        debug_assert!(index < 256);
         let offset = peek_offset(index);
+        debug_assert!(offset.unsigned_abs() < Self::ELEMENT_COUNT_IN_GUARD_AREA);
         unsafe { self.peek_at_unchecked(offset) }
     }
 

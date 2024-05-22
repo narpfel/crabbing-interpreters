@@ -13,6 +13,7 @@ use crate::bytecode::vm::stack::Stack;
 use crate::bytecode::Bytecode;
 use crate::bytecode::CallInner;
 use crate::environment::Environment;
+use crate::environment::ENV_SIZE;
 use crate::eval::ControlFlow;
 use crate::eval::Error;
 use crate::gc::GcRef;
@@ -36,7 +37,25 @@ use crate::value::Value::*;
 use crate::Report;
 
 #[cfg_attr(feature = "mmap", path = "vm/mmap_stack.rs")]
-mod stack;
+pub(crate) mod stack;
+
+impl<T> Stack<T> {
+    #![cfg_attr(not(feature = "mmap"), allow(unused))]
+
+    pub(crate) const ELEMENT_COUNT_IN_GUARD_AREA: usize =
+        (Self::GUARD_PAGE_COUNT * Self::PAGE_SIZE) / std::mem::size_of::<T>();
+    const GUARD_PAGE_COUNT: usize = 1;
+    const PAGE_SIZE: usize = 4096;
+    const SIZE_IN_BYTES: usize = Self::SIZE_IN_PAGES * Self::PAGE_SIZE;
+    const SIZE_IN_PAGES: usize =
+        2 * Self::GUARD_PAGE_COUNT + Self::USEABLE_SIZE_IN_BYTES / Self::PAGE_SIZE;
+    const START_OFFSET: usize = Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT;
+    const USEABLE_SIZE_IN_BYTES: usize = ENV_SIZE.next_power_of_two() * std::mem::size_of::<T>();
+    const _ASSERT_CORRECT_ALIGNMENT: () = assert!(Self::PAGE_SIZE >= std::mem::align_of::<T>());
+    const _ASSERT_PAGE_SIZE_IS_MULTIPLE_OF_ELEMENT_SIZE: () =
+        assert!(Self::PAGE_SIZE % std::mem::size_of::<T>() == 0);
+    const _ASSERT_STACK_HAS_SIZE: () = assert!(Self::SIZE_IN_PAGES > 2);
+}
 
 trait Cast {
     type Target;
