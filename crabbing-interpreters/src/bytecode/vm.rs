@@ -39,6 +39,8 @@ use crate::Report;
 #[cfg_attr(feature = "mmap", path = "vm/mmap_stack.rs")]
 pub(crate) mod stack;
 
+const USEABLE_STACK_SIZE_IN_ELEMENTS: usize = ENV_SIZE.next_power_of_two();
+
 impl<T> Stack<T> {
     #![cfg_attr(not(feature = "mmap"), allow(unused))]
 
@@ -50,7 +52,7 @@ impl<T> Stack<T> {
     const SIZE_IN_PAGES: usize =
         2 * Self::GUARD_PAGE_COUNT + Self::USEABLE_SIZE_IN_BYTES / Self::PAGE_SIZE;
     const START_OFFSET: usize = Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT;
-    const USEABLE_SIZE_IN_BYTES: usize = ENV_SIZE.next_power_of_two() * std::mem::size_of::<T>();
+    const USEABLE_SIZE_IN_BYTES: usize = USEABLE_STACK_SIZE_IN_ELEMENTS * std::mem::size_of::<T>();
     const _ASSERT_CORRECT_ALIGNMENT: () = assert!(Self::PAGE_SIZE >= std::mem::align_of::<T>());
     const _ASSERT_PAGE_SIZE_IS_MULTIPLE_OF_ELEMENT_SIZE: () =
         assert!(Self::PAGE_SIZE % std::mem::size_of::<T>() == 0);

@@ -1,10 +1,9 @@
 use std::fmt;
 
-use crate::environment::ENV_SIZE;
 use crate::gc::Trace;
 
 pub(crate) struct Stack<T> {
-    stack: Box<[T; ENV_SIZE]>,
+    stack: Box<[T; super::USEABLE_STACK_SIZE_IN_ELEMENTS]>,
     pointer: usize,
 }
 
@@ -14,8 +13,10 @@ where
 {
     pub(super) fn new(default_value: T) -> Self {
         Self {
-            stack: Box::try_from(vec![default_value; ENV_SIZE].into_boxed_slice())
-                .unwrap_or_else(|_| unreachable!()),
+            stack: Box::try_from(
+                vec![default_value; super::USEABLE_STACK_SIZE_IN_ELEMENTS].into_boxed_slice(),
+            )
+            .unwrap_or_else(|_| unreachable!()),
             pointer: 0,
         }
     }
