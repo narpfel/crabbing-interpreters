@@ -10,6 +10,12 @@ on:
 
 jobs:
   ci:
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - ""
+          - mmap
     runs-on: ubuntu-22.04
     steps:
       - name: checkout
@@ -33,7 +39,11 @@ jobs:
 
           # ignore unreferenced snapshots here because miri snapshots would be
           # rejected here
-          cargo insta test --unreferenced=ignore -- --include-ignored
+          cargo insta test \
+            --features=${{ matrix.features }} \
+            --unreferenced=ignore \
+            -- \
+            --include-ignored
       - name: miri tests
         run: |
           set -x
@@ -41,9 +51,12 @@ jobs:
           ulimit -s $((8192 * 10))
           ulimit -a
 
-          cargo miri test --lib
+          cargo miri test \
+            --lib \
+            --features=${{ matrix.features }}
+
           cargo insta test \
-            --features=miri_tests \
+            --features=miri_tests,${{ matrix.features }} \
             --unreferenced=reject \
             -- \
             --include-ignored

@@ -9,6 +9,7 @@ use Bytecode::*;
 use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
+use crate::bytecode::vm::stack::Stack;
 use crate::bytecode::Bytecode;
 use crate::bytecode::CallInner;
 use crate::environment::Environment;
@@ -35,6 +36,29 @@ use crate::value::Value;
 use crate::value::Value::*;
 use crate::Report;
 
+#[cfg_attr(feature = "mmap", path = "vm/mmap_stack.rs")]
+pub(crate) mod stack;
+
+const USEABLE_STACK_SIZE_IN_ELEMENTS: usize = ENV_SIZE.next_power_of_two();
+
+impl<T> Stack<T> {
+    #![cfg_attr(not(feature = "mmap"), allow(unused))]
+
+    pub(crate) const ELEMENT_COUNT_IN_GUARD_AREA: usize =
+        (Self::GUARD_PAGE_COUNT * Self::PAGE_SIZE) / std::mem::size_of::<T>();
+    const GUARD_PAGE_COUNT: usize = 1;
+    const PAGE_SIZE: usize = 4096;
+    const SIZE_IN_BYTES: usize = Self::SIZE_IN_PAGES * Self::PAGE_SIZE;
+    const SIZE_IN_PAGES: usize =
+        2 * Self::GUARD_PAGE_COUNT + Self::USEABLE_SIZE_IN_BYTES / Self::PAGE_SIZE;
+    const START_OFFSET: usize = Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT;
+    const USEABLE_SIZE_IN_BYTES: usize = USEABLE_STACK_SIZE_IN_ELEMENTS * std::mem::size_of::<T>();
+    const _ASSERT_CORRECT_ALIGNMENT: () = assert!(Self::PAGE_SIZE >= std::mem::align_of::<T>());
+    const _ASSERT_PAGE_SIZE_IS_MULTIPLE_OF_ELEMENT_SIZE: () =
+        assert!(Self::PAGE_SIZE % std::mem::size_of::<T>() == 0);
+    const _ASSERT_STACK_HAS_SIZE: () = assert!(Self::SIZE_IN_PAGES > 2);
+}
+
 trait Cast {
     type Target;
 
@@ -53,6 +77,7 @@ impl Cast for u32 {
 pub(crate) enum InvalidBytecode {
     NoEnd,
     JumpOutOfBounds,
+    TooManyArgsInShortCall,
 }
 
 impl Report for InvalidBytecode {
@@ -65,6 +90,19 @@ impl Report for InvalidBytecode {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CallFrame<'a> {
+    pc: usize,
+    offset: u32,
+    cells: Cells<'a>,
+}
+
+unsafe impl Trace for CallFrame<'_> {
+    fn trace(&self) {
+        self.cells.trace();
+    }
+}
+
 pub(crate) struct Vm<'a, 'b> {
     bytecode: &'b [Bytecode],
     constants: &'b [nanboxed::Value<'a>],
@@ -72,11 +110,9 @@ pub(crate) struct Vm<'a, 'b> {
     error_locations: &'b [ContainingExpression<'a>],
     env: Environment<'a>,
     pc: usize,
-    stack: Box<[nanboxed::Value<'a>; ENV_SIZE]>,
-    sp: usize,
+    stack: Stack<nanboxed::Value<'a>>,
     offset: u32,
-    call_stack: Box<[(usize, u32, Cells<'a>); ENV_SIZE]>,
-    call_sp: usize,
+    call_stack: Stack<CallFrame<'a>>,
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
 }
@@ -90,15 +126,8 @@ impl<'a, 'b> Vm<'a, 'b> {
         env: Environment<'a>,
         global_cells: Cells<'a>,
     ) -> Result<Self, InvalidBytecode> {
-        let stack =
-            Box::try_from(vec![Value::Nil.into_nanboxed(); ENV_SIZE].into_boxed_slice()).unwrap();
-        let call_stack = Box::try_from(
-            vec![(0, 0, Cells::from_iter_in(env.gc, [].into_iter())); ENV_SIZE].into_boxed_slice(),
-        )
-        .unwrap();
-
+        let gc = env.gc;
         validate_bytecode(bytecode, metadata)?;
-
         Ok(Self {
             bytecode,
             constants,
@@ -106,11 +135,13 @@ impl<'a, 'b> Vm<'a, 'b> {
             error_locations,
             env,
             pc: 0,
-            stack,
-            sp: 0,
+            stack: Stack::new(Value::Nil.into_nanboxed()),
             offset: 0,
-            call_stack,
-            call_sp: 0,
+            call_stack: Stack::new(CallFrame {
+                pc: 0,
+                offset: 0,
+                cells: Cells::from_iter_in(gc, [].into_iter()),
+            }),
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
         })
@@ -133,36 +164,12 @@ impl<'a, 'b> Vm<'a, 'b> {
     fn collect_if_necessary(&self) {
         if self.env.gc.collection_necessary() {
             self.constants.trace();
-            self.stack[..self.sp].trace();
-            self.call_stack[..self.call_sp].trace();
+            self.stack.trace();
+            self.call_stack.trace();
             self.cell_vars.trace();
             self.env.trace();
             unsafe { self.env.gc.sweep() };
         }
-    }
-
-    fn push_stack(&mut self, value: nanboxed::Value<'a>) {
-        #[cfg(feature = "debug_print")]
-        {
-            println!("pushing: {value}", value = value.parse());
-            println!("     at: {:>5}   {:?}", self.pc, self.bytecode[self.pc]);
-        }
-        self.stack[self.sp] = value;
-        self.sp += 1;
-    }
-
-    fn pop_stack(&mut self) -> nanboxed::Value<'a> {
-        #[cfg(feature = "debug_print")]
-        {
-            println!("popping: {}", self.stack[self.sp - 1].parse());
-            println!("     at: {:>5}   {:?}", self.pc, self.bytecode[self.pc]);
-        }
-        self.sp -= 1;
-        self.stack[self.sp]
-    }
-
-    fn peek_stack(&self) -> nanboxed::Value<'a> {
-        self.stack[self.sp - 1]
     }
 
     fn get_constant(&self, index: u32) -> nanboxed::Value<'a> {
@@ -173,9 +180,7 @@ impl<'a, 'b> Vm<'a, 'b> {
     fn print_stack(&self) {
         println!(
             "stack at {:>4}    {}: {:#?}",
-            self.pc,
-            self.bytecode[self.pc],
-            &self.stack[..self.sp]
+            self.pc, self.bytecode[self.pc], self.stack,
         );
     }
 
@@ -245,16 +250,6 @@ pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
     bytecode: Bytecode,
 ) -> Result<(), Option<Box<Error<'a>>>> {
-    #[cfg(feature = "debug_print")]
-    {
-        println!(
-            "{pc:>5}   {bytecode} ({sp})",
-            bytecode = vm.bytecode[vm.pc],
-            pc = vm.pc,
-            sp = vm.sp,
-        );
-    }
-
     #[cfg(feature = "count_bytecode_execution")]
     {
         vm.execution_counts[bytecode.discriminant()] += 1;
@@ -264,13 +259,13 @@ pub(crate) fn execute_bytecode<'a>(
 
     match bytecode {
         Pop => {
-            vm.pop_stack();
+            vm.stack.pop();
         }
         Const(i) => {
-            vm.push_stack(vm.get_constant(i));
+            vm.stack.push(vm.get_constant(i));
         }
         UnaryMinus => {
-            let value = match vm.pop_stack().parse() {
+            let value = match vm.stack.pop().parse() {
                 Number(x) => Number(-x).into_nanboxed(),
                 value => {
                     let expr = vm.error_location();
@@ -281,11 +276,11 @@ pub(crate) fn execute_bytecode<'a>(
                     }))?
                 }
             };
-            vm.push_stack(value);
+            vm.stack.push(value);
         }
         UnaryNot => {
-            let value = vm.pop_stack();
-            vm.push_stack(Bool(!value.is_truthy()).into_nanboxed());
+            let value = vm.stack.pop();
+            vm.stack.push(Bool(!value.is_truthy()).into_nanboxed());
         }
         Equal => any_binop(vm, |_, lhs, rhs| Ok(Bool(lhs == rhs)))?,
         NotEqual => any_binop(vm, |_, lhs, rhs| Ok(Bool(lhs != rhs)))?,
@@ -312,21 +307,21 @@ pub(crate) fn execute_bytecode<'a>(
         Divide => number_binop(vm, |lhs, rhs| Number(lhs / rhs))?,
         Power => number_binop(vm, |lhs, rhs| Number(lhs.powf(rhs)))?,
         Local(slot) => {
-            vm.push_stack(vm.env[vm.offset + slot]);
+            vm.stack.push(vm.env[vm.offset + slot]);
         }
         Global(slot) => {
-            vm.push_stack(vm.env[slot]);
+            vm.stack.push(vm.env[slot]);
         }
         Cell(slot) => {
-            vm.push_stack(vm.cell_vars[slot.cast()].get().get());
+            vm.stack.push(vm.cell_vars[slot.cast()].get().get());
         }
         Dup => {
-            let value = vm.peek_stack();
-            vm.push_stack(value);
+            let value = vm.stack.peek();
+            vm.stack.push(value);
         }
         StoreAttr(name) => {
-            let assignment_target = vm.pop_stack().parse();
-            let value = vm.pop_stack();
+            let assignment_target = vm.stack.pop().parse();
+            let value = vm.stack.pop();
             match assignment_target {
                 Instance(instance) => instance.attributes.borrow_mut().insert(name, value),
                 _ => {
@@ -344,7 +339,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm: &mut Vm<'a, '_>,
                 name: InternedString,
             ) -> Result<(), Box<Error<'a>>> {
-                let value = vm.pop_stack().parse();
+                let value = vm.stack.pop().parse();
                 let value = match value {
                     Instance(instance) => instance
                         .attributes
@@ -377,17 +372,17 @@ pub(crate) fn execute_bytecode<'a>(
                         at: vm.error_location(),
                     }))?,
                 };
-                vm.push_stack(value);
+                vm.stack.push(value);
                 Ok(())
             }
             load_attr(vm, name)?
         }
         StoreLocal(slot) => {
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             vm.env[vm.offset + slot] = value;
         }
         StoreGlobal(slot) => {
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             vm.env.set(
                 vm.cell_vars,
                 vm.offset.cast(),
@@ -396,113 +391,26 @@ pub(crate) fn execute_bytecode<'a>(
             );
         }
         StoreCell(slot) => {
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             vm.cell_vars[slot.cast()].get().set(value);
         }
         DefineCell(slot) => {
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             vm.cell_vars[slot.cast()].set(GcRef::new_in(vm.env.gc, Cell::new(value)));
         }
         Call(CallInner { argument_count, stack_size_at_callsite }) => {
-            let callee = vm.stack[vm.sp - 1 - argument_count.cast()].parse();
-            match callee {
-                Function(function) => {
-                    if function.parameters.len() != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: function.parameters.len(),
-                            at: vm.error_location(),
-                        }))?
-                    }
-                    vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
-                    vm.call_sp += 1;
-                    vm.pc = function.code_ptr - 1;
-                    vm.offset += stack_size_at_callsite;
-                    vm.cell_vars = function.cells;
-                }
-                BoundMethod(bound_method) => {
-                    let method = bound_method.method;
-                    if method.parameters.len() - 1 != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: method.parameters.len() - 1,
-                            at: vm.error_location(),
-                        }))?
-                    }
-                    vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
-                    vm.call_sp += 1;
-                    vm.pc = method.code_ptr - 1;
-                    vm.offset += stack_size_at_callsite;
-                    vm.cell_vars = method.cells;
-                }
-                NativeFunction(native_fn) => {
-                    // FIXME: This can be more efficient
-                    let mut args: Vec<_> = (0..argument_count)
-                        .map(|_| vm.pop_stack().parse())
-                        .collect();
-                    args.reverse();
-                    let value = native_fn(args).map_err(|err| {
-                        Box::new(match err {
-                            NativeError::Error(err) => err,
-                            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                                callee,
-                                expected,
-                                at: vm.error_location(),
-                            },
-                        })
-                    })?;
-                    vm.push_stack(value.into_nanboxed());
-                }
-                Class(class) => {
-                    let instance = GcRef::new_in(
-                        vm.env.gc,
-                        InstanceInner {
-                            class,
-                            attributes: RefCell::new(HashMap::default()),
-                        },
-                    );
-                    match class
-                        .lookup_method(interned::INIT)
-                        .map(nanboxed::Value::parse)
-                    {
-                        Some(Value::Function(init)) => {
-                            if init.parameters.len() - 1 != argument_count.cast() {
-                                Err(Box::new(Error::ArityMismatch {
-                                    callee,
-                                    expected: init.parameters.len() - 1,
-                                    at: vm.error_location(),
-                                }))?
-                            }
-                            vm.stack[vm.sp - 1 - argument_count.cast()] =
-                                BoundMethod(GcRef::new_in(
-                                    vm.env.gc,
-                                    BoundMethodInner { method: init, instance },
-                                ))
-                                .into_nanboxed();
-                            vm.call_stack[vm.call_sp] = (vm.pc, vm.offset, vm.cell_vars);
-                            vm.call_sp += 1;
-                            vm.pc = init.code_ptr - 1;
-                            vm.offset += stack_size_at_callsite;
-                            vm.cell_vars = init.cells;
-                        }
-                        Some(_) => unreachable!(),
-                        None if argument_count == 0 =>
-                            vm.push_stack(Value::Instance(instance).into_nanboxed()),
-                        None => Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: 0,
-                            at: vm.error_location(),
-                        }))?,
-                    }
-                }
-                _ => Err(Box::new(Error::Uncallable {
-                    callee,
-                    at: vm.error_location(),
-                }))?,
-            }
+            execute_call(
+                vm,
+                argument_count,
+                stack_size_at_callsite,
+                BoundsCheckedPeek,
+            )?;
+        }
+        ShortCall(CallInner { argument_count, stack_size_at_callsite }) => {
+            execute_call(vm, argument_count, stack_size_at_callsite, ShortPeek)?;
         }
         Print => outline! {
-            let value = vm.pop_stack().parse();
+            let value = vm.stack.pop().parse();
             println!("{value}");
         },
         GlobalByName(name) => {
@@ -512,7 +420,7 @@ pub(crate) fn execute_bytecode<'a>(
             })?;
 
             let value = vm.env[u32::try_from(variable).unwrap()];
-            vm.push_stack(value);
+            vm.stack.push(value);
         }
         StoreGlobalByName(name) => {
             let slot = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
@@ -520,7 +428,7 @@ pub(crate) fn execute_bytecode<'a>(
                 let target: AssignmentTargetTypes::Variable = expr.target.into_variant();
                 Box::new(Error::UndefinedName { at: *target.0.name })
             })?;
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             vm.env.set(
                 vm.cell_vars,
                 vm.offset.cast(),
@@ -529,28 +437,28 @@ pub(crate) fn execute_bytecode<'a>(
             );
         }
         JumpIfTrue(target) => {
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             if value.is_truthy() {
                 vm.pc = target.cast() - 1;
             }
         }
         JumpIfFalse(target) => {
-            let value = vm.pop_stack();
+            let value = vm.stack.pop();
             if !value.is_truthy() {
                 vm.pc = target.cast() - 1;
             }
         }
         PopJumpIfTrue(target) => {
-            let value = vm.peek_stack();
+            let value = vm.stack.peek();
             if value.is_truthy() {
-                vm.pop_stack();
+                vm.stack.pop();
                 vm.pc = target.cast() - 1;
             }
         }
         PopJumpIfFalse(target) => {
-            let value = vm.peek_stack();
+            let value = vm.stack.peek();
             if !value.is_truthy() {
-                vm.pop_stack();
+                vm.stack.pop();
                 vm.pc = target.cast() - 1;
             }
         }
@@ -561,8 +469,11 @@ pub(crate) fn execute_bytecode<'a>(
             vm.pc += target.cast();
         }
         Return => {
-            vm.call_sp -= 1;
-            (vm.pc, vm.offset, vm.cell_vars) = vm.call_stack[vm.call_sp]
+            CallFrame {
+                pc: vm.pc,
+                offset: vm.offset,
+                cells: vm.cell_vars,
+            } = vm.call_stack.pop();
         }
         BuildFunction(metadata_index) => {
             let Metadata::Function { function, code_size } = vm.metadata[metadata_index.cast()]
@@ -591,16 +502,16 @@ pub(crate) fn execute_bytecode<'a>(
                     compiled_body: function.compiled_body,
                 },
             ));
-            vm.push_stack(value.into_nanboxed());
+            vm.stack.push(value.into_nanboxed());
         }
         End => {
-            assert_eq!(vm.sp, 0);
+            assert!(vm.stack.is_empty());
             return Err(None);
         }
         Pop2 => {
-            let value = vm.pop_stack();
-            vm.pop_stack();
-            vm.push_stack(value);
+            let value = vm.stack.pop();
+            vm.stack.pop();
+            vm.stack.push(value);
         }
         BuildClass(metadata_index) => {
             let Metadata::Class { name, methods, base_error_location } =
@@ -611,10 +522,10 @@ pub(crate) fn execute_bytecode<'a>(
             let methods = methods
                 .iter()
                 .rev()
-                .map(|method| (method.name.id(), vm.pop_stack()))
+                .map(|method| (method.name.id(), vm.stack.pop()))
                 .collect();
             let base = if let Some(error_location) = base_error_location {
-                match vm.pop_stack().parse() {
+                match vm.stack.pop().parse() {
                     Class(class) => Some(class),
                     base => Err(Box::new(Error::InvalidBase {
                         base,
@@ -636,23 +547,24 @@ pub(crate) fn execute_bytecode<'a>(
                     method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
                 });
             }
-            vm.push_stack(Class(class).into_nanboxed());
+            vm.stack.push(Class(class).into_nanboxed());
         }
         PrintStack => {
             vm.print_stack();
         }
-        b @ BoundMethodGetInstance => match vm.peek_stack().parse() {
-            BoundMethod(bound_method) =>
-                vm.push_stack(Value::Instance(bound_method.instance).into_nanboxed()),
+        b @ BoundMethodGetInstance => match vm.stack.peek().parse() {
+            BoundMethod(bound_method) => vm
+                .stack
+                .push(Value::Instance(bound_method.instance).into_nanboxed()),
             value =>
                 unreachable!("invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"),
         },
         Super(name) => {
-            let super_class = match vm.pop_stack().parse() {
+            let super_class = match vm.stack.pop().parse() {
                 Value::Class(class) => class,
                 value => unreachable!("invalid base class value: {value}"),
             };
-            let this = match vm.pop_stack().parse() {
+            let this = match vm.stack.pop().parse() {
                 Value::Instance(this) => this,
                 value => unreachable!("`this` is not an instance: {value}"),
             };
@@ -673,12 +585,12 @@ pub(crate) fn execute_bytecode<'a>(
                         attribute: super_.attribute,
                     })
                 })?;
-            vm.push_stack(value.into_nanboxed());
+            vm.stack.push(value.into_nanboxed());
         }
-        ConstNil => vm.push_stack(Value::Nil.into_nanboxed()),
-        ConstTrue => vm.push_stack(Value::Bool(true).into_nanboxed()),
-        ConstFalse => vm.push_stack(Value::Bool(false).into_nanboxed()),
-        ConstNumber(number) => vm.push_stack(Value::Number(number.into()).into_nanboxed()),
+        ConstNil => vm.stack.push(Value::Nil.into_nanboxed()),
+        ConstTrue => vm.stack.push(Value::Bool(true).into_nanboxed()),
+        ConstFalse => vm.stack.push(Value::Bool(false).into_nanboxed()),
+        ConstNumber(number) => vm.stack.push(Value::Number(number.into()).into_nanboxed()),
     }
     vm.pc += 1;
     if cfg!(miri) || previous_pc > vm.pc {
@@ -697,10 +609,10 @@ fn any_binop<'a, 'b>(
         Value<'a>,
     ) -> Result<Value<'a>, Box<Error<'a>>>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.pop_stack().parse();
-    let lhs = vm.pop_stack().parse();
+    let rhs = vm.stack.pop().parse();
+    let lhs = vm.stack.pop().parse();
     let result = op(vm, lhs, rhs)?;
-    vm.push_stack(result.into_nanboxed());
+    vm.stack.push(result.into_nanboxed());
     Ok(())
 }
 
@@ -710,8 +622,8 @@ fn number_binop<'a, 'b>(
     vm: &mut Vm<'a, 'b>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.pop_stack().parse();
-    let lhs = vm.pop_stack().parse();
+    let rhs = vm.stack.pop().parse();
+    let lhs = vm.stack.pop().parse();
     let result = match (lhs, rhs) {
         (Number(lhs), Number(rhs)) => op(lhs, rhs),
         _ => {
@@ -719,6 +631,150 @@ fn number_binop<'a, 'b>(
             Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
         }
     };
-    vm.push_stack(result.into_nanboxed());
+    vm.stack.push(result.into_nanboxed());
+    Ok(())
+}
+
+trait Peeker {
+    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    where
+        T: Copy;
+}
+
+struct ShortPeek;
+
+impl Peeker for ShortPeek {
+    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    where
+        T: Copy,
+    {
+        stack.short_peek_at(index)
+    }
+}
+
+struct BoundsCheckedPeek;
+
+impl Peeker for BoundsCheckedPeek {
+    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    where
+        T: Copy,
+    {
+        stack.peek_at(index)
+    }
+}
+
+#[inline(always)]
+fn execute_call<'a>(
+    vm: &mut Vm<'a, '_>,
+    argument_count: u32,
+    stack_size_at_callsite: u32,
+    peeker: impl Peeker,
+) -> Result<(), Option<Box<Error<'a>>>> {
+    let callee = peeker.peek_at(&vm.stack, argument_count).parse();
+
+    match callee {
+        Function(function) => {
+            if function.parameters.len() != argument_count.cast() {
+                Err(Box::new(Error::ArityMismatch {
+                    callee,
+                    expected: function.parameters.len(),
+                    at: vm.error_location(),
+                }))?
+            }
+            vm.call_stack.push(CallFrame {
+                pc: vm.pc,
+                offset: vm.offset,
+                cells: vm.cell_vars,
+            });
+            vm.pc = function.code_ptr - 1;
+            vm.offset += stack_size_at_callsite;
+            vm.cell_vars = function.cells;
+        }
+        BoundMethod(bound_method) => {
+            let method = bound_method.method;
+            if method.parameters.len() - 1 != argument_count.cast() {
+                Err(Box::new(Error::ArityMismatch {
+                    callee,
+                    expected: method.parameters.len() - 1,
+                    at: vm.error_location(),
+                }))?
+            }
+            vm.call_stack.push(CallFrame {
+                pc: vm.pc,
+                offset: vm.offset,
+                cells: vm.cell_vars,
+            });
+            vm.pc = method.code_ptr - 1;
+            vm.offset += stack_size_at_callsite;
+            vm.cell_vars = method.cells;
+        }
+        NativeFunction(native_fn) => {
+            // FIXME: This can be more efficient
+            let mut args: Vec<_> = (0..argument_count)
+                .map(|_| vm.stack.pop().parse())
+                .collect();
+            args.reverse();
+            let value = native_fn(args).map_err(|err| {
+                Box::new(match err {
+                    NativeError::Error(err) => err,
+                    NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                        callee,
+                        expected,
+                        at: vm.error_location(),
+                    },
+                })
+            })?;
+            vm.stack.push(value.into_nanboxed());
+        }
+        Class(class) => {
+            let instance = GcRef::new_in(
+                vm.env.gc,
+                InstanceInner {
+                    class,
+                    attributes: RefCell::new(HashMap::default()),
+                },
+            );
+            match class
+                .lookup_method(interned::INIT)
+                .map(nanboxed::Value::parse)
+            {
+                Some(Value::Function(init)) => {
+                    if init.parameters.len() - 1 != argument_count.cast() {
+                        Err(Box::new(Error::ArityMismatch {
+                            callee,
+                            expected: init.parameters.len() - 1,
+                            at: vm.error_location(),
+                        }))?
+                    }
+                    *vm.stack.peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
+                        vm.env.gc,
+                        BoundMethodInner { method: init, instance },
+                    ))
+                    .into_nanboxed();
+                    vm.call_stack.push(CallFrame {
+                        pc: vm.pc,
+                        offset: vm.offset,
+                        cells: vm.cell_vars,
+                    });
+                    vm.pc = init.code_ptr - 1;
+                    vm.offset += stack_size_at_callsite;
+                    vm.cell_vars = init.cells;
+                }
+                Some(_) => unreachable!(),
+                None if argument_count == 0 =>
+                    vm.stack.push(Value::Instance(instance).into_nanboxed()),
+                None => Err(Box::new(Error::ArityMismatch {
+                    callee,
+                    expected: 0,
+                    at: vm.error_location(),
+                }))?,
+            }
+        }
+        _ => Err(Box::new(Error::Uncallable {
+            callee,
+            at: vm.error_location(),
+        }))?,
+    }
+
     Ok(())
 }

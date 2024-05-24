@@ -12,6 +12,7 @@ members = [
 
 [workspace.dependencies]
 bumpalo = "3.16.0"
+libc = { version = "0.2.155" }
 clap = { version = "4.5.4", features = ["derive"] }
 indexmap = "2.2.6"
 itertools = "0.12.1"

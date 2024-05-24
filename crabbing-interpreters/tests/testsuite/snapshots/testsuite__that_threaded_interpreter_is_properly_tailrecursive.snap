@@ -43,25 +43,26 @@ Bytecode execution counts
            StoreGlobal (22):      1000003
              StoreCell (23):      1000000
             DefineCell (24):      1000001
-                  Call (25):      8000000
-                 Print (26):      1000000
-          GlobalByName (27):      1000000
-     StoreGlobalByName (28):      1000000
-            JumpIfTrue (29):      3000002
-           JumpIfFalse (30):      2000000
-         PopJumpIfTrue (31):      1000000
-        PopJumpIfFalse (32):      2000000
-                  Jump (33):      1000002
-         BeginFunction (34):      3000002
-                Return (35):      5000000
-         BuildFunction (36):      3000002
-                   End (37):            1
-                  Pop2 (38):      8000000
-            BuildClass (39):      2000000
-            PrintStack (40):            0
-BoundMethodGetInstance (41):      3000000
-                 Super (42):      1000000
-              ConstNil (43):      7000000
-             ConstTrue (44):      2000000
-            ConstFalse (45):      3000000
-           ConstNumber (46):     29000005
+                  Call (25):            0
+             ShortCall (26):      8000000
+                 Print (27):      1000000
+          GlobalByName (28):      1000000
+     StoreGlobalByName (29):      1000000
+            JumpIfTrue (30):      3000002
+           JumpIfFalse (31):      2000000
+         PopJumpIfTrue (32):      1000000
+        PopJumpIfFalse (33):      2000000
+                  Jump (34):      1000002
+         BeginFunction (35):      3000002
+                Return (36):      5000000
+         BuildFunction (37):      3000002
+                   End (38):            1
+                  Pop2 (39):      8000000
+            BuildClass (40):      2000000
+            PrintStack (41):            0
+BoundMethodGetInstance (42):      3000000
+                 Super (43):      1000000
+              ConstNil (44):      7000000
+             ConstTrue (45):      2000000
+            ConstFalse (46):      3000000
+           ConstNumber (47):     29000005

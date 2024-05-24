@@ -5,9 +5,11 @@ pub(crate) use crate::bytecode::compiler::compile_program;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::vm::execute_bytecode;
 pub(crate) use crate::bytecode::vm::run_bytecode;
+use crate::bytecode::vm::stack::Stack;
 pub(crate) use crate::bytecode::vm::Vm;
 use crate::eval::Error;
 use crate::interner::InternedString;
+use crate::value::nanboxed;
 
 mod compiler;
 mod vm;
@@ -173,6 +175,7 @@ bytecode! {
         StoreCell(u32),
         DefineCell(u32),
         Call(CallInner),
+        ShortCall(CallInner),
         Print,
         GlobalByName(InternedString),
         StoreGlobalByName(InternedString),
@@ -229,6 +232,10 @@ impl fmt::Display for Bytecode {
             DefineCell(slot) => write!(f, "define_cell {slot}"),
             Call(CallInner { argument_count, stack_size_at_callsite }) =>
                 write!(f, "call +{stack_size_at_callsite} arity={argument_count}"),
+            ShortCall(CallInner { argument_count, stack_size_at_callsite }) => write!(
+                f,
+                "call +{stack_size_at_callsite} arity={argument_count} (short)",
+            ),
             Print => write!(f, "print"),
             GlobalByName(string) => write!(f, "global_by_name {string}"),
             StoreGlobalByName(string) => write!(f, "store_global_by_name {string}"),
@@ -289,6 +296,15 @@ fn validate_bytecode(
                     return Err(vm::InvalidBytecode::JumpOutOfBounds);
                 }
             }
+            Bytecode::ShortCall(CallInner {
+                argument_count,
+                stack_size_at_callsite: _,
+            }) =>
+                if usize::try_from(argument_count).unwrap()
+                    >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
+                {
+                    return Err(vm::InvalidBytecode::TooManyArgsInShortCall);
+                },
             Bytecode::Pop
             | Bytecode::Const(_)
             | Bytecode::UnaryMinus

@@ -4,6 +4,7 @@
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
+#![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
 #![feature(strict_provenance)]
