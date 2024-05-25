@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::bytecode::vm::stack::Stack;
@@ -6,6 +7,7 @@ use crate::bytecode::Bytecode::*;
 use crate::bytecode::CallInner;
 use crate::gc::Gc;
 use crate::gc::GcStr;
+use crate::nonempty;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::FunctionKind;
@@ -26,6 +28,8 @@ struct Compiler<'a> {
     constants: Vec<nanboxed::Value<'a>>,
     metadata: Vec<Metadata<'a>>,
     error_locations: Vec<ContainingExpression<'a>>,
+    defined_in_frame: Vec<DefinedInFrame>,
+    defined_in_current_frame: nonempty::Vec<BTreeSet<usize>>,
 }
 
 #[derive(Clone, Copy)]
@@ -93,6 +97,21 @@ impl ContainingExpression<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum DefinedInFrame {
+    Enter { at: usize, defined: Vec<usize> },
+    Exit { at: usize },
+}
+
+impl DefinedInFrame {
+    pub(crate) fn at(&self) -> usize {
+        match self {
+            DefinedInFrame::Enter { at, defined: _ } | DefinedInFrame::Exit { at } => *at,
+        }
+    }
+}
+
+#[expect(clippy::type_complexity, reason = "TODO")]
 pub(crate) fn compile_program<'a>(
     gc: &'a Gc,
     program: &'a [Statement<'a>],
@@ -101,6 +120,7 @@ pub(crate) fn compile_program<'a>(
     Vec<nanboxed::Value<'a>>,
     Vec<Metadata<'a>>,
     Vec<ContainingExpression<'a>>,
+    Vec<DefinedInFrame>,
 ) {
     let mut compiler = Compiler {
         gc,
@@ -108,6 +128,8 @@ pub(crate) fn compile_program<'a>(
         constants: Vec::new(),
         metadata: Vec::new(),
         error_locations: Vec::new(),
+        defined_in_frame: Vec::new(),
+        defined_in_current_frame: nonempty::Vec::default(),
     };
 
     for stmt in program {
@@ -122,12 +144,16 @@ pub(crate) fn compile_program<'a>(
         constants,
         metadata,
         error_locations,
+        defined_in_frame,
+        defined_in_current_frame,
     } = compiler;
-    (code, constants, metadata, error_locations)
+    assert_eq!(defined_in_current_frame.len(), 1);
+    (code, constants, metadata, error_locations, defined_in_frame)
 }
 
 impl<'a> Compiler<'a> {
     fn compile_stmt(&mut self, stmt: &'a Statement<'a>) {
+        self.enter_statement(self.code.len());
         match stmt {
             Statement::Expression(expr) => {
                 self.compile_expr(expr);
@@ -257,6 +283,7 @@ impl<'a> Compiler<'a> {
                 self.compile_store(target);
             }
         }
+        self.exit_statement(self.code.len());
     }
 
     fn compile_expr(&mut self, expr: &'a Expression<'a>) {
@@ -403,6 +430,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_store(&mut self, variable: &Variable<'_>) {
+        match variable.target() {
+            Target::Local(slot) | Target::GlobalBySlot(slot) => {
+                self.defined_in_current_frame.last_mut().insert(slot);
+            }
+            Target::Cell(_) | Target::GlobalByName => (),
+        }
         let op = match variable.target() {
             Target::Local(slot) => StoreLocal(slot.try_into().unwrap()),
             Target::GlobalByName => StoreGlobalByName(variable.name.id()),
@@ -415,13 +448,22 @@ impl<'a> Compiler<'a> {
     fn compile_define(&mut self, variable: &Variable<'_>) {
         match variable.target() {
             Target::Cell(slot) => self.code.push(DefineCell(slot.try_into().unwrap())),
-            _ => self.compile_store(variable),
+            _ => {
+                match variable.target() {
+                    Target::Local(slot) | Target::GlobalBySlot(slot) => {
+                        self.defined_in_current_frame.last_mut().insert(slot);
+                    }
+                    Target::Cell(_) | Target::GlobalByName => (),
+                }
+                self.compile_store(variable);
+            }
         }
     }
 
     fn compile_function(&mut self, function: &'a Function<'a>, kind: FunctionKind) {
         let begin_index = self.code.len();
         self.code.push(BeginFunction(0));
+        self.defined_in_current_frame.push(BTreeSet::new());
 
         let skip_this_if_method = match kind {
             FunctionKind::Function => 0,
@@ -450,6 +492,7 @@ impl<'a> Compiler<'a> {
         let meta_index = self.metadata.len();
         self.metadata
             .push(Metadata::Function { function, code_size });
+        self.defined_in_current_frame.pop().unwrap();
         self.code
             .push(BuildFunction(meta_index.try_into().unwrap()));
     }
@@ -459,7 +502,23 @@ impl<'a> Compiler<'a> {
             .push(ContainingExpression::Enter { at, expr });
     }
 
+    fn enter_statement(&mut self, at: usize) {
+        self.defined_in_frame.push(DefinedInFrame::Enter {
+            at,
+            defined: self
+                .defined_in_current_frame
+                .last()
+                .iter()
+                .copied()
+                .collect(),
+        });
+    }
+
     fn exit_expression(&mut self, at: usize) {
         self.error_locations.push(ContainingExpression::Exit { at });
+    }
+
+    fn exit_statement(&mut self, at: usize) {
+        self.defined_in_frame.push(DefinedInFrame::Exit { at });
     }
 }

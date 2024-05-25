@@ -13,6 +13,7 @@ use Bytecode::*;
 
 use super::CompiledBytecodes;
 use crate::bytecode::compiler::ContainingExpression;
+use crate::bytecode::compiler::DefinedInFrame;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
 use crate::bytecode::vm::stack::Stack;
@@ -124,6 +125,7 @@ pub(crate) struct Vm<'a, 'b> {
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
+    defined_in_frame: Vec<DefinedInFrame>,
 }
 
 impl Drop for Vm<'_, '_> {
@@ -140,6 +142,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         error_locations: &'b [ContainingExpression<'a>],
         env: Environment<'a>,
         global_cells: Cells<'a>,
+        defined_in_frame: Vec<DefinedInFrame>,
     ) -> Result<Self, InvalidBytecode> {
         let gc = env.gc;
         validate_bytecode(bytecode, metadata)?;
@@ -162,6 +165,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
             error: None,
+            defined_in_frame,
         })
     }
 
@@ -195,12 +199,13 @@ impl<'a, 'b> Vm<'a, 'b> {
     }
 
     #[inline(always)]
-    fn collect_if_necessary(&self, sp: NonNull<nanboxed::Value<'a>>) {
+    fn collect_if_necessary(&self, pc: usize, sp: NonNull<nanboxed::Value<'a>>) {
         if self.env.gc.collection_necessary() {
             #[cold]
             #[inline(never)]
             extern "rust-cold" fn do_collect<'a>(
                 vm: &Vm<'a, '_>,
+                pc: usize,
                 sp: NonNull<nanboxed::Value<'a>>,
             ) {
                 vm.constants.trace();
@@ -208,9 +213,12 @@ impl<'a, 'b> Vm<'a, 'b> {
                 vm.call_stack.trace();
                 vm.cell_vars.trace();
                 vm.env.trace();
+                for &offset in vm.defined_at(pc) {
+                    vm.env.get(vm.cell_vars, Slot::Local(offset)).trace();
+                }
                 unsafe { vm.env.gc.sweep() };
             }
-            do_collect(self, sp);
+            do_collect(self, pc, sp);
         }
     }
 
@@ -249,6 +257,27 @@ impl<'a, 'b> Vm<'a, 'b> {
                         depth -= 1;
                     },
                 ContainingExpression::Exit { at: _ } => depth += 1,
+            }
+        }
+        unreachable!()
+    }
+
+    fn defined_at(&self, pc: usize) -> &[usize] {
+        let index = self
+            .defined_in_frame
+            .partition_point(|containing_expr| containing_expr.at() <= pc);
+
+        let mut depth = 0;
+        for containing_expr in self.defined_in_frame[..index].iter().rev() {
+            match containing_expr {
+                DefinedInFrame::Enter { at: _, defined } =>
+                    if depth == 0 {
+                        return defined;
+                    }
+                    else {
+                        depth -= 1;
+                    },
+                DefinedInFrame::Exit { at: _ } => depth += 1,
             }
         }
         unreachable!()
@@ -705,7 +734,7 @@ pub(crate) fn execute_bytecode<'a>(
         *pc = pc.unchecked_add(1);
     }
     if cfg!(miri) || previous_pc > *pc {
-        vm.collect_if_necessary(*sp);
+        vm.collect_if_necessary(*pc, *sp);
     }
     Ok(())
 }
@@ -1066,6 +1095,7 @@ mod tests {
             &[],
             Environment::new(&gc, HashMap::default(), global_cells),
             global_cells,
+            vec![],
         )
         .unwrap();
         let mut sp = vm.stack_pointer;
