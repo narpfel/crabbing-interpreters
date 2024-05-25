@@ -60,8 +60,9 @@ jobs:
             --lib \
             --features=${{ matrix.features }}
 
-          cargo insta test \
-            --features=miri_tests,${{ matrix.features }} \
-            --unreferenced=reject \
-            -- \
-            --include-ignored
+          TEST_FEATURES=${{ matrix.features }} \
+            cargo insta test \
+              --features=miri_tests,${{ matrix.features }} \
+              --unreferenced=reject \
+              -- \
+              --include-ignored
