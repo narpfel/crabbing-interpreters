@@ -12,7 +12,7 @@ use crate::interner::InternedString;
 use crate::value::nanboxed;
 
 mod compiler;
-mod vm;
+pub(crate) mod vm;
 
 macro_rules! bytecode {
     (

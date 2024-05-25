@@ -198,7 +198,6 @@ pub enum Error<'a> {
 pub fn eval<'a>(
     env: &mut Environment<'a>,
     cell_vars: Cells<'a>,
-    offset: usize,
     expr: &Expression<'a>,
     trace_call_stack: &dyn Fn(),
 ) -> Result<Value<'a>, Box<Error<'a>>> {
@@ -213,7 +212,7 @@ pub fn eval<'a>(
         },
         Expression::Unary(op, inner_expr) => {
             use UnaryOpKind::*;
-            let value = eval(env, cell_vars, offset, inner_expr, trace_call_stack)?;
+            let value = eval(env, cell_vars, inner_expr, trace_call_stack)?;
             match op.kind {
                 Minus => match value {
                     Number(n) => Number(-n),
@@ -223,17 +222,17 @@ pub fn eval<'a>(
             }
         }
         Expression::Assign { target, value, .. } => {
-            let value = eval(env, cell_vars, offset, value, trace_call_stack)?;
+            let value = eval(env, cell_vars, value, trace_call_stack)?;
             match target {
                 AssignmentTarget::Variable(variable) => {
                     if let Target::GlobalByName = variable.target() {
                         let slot = env.get_global_slot_by_name(variable.name)?;
                         variable.set_target(Target::GlobalBySlot(slot));
                     }
-                    env.set(cell_vars, offset, variable.target(), value.into_nanboxed());
+                    env.set(cell_vars, variable.target(), value.into_nanboxed());
                 }
                 AssignmentTarget::Attribute { lhs, attribute } => {
-                    let target_value = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
+                    let target_value = eval(env, cell_vars, lhs, trace_call_stack)?;
                     match target_value {
                         Value::Instance(instance) => {
                             instance
@@ -254,26 +253,26 @@ pub fn eval<'a>(
             use BinOpKind::*;
             match op.kind {
                 And => {
-                    let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
+                    let lhs = eval(env, cell_vars, lhs, trace_call_stack)?;
                     if lhs.is_truthy() {
-                        eval(env, cell_vars, offset, rhs, trace_call_stack)?
+                        eval(env, cell_vars, rhs, trace_call_stack)?
                     }
                     else {
                         lhs
                     }
                 }
                 Or => {
-                    let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
+                    let lhs = eval(env, cell_vars, lhs, trace_call_stack)?;
                     if lhs.is_truthy() {
                         lhs
                     }
                     else {
-                        eval(env, cell_vars, offset, rhs, trace_call_stack)?
+                        eval(env, cell_vars, rhs, trace_call_stack)?
                     }
                 }
                 _ => {
-                    let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
-                    let rhs = eval(env, cell_vars, offset, rhs, trace_call_stack)?;
+                    let lhs = eval(env, cell_vars, lhs, trace_call_stack)?;
+                    let rhs = eval(env, cell_vars, rhs, trace_call_stack)?;
                     match (&lhs, op.kind, &rhs) {
                         (_, And | Or, _) => unreachable!(),
                         (_, EqualEqual, _) => Bool(lhs == rhs),
@@ -308,7 +307,8 @@ pub fn eval<'a>(
             stack_size_at_callsite,
             ..
         } => {
-            let callee = eval(env, cell_vars, offset, callee, trace_call_stack)?;
+            let stack_size_at_callsite = *stack_size_at_callsite;
+            let callee = eval(env, cell_vars, callee, trace_call_stack)?;
 
             let eval_call = #[inline(always)]
             |env: &mut Environment<'a>,
@@ -323,30 +323,24 @@ pub fn eval<'a>(
                     })?;
                 }
                 zip(*arguments, parameters).try_for_each(|(arg, param)| -> Result<(), Box<_>> {
-                    let arg = eval(env, cell_vars, offset, arg, trace_call_stack)?;
-                    env.define(
-                        function.cells,
-                        offset + stack_size_at_callsite,
-                        param.target(),
-                        arg.into_nanboxed(),
-                    );
+                    let arg = eval(env, cell_vars, arg, trace_call_stack)?;
+                    env.push_frame(stack_size_at_callsite);
+                    env.define(function.cells, param.target(), arg.into_nanboxed());
+                    env.pop_frame(stack_size_at_callsite);
                     Ok(())
                 })?;
                 let trace_call_stack = &move || {
                     callee.trace();
                     trace_call_stack();
                 };
-                match execute(
-                    env,
-                    offset + stack_size_at_callsite,
-                    function.code,
-                    function.cells,
-                    trace_call_stack,
-                ) {
+                env.push_frame(stack_size_at_callsite);
+                let result = match execute(env, function.code, function.cells, trace_call_stack) {
                     Ok(_) => Ok(Value::Nil),
                     Err(ControlFlow::Return(value)) => Ok(value),
                     Err(ControlFlow::Error(err)) => Err(err),
-                }
+                };
+                env.pop_frame(stack_size_at_callsite);
+                result
                 // FIXME: truncate env here to drop the callee’s locals
             };
 
@@ -355,12 +349,13 @@ pub fn eval<'a>(
                                     method: &crate::value::Function<'a>,
                                     instance: Value<'a>|
              -> Result<Value<'a>, Box<Error<'a>>> {
+                env.push_frame(stack_size_at_callsite);
                 env.define(
                     method.cells,
-                    offset + stack_size_at_callsite,
                     method.parameters[0].target(),
                     instance.into_nanboxed(),
                 );
+                env.pop_frame(stack_size_at_callsite);
                 let parameters = method.parameters.iter().skip(1);
                 eval_call(env, method, parameters)
             };
@@ -376,7 +371,7 @@ pub fn eval<'a>(
                 Value::NativeFunction(func) => {
                     let arguments = arguments
                         .iter()
-                        .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
+                        .map(|arg| eval(env, cell_vars, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
                     func(arguments).map_err(|err| match err {
                         NativeError::Error(err) => err,
@@ -420,19 +415,19 @@ pub fn eval<'a>(
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
-        Expression::Grouping { expr, .. } => eval(env, cell_vars, offset, expr, trace_call_stack)?,
+        Expression::Grouping { expr, .. } => eval(env, cell_vars, expr, trace_call_stack)?,
         Expression::Name(variable) => match variable.target() {
-            Target::Local(slot) => env.get(cell_vars, offset, Slot::Local(slot)).parse(),
+            Target::Local(slot) => env.get(cell_vars, Slot::Local(slot)).parse(),
             Target::GlobalByName => {
                 let (slot, value) = env.get_global_by_name(variable.name)?;
                 variable.set_target(Target::GlobalBySlot(slot));
                 value.parse()
             }
-            Target::GlobalBySlot(slot) => env.get(cell_vars, offset, Slot::Global(slot)).parse(),
-            Target::Cell(slot) => env.get(cell_vars, offset, Slot::Cell(slot)).parse(),
+            Target::GlobalBySlot(slot) => env.get(cell_vars, Slot::Global(slot)).parse(),
+            Target::Cell(slot) => env.get(cell_vars, Slot::Cell(slot)).parse(),
         },
         Expression::Attribute { lhs, attribute } => {
-            let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
+            let lhs = eval(env, cell_vars, lhs, trace_call_stack)?;
             match lhs {
                 Value::Instance(instance) => instance
                     .attributes
@@ -460,20 +455,8 @@ pub fn eval<'a>(
             }
         }
         Expression::Super { super_, this, attribute } => {
-            let this = eval(
-                env,
-                cell_vars,
-                offset,
-                &Expression::Name(*this),
-                trace_call_stack,
-            )?;
-            let super_ = match eval(
-                env,
-                cell_vars,
-                offset,
-                &Expression::Name(*super_),
-                trace_call_stack,
-            )? {
+            let this = eval(env, cell_vars, &Expression::Name(*this), trace_call_stack)?;
+            let super_ = match eval(env, cell_vars, &Expression::Name(*super_), trace_call_stack)? {
                 Value::Class(super_) => super_,
                 value => unreachable!("invalid base class value: {value}"),
             };
@@ -500,7 +483,6 @@ pub fn eval<'a>(
 
 pub fn execute<'a>(
     env: &mut Environment<'a>,
-    offset: usize,
     program: &[Statement<'a>],
     cell_vars: Cells<'a>,
     trace_call_stack: &dyn Fn(),
@@ -508,82 +490,53 @@ pub fn execute<'a>(
     let mut last_value = Value::Nil;
     for statement in program {
         last_value = match statement {
-            Statement::Expression(expr) => eval(env, cell_vars, offset, expr, trace_call_stack)?,
+            Statement::Expression(expr) => eval(env, cell_vars, expr, trace_call_stack)?,
             Statement::Print(expr) => {
-                println!("{}", eval(env, cell_vars, offset, expr, trace_call_stack)?);
+                println!("{}", eval(env, cell_vars, expr, trace_call_stack)?);
                 Value::Nil
             }
             Statement::Var(variable, initialiser) => {
                 let value = if let Some(initialiser) = initialiser {
-                    eval(env, cell_vars, offset, initialiser, trace_call_stack)?
+                    eval(env, cell_vars, initialiser, trace_call_stack)?
                 }
                 else {
                     Value::Nil
                 };
-                env.define(cell_vars, offset, variable.target(), value.into_nanboxed());
+                env.define(cell_vars, variable.target(), value.into_nanboxed());
                 Value::Nil
             }
-            Statement::Block(block) => execute(env, offset, block, cell_vars, trace_call_stack)?,
+            Statement::Block(block) => execute(env, block, cell_vars, trace_call_stack)?,
             Statement::If { condition, then, or_else } =>
-                if eval(env, cell_vars, offset, condition, trace_call_stack)?.is_truthy() {
-                    execute(
-                        env,
-                        offset,
-                        slice::from_ref(then),
-                        cell_vars,
-                        trace_call_stack,
-                    )?
+                if eval(env, cell_vars, condition, trace_call_stack)?.is_truthy() {
+                    execute(env, slice::from_ref(then), cell_vars, trace_call_stack)?
                 }
                 else {
                     match or_else {
-                        Some(stmt) => execute(
-                            env,
-                            offset,
-                            slice::from_ref(stmt),
-                            cell_vars,
-                            trace_call_stack,
-                        )?,
+                        Some(stmt) =>
+                            execute(env, slice::from_ref(stmt), cell_vars, trace_call_stack)?,
                         None => Value::Nil,
                     }
                 },
             Statement::While { condition, body } => {
-                while eval(env, cell_vars, offset, condition, trace_call_stack)?.is_truthy() {
-                    execute(
-                        env,
-                        offset,
-                        slice::from_ref(body),
-                        cell_vars,
-                        trace_call_stack,
-                    )?;
+                while eval(env, cell_vars, condition, trace_call_stack)?.is_truthy() {
+                    execute(env, slice::from_ref(body), cell_vars, trace_call_stack)?;
                 }
                 Value::Nil
             }
             Statement::For { init, condition, update, body } => {
                 if let Some(init) = init {
-                    execute(
-                        env,
-                        offset,
-                        slice::from_ref(init),
-                        cell_vars,
-                        trace_call_stack,
-                    )?;
+                    execute(env, slice::from_ref(init), cell_vars, trace_call_stack)?;
                 }
                 while condition
                     .as_ref()
                     .map_or(Ok(Value::Bool(true)), |cond| {
-                        eval(env, cell_vars, offset, cond, trace_call_stack)
+                        eval(env, cell_vars, cond, trace_call_stack)
                     })?
                     .is_truthy()
                 {
-                    execute(
-                        env,
-                        offset,
-                        slice::from_ref(body),
-                        cell_vars,
-                        trace_call_stack,
-                    )?;
+                    execute(env, slice::from_ref(body), cell_vars, trace_call_stack)?;
                     if let Some(update) = update {
-                        eval(env, cell_vars, offset, update, trace_call_stack)?;
+                        eval(env, cell_vars, update, trace_call_stack)?;
                     }
                 }
                 Value::Nil
@@ -591,46 +544,32 @@ pub fn execute<'a>(
             Statement::Function { target, function } => {
                 // we need to define the function variable before evaluating the cells as the
                 // function itself could be captured
-                env.define(
-                    cell_vars,
-                    offset,
-                    target.target(),
-                    Value::Nil.into_nanboxed(),
-                );
+                env.define(cell_vars, target.target(), Value::Nil.into_nanboxed());
                 let function = eval_function(env.gc, cell_vars, function);
-                env.set(cell_vars, offset, target.target(), function);
+                env.set(cell_vars, target.target(), function);
                 Value::Nil
             }
             Statement::Return(expr) => {
                 let return_value = expr.as_ref().map_or(Ok(Value::Nil), |expr| {
-                    eval(env, cell_vars, offset, expr, trace_call_stack)
+                    eval(env, cell_vars, expr, trace_call_stack)
                 })?;
                 Err(ControlFlow::Return(return_value))?
             }
             Statement::InitReturn(this) => Err(ControlFlow::Return(eval(
                 env,
                 cell_vars,
-                offset,
                 this,
                 trace_call_stack,
             )?))?,
             Statement::Class { target, base, methods } => {
                 let base = base
                     .as_ref()
-                    .map(
-                        |base| match eval(env, cell_vars, offset, base, trace_call_stack)? {
-                            Value::Class(class) => Ok::<Class, Box<Error<'a>>>(class),
-                            value =>
-                                Err(Error::InvalidBase { base: value, at: base.into_variant() })?,
-                        },
-                    )
+                    .map(|base| match eval(env, cell_vars, base, trace_call_stack)? {
+                        Value::Class(class) => Ok::<Class, Box<Error<'a>>>(class),
+                        value => Err(Error::InvalidBase { base: value, at: base.into_variant() })?,
+                    })
                     .transpose()?;
-                env.define(
-                    cell_vars,
-                    offset,
-                    target.target(),
-                    Value::Nil.into_nanboxed(),
-                );
+                env.define(cell_vars, target.target(), Value::Nil.into_nanboxed());
                 let methods: HashMap<_, _> = methods
                     .iter()
                     .map(|method| (method.name.id(), eval_function(env.gc, cell_vars, method)))
@@ -641,7 +580,6 @@ pub fn execute<'a>(
                 );
                 env.set(
                     cell_vars,
-                    offset,
                     target.target(),
                     Value::Class(class).into_nanboxed(),
                 );
@@ -750,7 +688,6 @@ mod tests {
         eval(
             &mut Environment::new(gc, global_name_offsets, global_cells),
             global_cells,
-            0,
             scoped_ast,
             &|| (),
         )

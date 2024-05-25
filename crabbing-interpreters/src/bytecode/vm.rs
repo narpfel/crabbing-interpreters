@@ -30,6 +30,7 @@ use crate::interner::InternedString;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
+use crate::scope::Slot;
 use crate::scope::Target;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
@@ -375,11 +376,11 @@ pub(crate) fn execute_bytecode<'a>(
         Divide => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs / rhs)?,
         Power => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
-            let value = vm.env[vm.offset + slot];
+            let value = vm.env.get(vm.cell_vars, Slot::Local(slot.cast()));
             vm.stack_mut(sp).push(value);
         }
         Global(slot) => {
-            let value = vm.env[slot];
+            let value = vm.env.get(vm.cell_vars, Slot::Global(slot.cast()));
             vm.stack_mut(sp).push(value);
         }
         Cell(slot) => {
@@ -453,16 +454,12 @@ pub(crate) fn execute_bytecode<'a>(
         }
         StoreLocal(slot) => {
             let value = vm.stack_mut(sp).pop();
-            vm.env[vm.offset + slot] = value;
+            vm.env.set(vm.cell_vars, Target::Local(slot.cast()), value);
         }
         StoreGlobal(slot) => {
             let value = vm.stack_mut(sp).pop();
-            vm.env.set(
-                vm.cell_vars,
-                vm.offset.cast(),
-                Target::GlobalBySlot(slot.cast()),
-                value,
-            );
+            vm.env
+                .set(vm.cell_vars, Target::GlobalBySlot(slot.cast()), value);
         }
         StoreCell(slot) => {
             let value = vm.stack_mut(sp).pop();
@@ -511,7 +508,7 @@ pub(crate) fn execute_bytecode<'a>(
                 Box::new(Error::UndefinedName { at: *expr.0.name })
             })?;
 
-            let value = vm.env[u32::try_from(variable).unwrap()];
+            let value = vm.env.get(vm.cell_vars, Slot::Global(variable));
             vm.stack_mut(sp).push(value);
         }
         StoreGlobalByName(name) => {
@@ -521,12 +518,7 @@ pub(crate) fn execute_bytecode<'a>(
                 Box::new(Error::UndefinedName { at: *target.0.name })
             })?;
             let value = vm.stack_mut(sp).pop();
-            vm.env.set(
-                vm.cell_vars,
-                vm.offset.cast(),
-                Target::GlobalBySlot(slot),
-                value,
-            );
+            vm.env.set(vm.cell_vars, Target::GlobalBySlot(slot), value);
         }
         JumpIfTrue(target) => {
             let value = vm.stack_mut(sp).pop();
@@ -561,11 +553,14 @@ pub(crate) fn execute_bytecode<'a>(
             *pc += target.cast();
         }
         Return => {
+            let old_offset = vm.offset;
             CallFrame {
                 pc: *pc,
                 offset: vm.offset,
                 cells: vm.cell_vars,
             } = vm.call_stack.pop();
+            vm.env
+                .pop_frame(usize::try_from(old_offset - vm.offset).unwrap());
         }
         BuildFunction(metadata_index) => {
             let Metadata::Function { function, code_size } = vm.metadata[metadata_index.cast()]
@@ -876,6 +871,8 @@ fn execute_call<'a>(
             *pc = function.code_ptr - 1;
             vm.offset += stack_size_at_callsite;
             vm.cell_vars = function.cells;
+            vm.env
+                .push_frame(usize::try_from(stack_size_at_callsite).unwrap())
         }
         BoundMethod(bound_method) => {
             let method = bound_method.method;
@@ -894,6 +891,8 @@ fn execute_call<'a>(
             *pc = method.code_ptr - 1;
             vm.offset += stack_size_at_callsite;
             vm.cell_vars = method.cells;
+            vm.env
+                .push_frame(usize::try_from(stack_size_at_callsite).unwrap())
         }
         NativeFunction(native_fn) => {
             #[cold]
@@ -973,6 +972,8 @@ fn execute_call<'a>(
                         *pc = init.code_ptr - 1;
                         vm.offset += stack_size_at_callsite;
                         vm.cell_vars = init.cells;
+                        vm.env
+                            .push_frame(usize::try_from(stack_size_at_callsite).unwrap())
                     }
                     Some(_) => unreachable!(),
                     None if argument_count == 0 => vm

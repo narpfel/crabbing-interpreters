@@ -37,7 +37,6 @@ use crate::value::Value;
 
 pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
-    pub(crate) offset: usize,
     pub(crate) cell_vars: Cells<'a>,
     pub(crate) trace_call_stack: &'b dyn Fn(),
 }
@@ -95,7 +94,6 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                     let initialiser = initialiser(state)?;
                     state.env.define(
                         state.cell_vars,
-                        state.offset,
                         variable.target(),
                         initialiser.into_nanboxed(),
                     );
@@ -165,16 +163,11 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
             let function = *function;
             bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> ExecResult<'a> {
-                    state.env.define(
-                        state.cell_vars,
-                        state.offset,
-                        target.target(),
-                        Value::Nil.into_nanboxed(),
-                    );
-                    let function = eval_function(state.env.gc, state.cell_vars, &function);
                     state
                         .env
-                        .set(state.cell_vars, state.offset, target.target(), function);
+                        .define(state.cell_vars, target.target(), Value::Nil.into_nanboxed());
+                    let function = eval_function(state.env.gc, state.cell_vars, &function);
+                    state.env.set(state.cell_vars, target.target(), function);
                     Ok(Value::Nil)
                 },
             )
@@ -217,12 +210,9 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                         }))?,
                         None => None,
                     };
-                    state.env.define(
-                        state.cell_vars,
-                        state.offset,
-                        target.target(),
-                        Value::Nil.into_nanboxed(),
-                    );
+                    state
+                        .env
+                        .define(state.cell_vars, target.target(), Value::Nil.into_nanboxed());
                     let methods = methods
                         .iter()
                         .map(|method| {
@@ -238,7 +228,6 @@ fn compile_stmt<'a>(bump: &'a Bump, stmt: &'a Statement<'a>) -> &'a Execute<'a> 
                     );
                     state.env.set(
                         state.cell_vars,
-                        state.offset,
                         target.target(),
                         Value::Class(class).into_nanboxed(),
                     );
@@ -378,10 +367,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
         Expression::Name(variable) => match variable.target() {
             Target::Local(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    Ok(state
-                        .env
-                        .get(state.cell_vars, state.offset, Slot::Local(slot))
-                        .parse())
+                    Ok(state.env.get(state.cell_vars, Slot::Local(slot)).parse())
                 },
             ),
             Target::GlobalByName => bump.alloc(
@@ -393,18 +379,12 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             ),
             Target::GlobalBySlot(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    Ok(state
-                        .env
-                        .get(state.cell_vars, state.offset, Slot::Global(slot))
-                        .parse())
+                    Ok(state.env.get(state.cell_vars, Slot::Global(slot)).parse())
                 },
             ),
             Target::Cell(slot) => bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
-                    Ok(state
-                        .env
-                        .get(state.cell_vars, state.offset, Slot::Cell(slot))
-                        .parse())
+                    Ok(state.env.get(state.cell_vars, Slot::Cell(slot)).parse())
                 },
             ),
         },
@@ -422,7 +402,6 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             }
                             state.env.set(
                                 state.cell_vars,
-                                state.offset,
                                 variable.target(),
                                 value.into_nanboxed(),
                             );
@@ -484,12 +463,13 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                         zip(arguments, parameters).try_for_each(
                             |(arg, param)| -> Result<(), Box<_>> {
                                 let arg = arg(state)?;
+                                state.env.push_frame(stack_size_at_callsite);
                                 state.env.define(
                                     function.cells,
-                                    state.offset + stack_size_at_callsite,
                                     param.target(),
                                     arg.into_nanboxed(),
                                 );
+                                state.env.pop_frame(stack_size_at_callsite);
                                 Ok(())
                             },
                         )?;
@@ -498,16 +478,18 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             trace_call_stack();
                             callee.trace();
                         };
-                        match (function.compiled_body)(&mut State {
+                        state.env.push_frame(stack_size_at_callsite);
+                        let result = match (function.compiled_body)(&mut State {
                             env: state.env,
-                            offset: state.offset + stack_size_at_callsite,
                             cell_vars: function.cells,
                             trace_call_stack,
                         }) {
                             Ok(_) => Ok(Value::Nil),
                             Err(ControlFlow::Return(value)) => Ok(value),
                             Err(ControlFlow::Error(err)) => Err(err),
-                        }
+                        };
+                        state.env.pop_frame(stack_size_at_callsite);
+                        result
                         // FIXME: truncate env here to drop the callee’s locals
                     };
 
@@ -517,12 +499,13 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                          method: &Function<'a>,
                          instance: Value<'a>|
                          -> Result<Value<'a>, Box<Error<'a>>> {
+                            state.env.push_frame(stack_size_at_callsite);
                             state.env.define(
                                 method.cells,
-                                state.offset + stack_size_at_callsite,
                                 method.parameters[0].target(),
                                 instance.into_nanboxed(),
                             );
+                            state.env.pop_frame(stack_size_at_callsite);
                             let parameters = method.parameters.iter().skip(1);
                             eval_call(state, method, parameters)
                         };

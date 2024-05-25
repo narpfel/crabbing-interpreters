@@ -1,6 +1,8 @@
 use std::fmt;
 use std::io;
 use std::mem::ManuallyDrop;
+use std::ops::Index;
+use std::ops::IndexMut;
 use std::ptr::NonNull;
 
 use crate::gc::Trace;
@@ -11,8 +13,8 @@ pub(crate) struct Stack<T> {
 }
 
 impl<T> Stack<T> {
-    pub(super) fn new(_default_value: T) -> Self {
-        let stack = unsafe {
+    pub(crate) fn new(_default_value: T) -> Self {
+        let ptr = unsafe {
             let ptr = libc::mmap(
                 std::ptr::null_mut(),
                 Self::SIZE_IN_BYTES,
@@ -47,8 +49,8 @@ impl<T> Stack<T> {
         };
 
         Self {
-            stack,
-            pointer: unsafe { stack.byte_add(Self::START_OFFSET) },
+            stack: unsafe { ptr.byte_add(Self::START_OFFSET) },
+            pointer: unsafe { ptr.byte_add(Self::START_OFFSET) },
         }
     }
 
@@ -70,7 +72,10 @@ impl<T> Drop for Stack<T> {
         unsafe {
             NonNull::from(self.used_stack_mut()).drop_in_place();
 
-            let result = libc::munmap(self.stack.as_ptr().cast(), Self::SIZE_IN_BYTES);
+            let result = libc::munmap(
+                self.stack.byte_sub(Self::START_OFFSET).as_ptr().cast(),
+                Self::SIZE_IN_BYTES,
+            );
             if result != 0 {
                 panic!("munmap failed: {}", io::Error::last_os_error());
             }
@@ -118,9 +123,49 @@ where
         debug_assert!(self.is_in_bounds(offset));
         unsafe { self.pointer.offset(offset).read() }
     }
+
+    pub(crate) fn get_from_beginning(&self, index: usize) -> T {
+        self[index]
+    }
+
+    pub(crate) fn get_in_frame(&self, index: usize) -> T {
+        debug_assert!(self.is_in_bounds(index as isize));
+        unsafe { self.pointer.add(index).read() }
+    }
 }
 
 impl<T> Stack<T> {
+    pub(crate) fn push_frame(&mut self, offset: usize) {
+        debug_assert!(self.is_in_bounds(offset as isize));
+        unsafe {
+            self.pointer = self.pointer.add(offset);
+            self.pointer.cast::<u64>().read_volatile();
+        }
+    }
+
+    pub(crate) fn pop_frame(&mut self, offset: usize) {
+        debug_assert!(self.is_in_bounds(-(offset as isize)));
+        unsafe {
+            self.pointer = self.pointer.sub(offset);
+            self.pointer.cast::<u64>().read_volatile();
+        }
+    }
+
+    pub(crate) fn get_from_beginning_ref(&self, index: usize) -> &T {
+        debug_assert!(self.is_in_bounds(index as isize));
+        unsafe { self.stack.add(index).as_ref() }
+    }
+
+    pub(crate) fn get_from_beginning_mut(&mut self, index: usize) -> &mut T {
+        debug_assert!(self.is_in_bounds(index as isize));
+        unsafe { self.stack.add(index).as_mut() }
+    }
+
+    pub(crate) fn get_in_frame_mut(&mut self, index: usize) -> &mut T {
+        debug_assert!(self.is_in_bounds(index as isize));
+        unsafe { self.pointer.add(index).as_mut() }
+    }
+
     pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
         let offset = peek_offset(index);
         assert!(self.is_in_bounds(offset));
@@ -144,7 +189,7 @@ impl<T> Stack<T> {
     }
 
     fn useable_stack_start(&self) -> NonNull<T> {
-        unsafe { self.stack.byte_add(Self::START_OFFSET) }
+        self.stack
     }
 
     fn used_stack(&self) -> &[T] {
@@ -177,6 +222,20 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.used_stack()).finish()
+    }
+}
+
+impl<T> Index<usize> for Stack<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.get_from_beginning_ref(index)
+    }
+}
+
+impl<T> IndexMut<usize> for Stack<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        self.get_from_beginning_mut(index)
     }
 }
 
