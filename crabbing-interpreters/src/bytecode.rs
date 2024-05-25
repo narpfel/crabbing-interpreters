@@ -111,7 +111,7 @@ impl Index<usize> for CompiledBytecodes<'_> {
     }
 }
 
-type CompiledBytecode = for<'a> fn(&mut Vm<'a, '_>, CompiledBytecodes);
+type CompiledBytecode = fn(&mut Vm, CompiledBytecodes);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CallInner {
