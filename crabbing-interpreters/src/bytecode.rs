@@ -65,7 +65,9 @@ macro_rules! bytecode {
                             #[allow(non_snake_case)]
                             fn $variant_name(vm: &mut Vm, compiled_program: CompiledBytecodes) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
-                                    = vm.next_bytecode()
+                                    // SAFETY: `compiled_program` has the same length as
+                                    // `vm.bytecode` and `vm.pc()` is always in bounds for that
+                                    = unsafe { compiled_program.get(vm.pc()) }.bytecode
                                 else {
                                     unsafe {
                                         std::hint::unreachable_unchecked();
@@ -80,12 +82,15 @@ macro_rules! bytecode {
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                        let next_function = unsafe { compiled_program.get(vm.pc()) };
-                                        next_function(vm, compiled_program)
+                                        let next = unsafe { compiled_program.get(vm.pc()) };
+                                        (next.function)(vm, compiled_program)
                                     }
                                 }
                             }
-                            $variant_name
+                            CompiledBytecode {
+                                bytecode: self,
+                                function: $variant_name,
+                            }
                         }
                     )*
                 }
@@ -111,7 +116,11 @@ impl Index<usize> for CompiledBytecodes<'_> {
     }
 }
 
-type CompiledBytecode = fn(&mut Vm, CompiledBytecodes);
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CompiledBytecode {
+    pub(crate) bytecode: Bytecode,
+    pub(crate) function: fn(&mut Vm, CompiledBytecodes),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CallInner {

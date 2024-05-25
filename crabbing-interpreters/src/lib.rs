@@ -432,7 +432,8 @@ pub fn run<'a>(
                             stack,
                             global_cells,
                         )?;
-                        compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes);
+                        let compiled_bytecode = compiled_bytecodes[vm.pc()];
+                        (compiled_bytecode.function)(&mut vm, compiled_bytecodes);
 
                         if args.show_bytecode_execution_counts {
                             let max_len = Bytecode::all_discriminants()
