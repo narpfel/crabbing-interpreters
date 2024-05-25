@@ -432,8 +432,7 @@ pub fn run<'a>(
                             stack,
                             global_cells,
                         )?;
-                        let mut error = None;
-                        compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes, &mut error);
+                        compiled_bytecodes[vm.pc()](&mut vm, compiled_bytecodes);
 
                         if args.show_bytecode_execution_counts {
                             let max_len = Bytecode::all_discriminants()
@@ -451,7 +450,7 @@ pub fn run<'a>(
                             }
                         }
 
-                        match error {
+                        match vm.error() {
                             Some(error) => Err(error)?,
                             None => Value::Nil,
                         }

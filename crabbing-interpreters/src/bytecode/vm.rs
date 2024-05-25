@@ -115,6 +115,7 @@ pub(crate) struct Vm<'a, 'b> {
     call_stack: Stack<CallFrame<'a>>,
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
+    error: Option<Box<Error<'a>>>,
 }
 
 impl<'a, 'b> Vm<'a, 'b> {
@@ -144,6 +145,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             }),
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
+            error: None,
         })
     }
 
@@ -155,6 +157,14 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn pc(&self) -> usize {
         self.pc
+    }
+
+    pub(crate) fn set_error(&mut self, error: Option<Box<Error<'a>>>) {
+        self.error = error;
+    }
+
+    pub(crate) fn error(self) -> Option<Box<Error<'a>>> {
+        self.error
     }
 
     pub(crate) fn execution_counts(&self) -> &[u64; Bytecode::all_discriminants().len()] {

@@ -7,7 +7,6 @@ use crate::bytecode::vm::execute_bytecode;
 pub(crate) use crate::bytecode::vm::run_bytecode;
 use crate::bytecode::vm::stack::Stack;
 pub(crate) use crate::bytecode::vm::Vm;
-use crate::eval::Error;
 use crate::interner::InternedString;
 use crate::value::nanboxed;
 
@@ -64,11 +63,7 @@ macro_rules! bytecode {
                     $(
                         $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => {
                             #[allow(non_snake_case)]
-                            fn $variant_name<'a>(
-                                vm: &mut Vm<'a, '_>,
-                                compiled_program: CompiledBytecodes,
-                                error: &mut Option<Box<Error<'a>>>,
-                            ) -> () {
+                            fn $variant_name(vm: &mut Vm, compiled_program: CompiledBytecodes) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                     = vm.next_bytecode()
                                 else {
@@ -81,12 +76,12 @@ macro_rules! bytecode {
                                     $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                 );
                                 match result {
-                                    Err(value) => *error = value,
+                                    Err(value) => vm.set_error(value),
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
                                         let next_function = unsafe { compiled_program.get(vm.pc()) };
-                                        next_function(vm, compiled_program, error)
+                                        next_function(vm, compiled_program)
                                     }
                                 }
                             }
@@ -116,7 +111,7 @@ impl Index<usize> for CompiledBytecodes<'_> {
     }
 }
 
-type CompiledBytecode = for<'a> fn(&mut Vm<'a, '_>, CompiledBytecodes, &mut Option<Box<Error<'a>>>);
+type CompiledBytecode = for<'a> fn(&mut Vm<'a, '_>, CompiledBytecodes);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CallInner {
