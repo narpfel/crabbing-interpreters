@@ -78,6 +78,7 @@ pub(crate) enum InvalidBytecode {
     NoEnd,
     JumpOutOfBounds,
     TooManyArgsInShortCall,
+    ConstNumberIsNaN,
 }
 
 impl Report for InvalidBytecode {
@@ -594,7 +595,10 @@ pub(crate) fn execute_bytecode<'a>(
         ConstNil => vm.stack.push(Value::Nil.into_nanboxed()),
         ConstTrue => vm.stack.push(Value::Bool(true).into_nanboxed()),
         ConstFalse => vm.stack.push(Value::Bool(false).into_nanboxed()),
-        ConstNumber(number) => vm.stack.push(Value::Number(number.into()).into_nanboxed()),
+        ConstNumber(number) => vm.stack.push(
+            // SAFETY: `validate_bytecode` makes sure that `number` is not `NaN`
+            unsafe { nanboxed::Value::from_f64_unchecked(number.into()) },
+        ),
     }
     vm.pc += 1;
     if cfg!(miri) || previous_pc > vm.pc {

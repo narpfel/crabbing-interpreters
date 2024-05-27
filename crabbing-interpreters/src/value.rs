@@ -40,7 +40,7 @@ impl<'a> Value<'a> {
                     nanboxed::NaN.into_nanboxed()
                 }
                 else {
-                    std::ptr::null::<()>().with_addr(usize::try_from(number.to_bits()).unwrap())
+                    return unsafe { nanboxed::Value::from_f64_unchecked(number) };
                 },
             Self::String(s) => s.into_nanboxed(),
             Self::Bool(b) => b.into_nanboxed(),
