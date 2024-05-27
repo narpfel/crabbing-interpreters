@@ -309,6 +309,10 @@ fn validate_bytecode(
                 {
                     return Err(vm::InvalidBytecode::TooManyArgsInShortCall);
                 },
+            Bytecode::ConstNumber(number) =>
+                if f64::from(number).is_nan() {
+                    return Err(vm::InvalidBytecode::ConstNumberIsNaN);
+                },
             Bytecode::Pop
             | Bytecode::Const(_)
             | Bytecode::UnaryMinus
@@ -347,8 +351,7 @@ fn validate_bytecode(
             | Bytecode::Super(_)
             | Bytecode::ConstNil
             | Bytecode::ConstTrue
-            | Bytecode::ConstFalse
-            | Bytecode::ConstNumber(_) => (),
+            | Bytecode::ConstFalse => (),
         }
     }
 

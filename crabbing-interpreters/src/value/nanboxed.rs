@@ -37,6 +37,14 @@ impl<'a> Value<'a> {
         Self { data, _value: PhantomData }
     }
 
+    pub(crate) unsafe fn from_f64_unchecked(number: f64) -> Self {
+        debug_assert!(!number.is_nan());
+        Self {
+            data: std::ptr::null::<()>().with_addr(usize::try_from(number.to_bits()).unwrap()),
+            _value: PhantomData,
+        }
+    }
+
     #[inline(always)]
     pub fn parse(self) -> Unboxed<'a> {
         let data = u64::try_from(self.data.addr()).unwrap();
