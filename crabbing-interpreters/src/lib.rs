@@ -363,7 +363,7 @@ pub fn run<'a>(
             Environment::new(gc, global_name_offsets, global_cells)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
-        let (bytecode, constants, metadata, error_locations, defined_in_frame) =
+        let (bytecode, constants, metadata, error_locations, defined_local_slots) =
             time("cmp", args.times, || compile_program(gc, program.stmts));
         let compiled_bytecodes = time("thr", args.times, || {
             bytecode
@@ -425,7 +425,7 @@ pub fn run<'a>(
                         &error_locations,
                         stack,
                         global_cells,
-                        defined_in_frame,
+                        defined_local_slots,
                     )?)?,
                     Loop::Threaded => {
                         let mut vm = Vm::new(
@@ -435,7 +435,7 @@ pub fn run<'a>(
                             &error_locations,
                             stack,
                             global_cells,
-                            defined_in_frame,
+                            defined_local_slots,
                         )?;
                         vm.run_threaded(compiled_bytecodes);
 

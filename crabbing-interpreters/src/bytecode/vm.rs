@@ -13,7 +13,7 @@ use Bytecode::*;
 
 use super::CompiledBytecodes;
 use crate::bytecode::compiler::ContainingExpression;
-use crate::bytecode::compiler::DefinedInFrame;
+use crate::bytecode::compiler::LocalSlotsDefinedInFrame;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
 use crate::bytecode::vm::stack::Stack;
@@ -125,7 +125,7 @@ pub(crate) struct Vm<'a, 'b> {
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
-    defined_in_frame: Vec<DefinedInFrame>,
+    defined_local_slots: Vec<LocalSlotsDefinedInFrame>,
 }
 
 impl Drop for Vm<'_, '_> {
@@ -142,7 +142,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         error_locations: &'b [ContainingExpression<'a>],
         env: Environment<'a>,
         global_cells: Cells<'a>,
-        defined_in_frame: Vec<DefinedInFrame>,
+        defined_local_slots: Vec<LocalSlotsDefinedInFrame>,
     ) -> Result<Self, InvalidBytecode> {
         let gc = env.gc;
         validate_bytecode(bytecode, metadata)?;
@@ -165,7 +165,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
             error: None,
-            defined_in_frame,
+            defined_local_slots,
         })
     }
 
@@ -213,7 +213,7 @@ impl<'a, 'b> Vm<'a, 'b> {
                 vm.call_stack.trace();
                 vm.cell_vars.trace();
                 vm.env.trace();
-                for &offset in vm.defined_at(pc) {
+                for &offset in vm.defined_local_slots_at(pc) {
                     vm.env.get(vm.cell_vars, Slot::Local(offset)).trace();
                 }
                 unsafe { vm.env.gc.sweep() };
@@ -262,22 +262,22 @@ impl<'a, 'b> Vm<'a, 'b> {
         unreachable!()
     }
 
-    fn defined_at(&self, pc: usize) -> &[usize] {
+    fn defined_local_slots_at(&self, pc: usize) -> &[usize] {
         let index = self
-            .defined_in_frame
+            .defined_local_slots
             .partition_point(|containing_expr| containing_expr.at() <= pc);
 
         let mut depth = 0;
-        for containing_expr in self.defined_in_frame[..index].iter().rev() {
+        for containing_expr in self.defined_local_slots[..index].iter().rev() {
             match containing_expr {
-                DefinedInFrame::Enter { at: _, defined } =>
+                LocalSlotsDefinedInFrame::Enter { at: _, defined } =>
                     if depth == 0 {
                         return defined;
                     }
                     else {
                         depth -= 1;
                     },
-                DefinedInFrame::Exit { at: _ } => depth += 1,
+                LocalSlotsDefinedInFrame::Exit { at: _ } => depth += 1,
             }
         }
         unreachable!()
