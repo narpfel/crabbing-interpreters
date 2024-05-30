@@ -293,24 +293,45 @@ pub(crate) fn execute_bytecode<'a>(
         LessEqual => number_binop(vm, |lhs, rhs| Bool(lhs <= rhs))?,
         Greater => number_binop(vm, |lhs, rhs| Bool(lhs > rhs))?,
         GreaterEqual => number_binop(vm, |lhs, rhs| Bool(lhs >= rhs))?,
-        Add => any_binop(vm, |vm, lhs, rhs| match (lhs, rhs) {
-            (Number(lhs), Number(rhs)) => Ok(Number(lhs + rhs)),
-            (String(lhs), String(rhs)) =>
-                Ok(String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}")))),
-            _ => {
-                let expr = vm.error_location();
-                Err(Box::new(Error::InvalidBinaryOp {
-                    at: expr,
-                    lhs,
-                    op: expr.op,
-                    rhs,
-                }))?
+        Add => {
+            let rhs = vm.stack.pop();
+            let lhs = vm.stack.pop();
+            let fast_path_result = lhs.data() + rhs.data();
+            if fast_path_result.is_nan() {
+                #[cold]
+                #[inline(never)]
+                fn add_slow_path<'a>(
+                    vm: &mut Vm<'a, '_>,
+                    lhs: nanboxed::Value<'a>,
+                    rhs: nanboxed::Value<'a>,
+                ) -> Result<nanboxed::Value<'a>, Option<Box<Error<'a>>>> {
+                    let result = match (lhs.parse(), rhs.parse()) {
+                        (Number(lhs), Number(rhs)) => Number(lhs + rhs),
+                        (String(lhs), String(rhs)) =>
+                            String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}"))),
+                        (lhs, rhs) => {
+                            let expr = vm.error_location();
+                            Err(Box::new(Error::InvalidBinaryOp {
+                                at: expr,
+                                lhs,
+                                op: expr.op,
+                                rhs,
+                            }))?
+                        }
+                    };
+                    Ok(result.into_nanboxed())
+                }
+                let result = add_slow_path(vm, lhs, rhs)?;
+                vm.stack.push(result);
             }
-        })?,
-        Subtract => number_binop(vm, |lhs, rhs| Number(lhs - rhs))?,
-        Multiply => number_binop(vm, |lhs, rhs| Number(lhs * rhs))?,
-        Divide => number_binop(vm, |lhs, rhs| Number(lhs / rhs))?,
-        Power => number_binop(vm, |lhs, rhs| Number(lhs.powf(rhs)))?,
+            else {
+                vm.stack.push(Number(fast_path_result).into_nanboxed());
+            };
+        }
+        Subtract => nan_preserving_number_binop(vm, |lhs, rhs| lhs - rhs)?,
+        Multiply => nan_preserving_number_binop(vm, |lhs, rhs| lhs * rhs)?,
+        Divide => nan_preserving_number_binop(vm, |lhs, rhs| lhs / rhs)?,
+        Power => nan_preserving_number_binop(vm, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
             vm.stack.push(vm.env[vm.offset + slot]);
         }
@@ -609,13 +630,9 @@ pub(crate) fn execute_bytecode<'a>(
 
 #[inline(always)]
 #[track_caller]
-fn any_binop<'a, 'b>(
-    vm: &mut Vm<'a, 'b>,
-    op: impl for<'c> FnOnce(
-        &'c mut Vm<'a, 'b>,
-        Value<'a>,
-        Value<'a>,
-    ) -> Result<Value<'a>, Box<Error<'a>>>,
+fn any_binop<'a>(
+    vm: &mut Vm<'a, '_>,
+    op: impl FnOnce(&mut Vm<'a, '_>, Value<'a>, Value<'a>) -> Result<Value<'a>, Box<Error<'a>>>,
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.stack.pop().parse();
     let lhs = vm.stack.pop().parse();
@@ -626,18 +643,48 @@ fn any_binop<'a, 'b>(
 
 #[inline(always)]
 #[track_caller]
-fn number_binop<'a, 'b>(
-    vm: &mut Vm<'a, 'b>,
+fn number_binop<'a>(
+    vm: &mut Vm<'a, '_>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.pop().parse();
-    let lhs = vm.stack.pop().parse();
-    let result = match (lhs, rhs) {
-        (Number(lhs), Number(rhs)) => op(lhs, rhs),
-        _ => {
-            let expr = vm.error_location();
-            Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+    let rhs = vm.stack.pop();
+    let lhs = vm.stack.pop();
+    if lhs.data().is_nan() || rhs.data().is_nan() {
+        let result = match (lhs.parse(), rhs.parse()) {
+            (Number(lhs), Number(rhs)) => op(lhs, rhs),
+            (lhs, rhs) => {
+                let expr = vm.error_location();
+                Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+            }
+        };
+        vm.stack.push(result.into_nanboxed());
+    }
+    else {
+        vm.stack.push(op(lhs.data(), rhs.data()).into_nanboxed());
+    }
+    Ok(())
+}
+
+#[inline(always)]
+#[track_caller]
+fn nan_preserving_number_binop<'a>(
+    vm: &mut Vm<'a, '_>,
+    op: impl Fn(f64, f64) -> f64,
+) -> Result<(), Box<Error<'a>>> {
+    let rhs = vm.stack.pop();
+    let lhs = vm.stack.pop();
+    let fast_path_result = op(lhs.data(), rhs.data());
+    let result = if fast_path_result.is_nan() {
+        match (lhs.parse(), rhs.parse()) {
+            (Number(_), Number(_)) => Number(fast_path_result),
+            (lhs, rhs) => {
+                let expr = vm.error_location();
+                Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+            }
         }
+    }
+    else {
+        Number(fast_path_result)
     };
     vm.stack.push(result.into_nanboxed());
     Ok(())

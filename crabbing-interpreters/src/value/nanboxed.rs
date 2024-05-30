@@ -45,6 +45,10 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub(crate) fn data(self) -> f64 {
+        f64::from_bits(u64::try_from(self.data.addr()).unwrap())
+    }
+
     #[inline(always)]
     pub fn parse(self) -> Unboxed<'a> {
         let data = u64::try_from(self.data.addr()).unwrap();
