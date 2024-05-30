@@ -676,7 +676,7 @@ fn nan_preserving_number_binop<'a>(
     let fast_path_result = op(lhs.data(), rhs.data());
     let result = if fast_path_result.is_nan() {
         match (lhs.parse(), rhs.parse()) {
-            (Number(lhs), Number(rhs)) => Number(op(lhs, rhs)),
+            (Number(_), Number(_)) => Number(fast_path_result),
             (lhs, rhs) => {
                 let expr = vm.error_location();
                 Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
