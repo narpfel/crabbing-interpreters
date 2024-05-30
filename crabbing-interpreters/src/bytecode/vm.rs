@@ -293,20 +293,41 @@ pub(crate) fn execute_bytecode<'a>(
         LessEqual => number_binop(vm, |lhs, rhs| Bool(lhs <= rhs))?,
         Greater => number_binop(vm, |lhs, rhs| Bool(lhs > rhs))?,
         GreaterEqual => number_binop(vm, |lhs, rhs| Bool(lhs >= rhs))?,
-        Add => any_binop(vm, |vm, lhs, rhs| match (lhs, rhs) {
-            (Number(lhs), Number(rhs)) => Ok(Number(lhs + rhs)),
-            (String(lhs), String(rhs)) =>
-                Ok(String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}")))),
-            _ => {
-                let expr = vm.error_location();
-                Err(Box::new(Error::InvalidBinaryOp {
-                    at: expr,
-                    lhs,
-                    op: expr.op,
-                    rhs,
-                }))?
+        Add => {
+            let rhs = vm.stack.pop();
+            let lhs = vm.stack.pop();
+            let fast_path_result = lhs.data() + rhs.data();
+            if fast_path_result.is_nan() {
+                #[cold]
+                #[inline(never)]
+                fn add_slow_path<'a>(
+                    vm: &mut Vm<'a, '_>,
+                    lhs: nanboxed::Value<'a>,
+                    rhs: nanboxed::Value<'a>,
+                ) -> Result<nanboxed::Value<'a>, Option<Box<Error<'a>>>> {
+                    let result = match (lhs.parse(), rhs.parse()) {
+                        (Number(lhs), Number(rhs)) => Number(lhs + rhs),
+                        (String(lhs), String(rhs)) =>
+                            String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}"))),
+                        (lhs, rhs) => {
+                            let expr = vm.error_location();
+                            Err(Box::new(Error::InvalidBinaryOp {
+                                at: expr,
+                                lhs,
+                                op: expr.op,
+                                rhs,
+                            }))?
+                        }
+                    };
+                    Ok(result.into_nanboxed())
+                }
+                let result = add_slow_path(vm, lhs, rhs)?;
+                vm.stack.push(result);
             }
-        })?,
+            else {
+                vm.stack.push(Number(fast_path_result).into_nanboxed());
+            };
+        }
         Subtract => number_binop(vm, |lhs, rhs| Number(lhs - rhs))?,
         Multiply => number_binop(vm, |lhs, rhs| Number(lhs * rhs))?,
         Divide => number_binop(vm, |lhs, rhs| Number(lhs / rhs))?,
