@@ -630,13 +630,9 @@ pub(crate) fn execute_bytecode<'a>(
 
 #[inline(always)]
 #[track_caller]
-fn any_binop<'a, 'b>(
-    vm: &mut Vm<'a, 'b>,
-    op: impl for<'c> FnOnce(
-        &'c mut Vm<'a, 'b>,
-        Value<'a>,
-        Value<'a>,
-    ) -> Result<Value<'a>, Box<Error<'a>>>,
+fn any_binop<'a>(
+    vm: &mut Vm<'a, '_>,
+    op: impl FnOnce(&mut Vm<'a, '_>, Value<'a>, Value<'a>) -> Result<Value<'a>, Box<Error<'a>>>,
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.stack.pop().parse();
     let lhs = vm.stack.pop().parse();
@@ -647,8 +643,8 @@ fn any_binop<'a, 'b>(
 
 #[inline(always)]
 #[track_caller]
-fn number_binop<'a, 'b>(
-    vm: &mut Vm<'a, 'b>,
+fn number_binop<'a>(
+    vm: &mut Vm<'a, '_>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.stack.pop();
