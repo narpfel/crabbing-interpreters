@@ -651,16 +651,21 @@ fn number_binop<'a, 'b>(
     vm: &mut Vm<'a, 'b>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.pop().parse();
-    let lhs = vm.stack.pop().parse();
-    let result = match (lhs, rhs) {
-        (Number(lhs), Number(rhs)) => op(lhs, rhs),
-        _ => {
-            let expr = vm.error_location();
-            Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
-        }
-    };
-    vm.stack.push(result.into_nanboxed());
+    let rhs = vm.stack.pop();
+    let lhs = vm.stack.pop();
+    if lhs.data().is_nan() || rhs.data().is_nan() {
+        let result = match (lhs.parse(), rhs.parse()) {
+            (Number(lhs), Number(rhs)) => op(lhs, rhs),
+            (lhs, rhs) => {
+                let expr = vm.error_location();
+                Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+            }
+        };
+        vm.stack.push(result.into_nanboxed());
+    }
+    else {
+        vm.stack.push(op(lhs.data(), rhs.data()).into_nanboxed());
+    }
     Ok(())
 }
 
