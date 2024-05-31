@@ -1,5 +1,6 @@
 use std::fmt;
-use std::ops::Index;
+use std::marker::PhantomData;
+use std::ptr::NonNull;
 
 pub(crate) use crate::bytecode::compiler::compile_program;
 use crate::bytecode::compiler::Metadata;
@@ -67,7 +68,7 @@ macro_rules! bytecode {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                     // SAFETY: `compiled_program` has the same length as
                                     // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                    = unsafe { compiled_program.get(vm.pc()) }.bytecode
+                                    = unsafe { compiled_program.get_unchecked(vm.pc()) }.bytecode
                                 else {
                                     unsafe {
                                         std::hint::unreachable_unchecked();
@@ -82,7 +83,7 @@ macro_rules! bytecode {
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                        let next = unsafe { compiled_program.get(vm.pc()) };
+                                        let next = unsafe { compiled_program.get_unchecked(vm.pc()) };
                                         (next.function)(vm, compiled_program)
                                     }
                                 }
@@ -100,19 +101,26 @@ macro_rules! bytecode {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct CompiledBytecodes<'a>(pub(crate) &'a [CompiledBytecode]);
+pub(crate) struct CompiledBytecodes<'a>(
+    NonNull<CompiledBytecode>,
+    PhantomData<&'a [CompiledBytecode]>,
+    #[cfg(debug_assertions)] usize,
+);
 
-impl CompiledBytecodes<'_> {
-    unsafe fn get(self, index: usize) -> CompiledBytecode {
-        unsafe { *self.0.get_unchecked(index) }
+impl<'a> CompiledBytecodes<'a> {
+    pub(crate) fn new(bytecodes: &'a [CompiledBytecode]) -> Self {
+        Self(
+            NonNull::new(bytecodes.as_ptr().cast_mut()).unwrap(),
+            PhantomData,
+            #[cfg(debug_assertions)]
+            bytecodes.len(),
+        )
     }
-}
 
-impl Index<usize> for CompiledBytecodes<'_> {
-    type Output = CompiledBytecode;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+    pub(crate) unsafe fn get_unchecked(self, index: usize) -> CompiledBytecode {
+        #[cfg(debug_assertions)]
+        debug_assert!(index <= self.2);
+        unsafe { self.0.add(index).read() }
     }
 }
 
