@@ -367,7 +367,7 @@ pub fn run<'a>(
                 .map(|bytecode| bytecode.compile())
                 .collect_vec()
         });
-        let compiled_bytecodes = CompiledBytecodes(&compiled_bytecodes);
+        let compiled_bytecodes = CompiledBytecodes::new(&compiled_bytecodes);
 
         if args.bytecode {
             println!("Interned strings");
@@ -432,7 +432,8 @@ pub fn run<'a>(
                             stack,
                             global_cells,
                         )?;
-                        let compiled_bytecode = compiled_bytecodes[vm.pc()];
+                        let compiled_bytecode =
+                            unsafe { compiled_bytecodes.get_unchecked(vm.pc()) };
                         (compiled_bytecode.function)(&mut vm, compiled_bytecodes);
 
                         if args.show_bytecode_execution_counts {

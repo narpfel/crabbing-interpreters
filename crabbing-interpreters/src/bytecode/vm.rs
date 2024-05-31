@@ -621,7 +621,9 @@ pub(crate) fn execute_bytecode<'a>(
             unsafe { nanboxed::Value::from_f64_unchecked(number.into()) },
         ),
     }
-    vm.pc += 1;
+    unsafe {
+        vm.pc = vm.pc.unchecked_add(1);
+    }
     if cfg!(miri) || previous_pc > vm.pc {
         vm.collect_if_necessary();
     }
