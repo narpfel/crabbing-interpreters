@@ -298,13 +298,17 @@ pub(crate) fn execute_bytecode<'a>(
             let lhs = vm.stack.pop();
             let fast_path_result = lhs.data() + rhs.data();
             if fast_path_result.is_nan() {
+                #[expect(improper_ctypes_definitions)]
                 #[cold]
                 #[inline(never)]
-                fn add_slow_path<'a>(
+                extern "rust-cold" fn add_slow_path<'a>(
                     vm: &mut Vm<'a, '_>,
-                    lhs: nanboxed::Value<'a>,
-                    rhs: nanboxed::Value<'a>,
-                ) -> Result<nanboxed::Value<'a>, Option<Box<Error<'a>>>> {
+                    // We pass `f64` here to save two integer registers in the fast path
+                    lhs: f64,
+                    rhs: f64,
+                ) -> Result<(), Option<Box<Error<'a>>>> {
+                    let lhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(lhs) };
+                    let rhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(rhs) };
                     let result = match (lhs.parse(), rhs.parse()) {
                         (Number(lhs), Number(rhs)) => Number(lhs + rhs),
                         (String(lhs), String(rhs)) =>
@@ -319,14 +323,20 @@ pub(crate) fn execute_bytecode<'a>(
                             }))?
                         }
                     };
-                    Ok(result.into_nanboxed())
+                    vm.stack.push(result.into_nanboxed());
+                    Ok(())
                 }
-                let result = add_slow_path(vm, lhs, rhs)?;
-                vm.stack.push(result);
+                let old_pc = vm.pc;
+                add_slow_path(vm, lhs.data(), rhs.data())?;
+                // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
+                // inlined.
+                if vm.pc != old_pc {
+                    unsafe { std::hint::unreachable_unchecked() }
+                }
             }
             else {
                 vm.stack.push(Number(fast_path_result).into_nanboxed());
-            };
+            }
         }
         Subtract => nan_preserving_number_binop(vm, |lhs, rhs| lhs - rhs)?,
         Multiply => nan_preserving_number_binop(vm, |lhs, rhs| lhs * rhs)?,
