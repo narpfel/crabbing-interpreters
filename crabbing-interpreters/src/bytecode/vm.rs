@@ -682,8 +682,8 @@ fn nan_preserving_number_binop<'a>(
     vm: &mut Vm<'a, '_>,
     op: impl Fn(f64, f64) -> f64,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.pop();
-    let lhs = vm.stack.pop();
+    let rhs = vm.stack.short_peek_at(0);
+    let lhs = vm.stack.short_peek_at(1);
     let fast_path_result = op(lhs.data(), rhs.data());
     if fast_path_result.is_nan() {
         #[expect(improper_ctypes_definitions)]
@@ -692,12 +692,9 @@ fn nan_preserving_number_binop<'a>(
         extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
             op: impl Fn(f64, f64) -> f64,
-            // We pass `f64` here to save two integer registers in the fast path
-            lhs: f64,
-            rhs: f64,
         ) -> Result<(), Box<Error<'a>>> {
-            let lhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(lhs) };
-            let rhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(rhs) };
+            let rhs = vm.stack.pop();
+            let lhs = vm.stack.pop();
             let result = match (lhs.parse(), rhs.parse()) {
                 (Number(lhs), Number(rhs)) => Number(op(lhs, rhs)).into_nanboxed(),
                 (lhs, rhs) => {
@@ -709,7 +706,7 @@ fn nan_preserving_number_binop<'a>(
             Ok(())
         }
         let old_pc = vm.pc;
-        let result = nan_preserving_number_binop_slow_path(vm, op, lhs.data(), rhs.data());
+        let result = nan_preserving_number_binop_slow_path(vm, op);
         // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
         // inlined.
         if vm.pc != old_pc {
@@ -718,6 +715,8 @@ fn nan_preserving_number_binop<'a>(
         result
     }
     else {
+        vm.stack.pop();
+        vm.stack.pop();
         vm.stack.push(Number(fast_path_result).into_nanboxed());
         Ok(())
     }
