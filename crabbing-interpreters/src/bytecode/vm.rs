@@ -294,8 +294,8 @@ pub(crate) fn execute_bytecode<'a>(
         Greater => number_binop(vm, |lhs, rhs| Bool(lhs > rhs))?,
         GreaterEqual => number_binop(vm, |lhs, rhs| Bool(lhs >= rhs))?,
         Add => {
-            let rhs = vm.stack.pop();
-            let lhs = vm.stack.pop();
+            let rhs = vm.stack.short_peek_at(0);
+            let lhs = vm.stack.short_peek_at(1);
             let fast_path_result = lhs.data() + rhs.data();
             if fast_path_result.is_nan() {
                 #[expect(improper_ctypes_definitions)]
@@ -303,12 +303,9 @@ pub(crate) fn execute_bytecode<'a>(
                 #[inline(never)]
                 extern "rust-cold" fn add_slow_path<'a>(
                     vm: &mut Vm<'a, '_>,
-                    // We pass `f64` here to save two integer registers in the fast path
-                    lhs: f64,
-                    rhs: f64,
                 ) -> Result<(), Option<Box<Error<'a>>>> {
-                    let lhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(lhs) };
-                    let rhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(rhs) };
+                    let rhs = vm.stack.pop();
+                    let lhs = vm.stack.pop();
                     let result = match (lhs.parse(), rhs.parse()) {
                         (Number(lhs), Number(rhs)) => Number(lhs + rhs),
                         (String(lhs), String(rhs)) =>
@@ -327,7 +324,7 @@ pub(crate) fn execute_bytecode<'a>(
                     Ok(())
                 }
                 let old_pc = vm.pc;
-                add_slow_path(vm, lhs.data(), rhs.data())?;
+                add_slow_path(vm)?;
                 // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
                 // inlined.
                 if vm.pc != old_pc {
@@ -335,6 +332,8 @@ pub(crate) fn execute_bytecode<'a>(
                 }
             }
             else {
+                vm.stack.pop();
+                vm.stack.pop();
                 vm.stack.push(Number(fast_path_result).into_nanboxed());
             }
         }
