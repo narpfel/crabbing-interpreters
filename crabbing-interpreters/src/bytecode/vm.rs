@@ -676,20 +676,42 @@ fn nan_preserving_number_binop<'a>(
     let rhs = vm.stack.pop();
     let lhs = vm.stack.pop();
     let fast_path_result = op(lhs.data(), rhs.data());
-    let result = if fast_path_result.is_nan() {
-        match (lhs.parse(), rhs.parse()) {
-            (Number(_), Number(_)) => Number(fast_path_result),
-            (lhs, rhs) => {
-                let expr = vm.error_location();
-                Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
-            }
+    if fast_path_result.is_nan() {
+        #[expect(improper_ctypes_definitions)]
+        #[cold]
+        #[inline(never)]
+        extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
+            vm: &mut Vm<'a, '_>,
+            op: impl Fn(f64, f64) -> f64,
+            // We pass `f64` here to save two integer registers in the fast path
+            lhs: f64,
+            rhs: f64,
+        ) -> Result<(), Box<Error<'a>>> {
+            let lhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(lhs) };
+            let rhs = unsafe { std::mem::transmute::<f64, nanboxed::Value<'a>>(rhs) };
+            let result = match (lhs.parse(), rhs.parse()) {
+                (Number(lhs), Number(rhs)) => Number(op(lhs, rhs)).into_nanboxed(),
+                (lhs, rhs) => {
+                    let expr = vm.error_location();
+                    Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+                }
+            };
+            vm.stack.push(result);
+            Ok(())
         }
+        let old_pc = vm.pc;
+        let result = nan_preserving_number_binop_slow_path(vm, op, lhs.data(), rhs.data());
+        // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
+        // inlined.
+        if vm.pc != old_pc {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+        result
     }
     else {
-        Number(fast_path_result)
-    };
-    vm.stack.push(result.into_nanboxed());
-    Ok(())
+        vm.stack.push(Number(fast_path_result).into_nanboxed());
+        Ok(())
+    }
 }
 
 trait Peeker {
