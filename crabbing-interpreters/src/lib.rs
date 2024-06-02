@@ -433,9 +433,8 @@ pub fn run<'a>(
                             stack,
                             global_cells,
                         )?;
-                        let compiled_bytecode =
-                            unsafe { compiled_bytecodes.get_unchecked(vm.pc()) };
-                        (compiled_bytecode.function)(&mut vm, compiled_bytecodes);
+                        let compiled_bytecode = unsafe { compiled_bytecodes.get_unchecked(0) };
+                        (compiled_bytecode.function)(&mut vm, 0, compiled_bytecodes);
 
                         if args.show_bytecode_execution_counts {
                             let max_len = Bytecode::all_discriminants()
