@@ -64,11 +64,15 @@ macro_rules! bytecode {
                     $(
                         $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => {
                             #[allow(non_snake_case)]
-                            fn $variant_name(vm: &mut Vm, compiled_program: CompiledBytecodes) {
+                            fn $variant_name(
+                                vm: &mut Vm,
+                                mut pc: usize,
+                                compiled_program: CompiledBytecodes,
+                            ) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                     // SAFETY: `compiled_program` has the same length as
                                     // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                    = unsafe { compiled_program.get_unchecked(vm.pc()) }.bytecode
+                                    = unsafe { compiled_program.get_unchecked(pc) }.bytecode
                                 else {
                                     unsafe {
                                         std::hint::unreachable_unchecked();
@@ -76,6 +80,7 @@ macro_rules! bytecode {
                                 };
                                 let result = execute_bytecode(
                                     vm,
+                                    &mut pc,
                                     $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                 );
                                 match result {
@@ -83,8 +88,8 @@ macro_rules! bytecode {
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                        let next = unsafe { compiled_program.get_unchecked(vm.pc()) };
-                                        (next.function)(vm, compiled_program)
+                                        let next = unsafe { compiled_program.get_unchecked(pc) };
+                                        (next.function)(vm, pc, compiled_program)
                                     }
                                 }
                             }
@@ -127,7 +132,7 @@ impl<'a> CompiledBytecodes<'a> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompiledBytecode {
     pub(crate) bytecode: Bytecode,
-    pub(crate) function: fn(&mut Vm, CompiledBytecodes),
+    pub(crate) function: fn(&mut Vm, usize, CompiledBytecodes),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -110,7 +110,6 @@ pub(crate) struct Vm<'a, 'b> {
     metadata: &'b [Metadata<'a>],
     error_locations: &'b [ContainingExpression<'a>],
     env: Environment<'a>,
-    pc: usize,
     stack: Stack<nanboxed::Value<'a>>,
     offset: u32,
     call_stack: Stack<CallFrame<'a>>,
@@ -136,7 +135,6 @@ impl<'a, 'b> Vm<'a, 'b> {
             metadata,
             error_locations,
             env,
-            pc: 0,
             stack: Stack::new(Value::Nil.into_nanboxed()),
             offset: 0,
             call_stack: Stack::new(CallFrame {
@@ -148,10 +146,6 @@ impl<'a, 'b> Vm<'a, 'b> {
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
             error: None,
         })
-    }
-
-    pub(crate) fn pc(&self) -> usize {
-        self.pc
     }
 
     pub(crate) fn set_error(&mut self, error: Option<Box<Error<'a>>>) {
@@ -182,19 +176,11 @@ impl<'a, 'b> Vm<'a, 'b> {
     }
 
     #[inline(never)]
-    fn print_stack(&self) {
+    fn print_stack(&self, pc: usize) {
         println!(
             "stack at {:>4}    {}: {:#?}",
-            self.pc, self.bytecode[self.pc], self.stack,
+            pc, self.bytecode[pc], self.stack,
         );
-    }
-
-    fn error_location<ExpressionType>(&self) -> ExpressionType
-    where
-        ExpressionType: IntoEnum<Enum = Expression<'a>>,
-        Expression<'a>: IntoVariant<ExpressionType>,
-    {
-        self.error_location_at(self.pc)
     }
 
     #[cold]
@@ -227,9 +213,10 @@ impl<'a, 'b> Vm<'a, 'b> {
 pub fn run_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
+    let mut pc = 0;
     loop {
-        let bytecode = vm.bytecode[vm.pc];
-        match execute_bytecode(vm, bytecode) {
+        let bytecode = vm.bytecode[pc];
+        match execute_bytecode(vm, &mut pc, bytecode) {
             Ok(()) => (),
             Err(None) => return Ok(Value::Nil),
             Err(Some(err)) => Err(err)?,
@@ -253,6 +240,7 @@ macro_rules! outline {
 #[inline(always)]
 pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
+    pc: &mut usize,
     bytecode: Bytecode,
 ) -> Result<(), Option<Box<Error<'a>>>> {
     #[cfg(feature = "count_bytecode_execution")]
@@ -260,7 +248,7 @@ pub(crate) fn execute_bytecode<'a>(
         vm.execution_counts[bytecode.discriminant()] += 1;
     }
 
-    let previous_pc = vm.pc;
+    let previous_pc = *pc;
 
     match bytecode {
         Pop => {
@@ -273,7 +261,7 @@ pub(crate) fn execute_bytecode<'a>(
             let value = match vm.stack.pop().parse() {
                 Number(x) => Number(-x).into_nanboxed(),
                 value => {
-                    let expr = vm.error_location();
+                    let expr = vm.error_location_at(*pc);
                     Err(Box::new(Error::InvalidUnaryOp {
                         value,
                         at: expr,
@@ -289,10 +277,10 @@ pub(crate) fn execute_bytecode<'a>(
         }
         Equal => any_binop(vm, |_, lhs, rhs| Ok(Bool(lhs == rhs)))?,
         NotEqual => any_binop(vm, |_, lhs, rhs| Ok(Bool(lhs != rhs)))?,
-        Less => number_binop(vm, |lhs, rhs| Bool(lhs < rhs))?,
-        LessEqual => number_binop(vm, |lhs, rhs| Bool(lhs <= rhs))?,
-        Greater => number_binop(vm, |lhs, rhs| Bool(lhs > rhs))?,
-        GreaterEqual => number_binop(vm, |lhs, rhs| Bool(lhs >= rhs))?,
+        Less => number_binop(vm, *pc, |lhs, rhs| Bool(lhs < rhs))?,
+        LessEqual => number_binop(vm, *pc, |lhs, rhs| Bool(lhs <= rhs))?,
+        Greater => number_binop(vm, *pc, |lhs, rhs| Bool(lhs > rhs))?,
+        GreaterEqual => number_binop(vm, *pc, |lhs, rhs| Bool(lhs >= rhs))?,
         Add => {
             let rhs = vm.stack.short_peek_at(0);
             let lhs = vm.stack.short_peek_at(1);
@@ -303,6 +291,7 @@ pub(crate) fn execute_bytecode<'a>(
                 #[inline(never)]
                 extern "rust-cold" fn add_slow_path<'a>(
                     vm: &mut Vm<'a, '_>,
+                    pc: usize,
                 ) -> Result<(), Option<Box<Error<'a>>>> {
                     let rhs = vm.stack.pop();
                     let lhs = vm.stack.pop();
@@ -311,7 +300,7 @@ pub(crate) fn execute_bytecode<'a>(
                         (String(lhs), String(rhs)) =>
                             String(GcStr::new_in(vm.env.gc, &format!("{lhs}{rhs}"))),
                         (lhs, rhs) => {
-                            let expr = vm.error_location();
+                            let expr = vm.error_location_at(pc);
                             Err(Box::new(Error::InvalidBinaryOp {
                                 at: expr,
                                 lhs,
@@ -323,13 +312,7 @@ pub(crate) fn execute_bytecode<'a>(
                     vm.stack.push(result.into_nanboxed());
                     Ok(())
                 }
-                let old_pc = vm.pc;
-                add_slow_path(vm)?;
-                // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
-                // inlined.
-                if vm.pc != old_pc {
-                    unsafe { std::hint::unreachable_unchecked() }
-                }
+                add_slow_path(vm, *pc)?
             }
             else {
                 vm.stack.pop();
@@ -337,10 +320,10 @@ pub(crate) fn execute_bytecode<'a>(
                 vm.stack.push(Number(fast_path_result).into_nanboxed());
             }
         }
-        Subtract => nan_preserving_number_binop(vm, |lhs, rhs| lhs - rhs)?,
-        Multiply => nan_preserving_number_binop(vm, |lhs, rhs| lhs * rhs)?,
-        Divide => nan_preserving_number_binop(vm, |lhs, rhs| lhs / rhs)?,
-        Power => nan_preserving_number_binop(vm, |lhs, rhs| lhs.powf(rhs))?,
+        Subtract => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs - rhs)?,
+        Multiply => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs * rhs)?,
+        Divide => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs / rhs)?,
+        Power => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
             vm.stack.push(vm.env[vm.offset + slot]);
         }
@@ -360,7 +343,7 @@ pub(crate) fn execute_bytecode<'a>(
             match assignment_target {
                 Instance(instance) => instance.attributes.borrow_mut().insert(name, value),
                 _ => {
-                    let expr: ExpressionTypes::Assign = vm.error_location();
+                    let expr: ExpressionTypes::Assign = vm.error_location_at(*pc);
                     Err(Box::new(Error::NoFields {
                         lhs: assignment_target,
                         at: expr.target.into_variant(),
@@ -372,6 +355,7 @@ pub(crate) fn execute_bytecode<'a>(
             #[inline(never)]
             fn load_attr<'a>(
                 vm: &mut Vm<'a, '_>,
+                pc: usize,
                 name: InternedString,
             ) -> Result<(), Box<Error<'a>>> {
                 let value = vm.stack.pop().parse();
@@ -395,7 +379,7 @@ pub(crate) fn execute_bytecode<'a>(
                                 })
                         })
                         .ok_or_else(|| {
-                            let expr = vm.error_location();
+                            let expr = vm.error_location_at(pc);
                             Box::new(Error::UndefinedProperty {
                                 at: expr,
                                 lhs: value,
@@ -404,13 +388,13 @@ pub(crate) fn execute_bytecode<'a>(
                         })?,
                     _ => Err(Box::new(Error::NoProperty {
                         lhs: value,
-                        at: vm.error_location(),
+                        at: vm.error_location_at(pc),
                     }))?,
                 };
                 vm.stack.push(value);
                 Ok(())
             }
-            load_attr(vm, name)?
+            load_attr(vm, *pc, name)?
         }
         StoreLocal(slot) => {
             let value = vm.stack.pop();
@@ -436,13 +420,14 @@ pub(crate) fn execute_bytecode<'a>(
         Call(CallInner { argument_count, stack_size_at_callsite }) => {
             execute_call(
                 vm,
+                pc,
                 argument_count,
                 stack_size_at_callsite,
                 BoundsCheckedPeek,
             )?;
         }
         ShortCall(CallInner { argument_count, stack_size_at_callsite }) => {
-            execute_call(vm, argument_count, stack_size_at_callsite, ShortPeek)?;
+            execute_call(vm, pc, argument_count, stack_size_at_callsite, ShortPeek)?;
         }
         Print => outline! {
             let value = vm.stack.pop().parse();
@@ -450,7 +435,7 @@ pub(crate) fn execute_bytecode<'a>(
         },
         GlobalByName(name) => {
             let variable = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
-                let expr: ExpressionTypes::Name = vm.error_location();
+                let expr: ExpressionTypes::Name = vm.error_location_at(*pc);
                 Box::new(Error::UndefinedName { at: *expr.0.name })
             })?;
 
@@ -459,7 +444,7 @@ pub(crate) fn execute_bytecode<'a>(
         }
         StoreGlobalByName(name) => {
             let slot = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
-                let expr: ExpressionTypes::Assign = vm.error_location();
+                let expr: ExpressionTypes::Assign = vm.error_location_at(*pc);
                 let target: AssignmentTargetTypes::Variable = expr.target.into_variant();
                 Box::new(Error::UndefinedName { at: *target.0.name })
             })?;
@@ -474,38 +459,38 @@ pub(crate) fn execute_bytecode<'a>(
         JumpIfTrue(target) => {
             let value = vm.stack.pop();
             if value.is_truthy() {
-                vm.pc = target.cast() - 1;
+                *pc = target.cast() - 1;
             }
         }
         JumpIfFalse(target) => {
             let value = vm.stack.pop();
             if !value.is_truthy() {
-                vm.pc = target.cast() - 1;
+                *pc = target.cast() - 1;
             }
         }
         PopJumpIfTrue(target) => {
             let value = vm.stack.peek();
             if value.is_truthy() {
                 vm.stack.pop();
-                vm.pc = target.cast() - 1;
+                *pc = target.cast() - 1;
             }
         }
         PopJumpIfFalse(target) => {
             let value = vm.stack.peek();
             if !value.is_truthy() {
                 vm.stack.pop();
-                vm.pc = target.cast() - 1;
+                *pc = target.cast() - 1;
             }
         }
         Jump(target) => {
-            vm.pc = target.cast() - 1;
+            *pc = target.cast() - 1;
         }
         BeginFunction(target) => {
-            vm.pc += target.cast();
+            *pc += target.cast();
         }
         Return => {
             CallFrame {
-                pc: vm.pc,
+                pc: *pc,
                 offset: vm.offset,
                 cells: vm.cell_vars,
             } = vm.call_stack.pop();
@@ -515,7 +500,7 @@ pub(crate) fn execute_bytecode<'a>(
             else {
                 unreachable!()
             };
-            let code_ptr = vm.pc - code_size.cast();
+            let code_ptr = *pc - code_size.cast();
             let cells = GcRef::from_iter_in(
                 vm.env.gc,
                 function.cells.iter().map(|cell| match cell {
@@ -585,7 +570,7 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack.push(Class(class).into_nanboxed());
         }
         PrintStack => {
-            vm.print_stack();
+            vm.print_stack(*pc);
         }
         b @ BoundMethodGetInstance => match vm.stack.peek().parse() {
             BoundMethod(bound_method) => vm
@@ -613,7 +598,7 @@ pub(crate) fn execute_bytecode<'a>(
                     _ => unreachable!(),
                 })
                 .ok_or_else(|| {
-                    let super_ = vm.error_location();
+                    let super_ = vm.error_location_at(*pc);
                     Box::new(Error::UndefinedSuperProperty {
                         at: super_,
                         super_: Value::Instance(this),
@@ -631,9 +616,9 @@ pub(crate) fn execute_bytecode<'a>(
         ),
     }
     unsafe {
-        vm.pc = vm.pc.unchecked_add(1);
+        *pc = pc.unchecked_add(1);
     }
-    if cfg!(miri) || previous_pc > vm.pc {
+    if cfg!(miri) || previous_pc > *pc {
         vm.collect_if_necessary();
     }
     Ok(())
@@ -656,6 +641,7 @@ fn any_binop<'a>(
 #[track_caller]
 fn number_binop<'a>(
     vm: &mut Vm<'a, '_>,
+    pc: usize,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.stack.short_peek_at(0);
@@ -666,6 +652,7 @@ fn number_binop<'a>(
         #[inline(never)]
         extern "rust-cold" fn number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
+            pc: usize,
             op: impl FnOnce(f64, f64) -> Value<'a>,
         ) -> Result<(), Box<Error<'a>>> {
             let rhs = vm.stack.pop();
@@ -673,21 +660,14 @@ fn number_binop<'a>(
             let result = match (lhs.parse(), rhs.parse()) {
                 (Number(lhs), Number(rhs)) => op(lhs, rhs),
                 (lhs, rhs) => {
-                    let expr = vm.error_location();
+                    let expr = vm.error_location_at(pc);
                     Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
                 }
             };
             vm.stack.push(result.into_nanboxed());
             Ok(())
         }
-        let old_pc = vm.pc;
-        let result = number_binop_slow_path(vm, op);
-        // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
-        // inlined.
-        if vm.pc != old_pc {
-            unsafe { std::hint::unreachable_unchecked() }
-        }
-        result
+        number_binop_slow_path(vm, pc, op)
     }
     else {
         vm.stack.pop();
@@ -701,6 +681,7 @@ fn number_binop<'a>(
 #[track_caller]
 fn nan_preserving_number_binop<'a>(
     vm: &mut Vm<'a, '_>,
+    pc: usize,
     op: impl Fn(f64, f64) -> f64,
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.stack.short_peek_at(0);
@@ -712,6 +693,7 @@ fn nan_preserving_number_binop<'a>(
         #[inline(never)]
         extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
+            pc: usize,
             op: impl Fn(f64, f64) -> f64,
         ) -> Result<(), Box<Error<'a>>> {
             let rhs = vm.stack.pop();
@@ -719,21 +701,14 @@ fn nan_preserving_number_binop<'a>(
             let result = match (lhs.parse(), rhs.parse()) {
                 (Number(lhs), Number(rhs)) => Number(op(lhs, rhs)).into_nanboxed(),
                 (lhs, rhs) => {
-                    let expr = vm.error_location();
+                    let expr = vm.error_location_at(pc);
                     Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
                 }
             };
             vm.stack.push(result);
             Ok(())
         }
-        let old_pc = vm.pc;
-        let result = nan_preserving_number_binop_slow_path(vm, op);
-        // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
-        // inlined.
-        if vm.pc != old_pc {
-            unsafe { std::hint::unreachable_unchecked() }
-        }
-        result
+        nan_preserving_number_binop_slow_path(vm, pc, op)
     }
     else {
         vm.stack.pop();
@@ -774,6 +749,7 @@ impl Peeker for BoundsCheckedPeek {
 #[inline(always)]
 fn execute_call<'a>(
     vm: &mut Vm<'a, '_>,
+    pc: &mut usize,
     argument_count: u32,
     stack_size_at_callsite: u32,
     peeker: impl Peeker,
@@ -786,15 +762,15 @@ fn execute_call<'a>(
                 Err(Box::new(Error::ArityMismatch {
                     callee,
                     expected: function.parameters.len(),
-                    at: vm.error_location(),
+                    at: vm.error_location_at(*pc),
                 }))?
             }
             vm.call_stack.push(CallFrame {
-                pc: vm.pc,
+                pc: *pc,
                 offset: vm.offset,
                 cells: vm.cell_vars,
             });
-            vm.pc = function.code_ptr - 1;
+            *pc = function.code_ptr - 1;
             vm.offset += stack_size_at_callsite;
             vm.cell_vars = function.cells;
         }
@@ -804,15 +780,15 @@ fn execute_call<'a>(
                 Err(Box::new(Error::ArityMismatch {
                     callee,
                     expected: method.parameters.len() - 1,
-                    at: vm.error_location(),
+                    at: vm.error_location_at(*pc),
                 }))?
             }
             vm.call_stack.push(CallFrame {
-                pc: vm.pc,
+                pc: *pc,
                 offset: vm.offset,
                 cells: vm.cell_vars,
             });
-            vm.pc = method.code_ptr - 1;
+            *pc = method.code_ptr - 1;
             vm.offset += stack_size_at_callsite;
             vm.cell_vars = method.cells;
         }
@@ -828,7 +804,7 @@ fn execute_call<'a>(
                     NativeError::ArityMismatch { expected } => Error::ArityMismatch {
                         callee,
                         expected,
-                        at: vm.error_location(),
+                        at: vm.error_location_at(*pc),
                     },
                 })
             })?;
@@ -851,7 +827,7 @@ fn execute_call<'a>(
                         Err(Box::new(Error::ArityMismatch {
                             callee,
                             expected: init.parameters.len() - 1,
-                            at: vm.error_location(),
+                            at: vm.error_location_at(*pc),
                         }))?
                     }
                     *vm.stack.peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
@@ -860,11 +836,11 @@ fn execute_call<'a>(
                     ))
                     .into_nanboxed();
                     vm.call_stack.push(CallFrame {
-                        pc: vm.pc,
+                        pc: *pc,
                         offset: vm.offset,
                         cells: vm.cell_vars,
                     });
-                    vm.pc = init.code_ptr - 1;
+                    *pc = init.code_ptr - 1;
                     vm.offset += stack_size_at_callsite;
                     vm.cell_vars = init.cells;
                 }
@@ -874,13 +850,13 @@ fn execute_call<'a>(
                 None => Err(Box::new(Error::ArityMismatch {
                     callee,
                     expected: 0,
-                    at: vm.error_location(),
+                    at: vm.error_location_at(*pc),
                 }))?,
             }
         }
         _ => Err(Box::new(Error::Uncallable {
             callee,
-            at: vm.error_location(),
+            at: vm.error_location_at(*pc),
         }))?,
     }
 
