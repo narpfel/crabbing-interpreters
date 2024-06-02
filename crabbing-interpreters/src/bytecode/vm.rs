@@ -294,17 +294,18 @@ pub(crate) fn execute_bytecode<'a>(
         Greater => number_binop(vm, |lhs, rhs| Bool(lhs > rhs))?,
         GreaterEqual => number_binop(vm, |lhs, rhs| Bool(lhs >= rhs))?,
         Add => {
-            let rhs = vm.stack.pop();
-            let lhs = vm.stack.pop();
+            let rhs = vm.stack.short_peek_at(0);
+            let lhs = vm.stack.short_peek_at(1);
             let fast_path_result = lhs.data() + rhs.data();
             if fast_path_result.is_nan() {
+                #[expect(improper_ctypes_definitions)]
                 #[cold]
                 #[inline(never)]
-                fn add_slow_path<'a>(
+                extern "rust-cold" fn add_slow_path<'a>(
                     vm: &mut Vm<'a, '_>,
-                    lhs: nanboxed::Value<'a>,
-                    rhs: nanboxed::Value<'a>,
-                ) -> Result<nanboxed::Value<'a>, Option<Box<Error<'a>>>> {
+                ) -> Result<(), Option<Box<Error<'a>>>> {
+                    let rhs = vm.stack.pop();
+                    let lhs = vm.stack.pop();
                     let result = match (lhs.parse(), rhs.parse()) {
                         (Number(lhs), Number(rhs)) => Number(lhs + rhs),
                         (String(lhs), String(rhs)) =>
@@ -319,14 +320,22 @@ pub(crate) fn execute_bytecode<'a>(
                             }))?
                         }
                     };
-                    Ok(result.into_nanboxed())
+                    vm.stack.push(result.into_nanboxed());
+                    Ok(())
                 }
-                let result = add_slow_path(vm, lhs, rhs)?;
-                vm.stack.push(result);
+                let old_pc = vm.pc;
+                add_slow_path(vm)?;
+                // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
+                // inlined.
+                if vm.pc != old_pc {
+                    unsafe { std::hint::unreachable_unchecked() }
+                }
             }
             else {
+                vm.stack.pop();
+                vm.stack.pop();
                 vm.stack.push(Number(fast_path_result).into_nanboxed());
-            };
+            }
         }
         Subtract => nan_preserving_number_binop(vm, |lhs, rhs| lhs - rhs)?,
         Multiply => nan_preserving_number_binop(vm, |lhs, rhs| lhs * rhs)?,
@@ -649,22 +658,43 @@ fn number_binop<'a>(
     vm: &mut Vm<'a, '_>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.pop();
-    let lhs = vm.stack.pop();
+    let rhs = vm.stack.short_peek_at(0);
+    let lhs = vm.stack.short_peek_at(1);
     if lhs.data().is_nan() || rhs.data().is_nan() {
-        let result = match (lhs.parse(), rhs.parse()) {
-            (Number(lhs), Number(rhs)) => op(lhs, rhs),
-            (lhs, rhs) => {
-                let expr = vm.error_location();
-                Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
-            }
-        };
-        vm.stack.push(result.into_nanboxed());
+        #[expect(improper_ctypes_definitions)]
+        #[cold]
+        #[inline(never)]
+        extern "rust-cold" fn number_binop_slow_path<'a>(
+            vm: &mut Vm<'a, '_>,
+            op: impl FnOnce(f64, f64) -> Value<'a>,
+        ) -> Result<(), Box<Error<'a>>> {
+            let rhs = vm.stack.pop();
+            let lhs = vm.stack.pop();
+            let result = match (lhs.parse(), rhs.parse()) {
+                (Number(lhs), Number(rhs)) => op(lhs, rhs),
+                (lhs, rhs) => {
+                    let expr = vm.error_location();
+                    Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+                }
+            };
+            vm.stack.push(result.into_nanboxed());
+            Ok(())
+        }
+        let old_pc = vm.pc;
+        let result = number_binop_slow_path(vm, op);
+        // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
+        // inlined.
+        if vm.pc != old_pc {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+        result
     }
     else {
+        vm.stack.pop();
+        vm.stack.pop();
         vm.stack.push(op(lhs.data(), rhs.data()).into_nanboxed());
+        Ok(())
     }
-    Ok(())
 }
 
 #[inline(always)]
@@ -673,23 +703,44 @@ fn nan_preserving_number_binop<'a>(
     vm: &mut Vm<'a, '_>,
     op: impl Fn(f64, f64) -> f64,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.pop();
-    let lhs = vm.stack.pop();
+    let rhs = vm.stack.short_peek_at(0);
+    let lhs = vm.stack.short_peek_at(1);
     let fast_path_result = op(lhs.data(), rhs.data());
-    let result = if fast_path_result.is_nan() {
-        match (lhs.parse(), rhs.parse()) {
-            (Number(_), Number(_)) => Number(fast_path_result),
-            (lhs, rhs) => {
-                let expr = vm.error_location();
-                Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
-            }
+    if fast_path_result.is_nan() {
+        #[expect(improper_ctypes_definitions)]
+        #[cold]
+        #[inline(never)]
+        extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
+            vm: &mut Vm<'a, '_>,
+            op: impl Fn(f64, f64) -> f64,
+        ) -> Result<(), Box<Error<'a>>> {
+            let rhs = vm.stack.pop();
+            let lhs = vm.stack.pop();
+            let result = match (lhs.parse(), rhs.parse()) {
+                (Number(lhs), Number(rhs)) => Number(op(lhs, rhs)).into_nanboxed(),
+                (lhs, rhs) => {
+                    let expr = vm.error_location();
+                    Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
+                }
+            };
+            vm.stack.push(result);
+            Ok(())
         }
+        let old_pc = vm.pc;
+        let result = nan_preserving_number_binop_slow_path(vm, op);
+        // The slow path doesn’t modify `vm.pc`, but the compiler can’t see that because it’s not
+        // inlined.
+        if vm.pc != old_pc {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+        result
     }
     else {
-        Number(fast_path_result)
-    };
-    vm.stack.push(result.into_nanboxed());
-    Ok(())
+        vm.stack.pop();
+        vm.stack.pop();
+        vm.stack.push(Number(fast_path_result).into_nanboxed());
+        Ok(())
+    }
 }
 
 trait Peeker {
