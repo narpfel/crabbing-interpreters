@@ -160,14 +160,20 @@ impl<'a, 'b> Vm<'a, 'b> {
         &self.execution_counts
     }
 
+    #[inline(always)]
     fn collect_if_necessary(&self) {
         if self.env.gc.collection_necessary() {
-            self.constants.trace();
-            self.stack.trace();
-            self.call_stack.trace();
-            self.cell_vars.trace();
-            self.env.trace();
-            unsafe { self.env.gc.sweep() };
+            #[cold]
+            #[inline(never)]
+            extern "rust-cold" fn do_collect(vm: &Vm) {
+                vm.constants.trace();
+                vm.stack.trace();
+                vm.call_stack.trace();
+                vm.cell_vars.trace();
+                vm.env.trace();
+                unsafe { vm.env.gc.sweep() };
+            }
+            do_collect(self);
         }
     }
 
