@@ -19,11 +19,7 @@ const NANBOX_TAG_OFFSET: u64 = 48;
 const NAN_BITS: u64 = !((1 << (64 - NAN_PREFIX_LENGTH)) - 1);
 
 fn extend_leftmost_pointer_bit(n: u64) -> u64 {
-    #[expect(clippy::as_conversions, reason = "this is an intentional bitcast")]
-    let n = n as i64;
-    let n = (n << (64 - NANBOX_TAG_OFFSET)) >> (64 - NANBOX_TAG_OFFSET);
-    #[expect(clippy::as_conversions, reason = "this is an intentional bitcast")]
-    (n as u64)
+    ((n.cast_signed() << (64 - NANBOX_TAG_OFFSET)) >> (64 - NANBOX_TAG_OFFSET)).cast_unsigned()
 }
 
 #[derive(Debug, Clone, Copy)]

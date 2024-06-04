@@ -1,5 +1,6 @@
 #![feature(closure_lifetime_binder)]
 #![feature(debug_closure_helpers)]
+#![feature(integer_sign_cast)]
 #![feature(lint_reasons)]
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
