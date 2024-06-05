@@ -1,10 +1,27 @@
 use std::fmt;
+use std::ptr::NonNull;
 
 use crate::gc::Trace;
 
 pub(crate) struct Stack<T> {
     stack: Box<[T; super::USEABLE_STACK_SIZE_IN_ELEMENTS]>,
     pointer: usize,
+}
+
+impl<T> Stack<T> {
+    pub(super) fn into_raw_parts(self) -> (NonNull<T>, NonNull<T>) {
+        assert!(self.pointer < self.stack.len());
+        let ptr = NonNull::new(Box::into_raw(self.stack)).unwrap().cast();
+        (ptr, unsafe { ptr.add(self.pointer) })
+    }
+
+    pub(super) unsafe fn from_raw_parts(base: NonNull<T>, sp: NonNull<T>) -> Self {
+        let pointer = unsafe { sp.sub_ptr(base) };
+        Self {
+            stack: unsafe { Box::from_raw(base.cast().as_ptr()) },
+            pointer,
+        }
+    }
 }
 
 impl<T> Stack<T>

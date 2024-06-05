@@ -1,11 +1,17 @@
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
+use std::ops::Deref;
+use std::ops::DerefMut;
+use std::ptr::NonNull;
 
 use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoEnum;
 use variant_types::IntoVariant;
 use Bytecode::*;
 
+use super::CompiledBytecodes;
 use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
@@ -110,12 +116,19 @@ pub(crate) struct Vm<'a, 'b> {
     metadata: &'b [Metadata<'a>],
     error_locations: &'b [ContainingExpression<'a>],
     env: Environment<'a>,
-    stack: Stack<nanboxed::Value<'a>>,
+    stack_base: NonNull<nanboxed::Value<'a>>,
+    stack_pointer: NonNull<nanboxed::Value<'a>>,
     offset: u32,
     call_stack: Stack<CallFrame<'a>>,
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
+}
+
+impl Drop for Vm<'_, '_> {
+    fn drop(&mut self) {
+        drop(unsafe { Stack::from_raw_parts(self.stack_base, self.stack_pointer) })
+    }
 }
 
 impl<'a, 'b> Vm<'a, 'b> {
@@ -129,13 +142,16 @@ impl<'a, 'b> Vm<'a, 'b> {
     ) -> Result<Self, InvalidBytecode> {
         let gc = env.gc;
         validate_bytecode(bytecode, metadata)?;
+        let stack = Stack::new(Value::Nil.into_nanboxed());
+        let (stack_base, stack_pointer) = stack.into_raw_parts();
         Ok(Self {
             bytecode,
             constants,
             metadata,
             error_locations,
             env,
-            stack: Stack::new(Value::Nil.into_nanboxed()),
+            stack_base,
+            stack_pointer,
             offset: 0,
             call_stack: Stack::new(CallFrame {
                 pc: 0,
@@ -152,28 +168,48 @@ impl<'a, 'b> Vm<'a, 'b> {
         self.error = error;
     }
 
-    pub(crate) fn error(self) -> Option<Box<Error<'a>>> {
-        self.error
+    pub(crate) unsafe fn set_stack_pointer(&mut self, stack_pointer: NonNull<nanboxed::Value<'a>>) {
+        self.stack_pointer = stack_pointer;
+    }
+
+    pub(crate) fn error(mut self) -> Option<Box<Error<'a>>> {
+        self.error.take()
     }
 
     pub(crate) fn execution_counts(&self) -> &[u64; Bytecode::all_discriminants().len()] {
         &self.execution_counts
     }
 
+    fn stack(&self, sp: NonNull<nanboxed::Value<'a>>) -> StackRef<nanboxed::Value<'a>> {
+        let stack = ManuallyDrop::new(unsafe { Stack::from_raw_parts(self.stack_base, sp) });
+        StackRef { stack, _lifetime: PhantomData }
+    }
+
+    fn stack_mut<'slf>(
+        &'slf mut self,
+        sp: &'slf mut NonNull<nanboxed::Value<'a>>,
+    ) -> SetSpOnDrop<nanboxed::Value<'a>> {
+        let stack = Some(unsafe { Stack::from_raw_parts(self.stack_base, *sp) });
+        SetSpOnDrop { sp, stack }
+    }
+
     #[inline(always)]
-    fn collect_if_necessary(&self) {
+    fn collect_if_necessary(&self, sp: NonNull<nanboxed::Value<'a>>) {
         if self.env.gc.collection_necessary() {
             #[cold]
             #[inline(never)]
-            extern "rust-cold" fn do_collect(vm: &Vm) {
+            extern "rust-cold" fn do_collect<'a>(
+                vm: &Vm<'a, '_>,
+                sp: NonNull<nanboxed::Value<'a>>,
+            ) {
                 vm.constants.trace();
-                vm.stack.trace();
+                vm.stack(sp).trace();
                 vm.call_stack.trace();
                 vm.cell_vars.trace();
                 vm.env.trace();
                 unsafe { vm.env.gc.sweep() };
             }
-            do_collect(self);
+            do_collect(self, sp);
         }
     }
 
@@ -182,10 +218,12 @@ impl<'a, 'b> Vm<'a, 'b> {
     }
 
     #[inline(never)]
-    fn print_stack(&self, pc: usize) {
+    fn print_stack(&self, pc: usize, sp: NonNull<nanboxed::Value<'a>>) {
         println!(
             "stack at {:>4}    {}: {:#?}",
-            pc, self.bytecode[pc], self.stack,
+            pc,
+            self.bytecode[pc],
+            self.stack(sp).deref(),
         );
     }
 
@@ -214,18 +252,30 @@ impl<'a, 'b> Vm<'a, 'b> {
         }
         unreachable!()
     }
+
+    pub(crate) fn run_threaded(&mut self, compiled_bytecodes: CompiledBytecodes) {
+        let compiled_bytecode = unsafe { compiled_bytecodes.get_unchecked(0) };
+        (compiled_bytecode.function)(self, 0, self.stack_pointer, compiled_bytecodes);
+    }
 }
 
 pub fn run_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut pc = 0;
+    let mut sp = vm.stack_pointer;
     loop {
         let bytecode = vm.bytecode[pc];
-        match execute_bytecode(vm, &mut pc, bytecode) {
+        match execute_bytecode(vm, &mut pc, &mut sp, bytecode) {
             Ok(()) => (),
-            Err(None) => return Ok(Value::Nil),
-            Err(Some(err)) => Err(err)?,
+            Err(None) => {
+                assert_eq!(vm.stack_base, sp);
+                return Ok(Value::Nil);
+            }
+            Err(Some(err)) => {
+                vm.stack_pointer = sp;
+                Err(err)?;
+            }
         }
     }
 }
@@ -247,6 +297,7 @@ macro_rules! outline {
 pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
+    sp: &mut NonNull<nanboxed::Value<'a>>,
     bytecode: Bytecode,
 ) -> Result<(), Option<Box<Error<'a>>>> {
     #[cfg(feature = "count_bytecode_execution")]
@@ -258,13 +309,15 @@ pub(crate) fn execute_bytecode<'a>(
 
     match bytecode {
         Pop => {
-            vm.stack.pop();
+            vm.stack_mut(sp).pop();
         }
         Const(i) => {
-            vm.stack.push(vm.get_constant(i));
+            let constant = vm.get_constant(i);
+            vm.stack_mut(sp).push(constant);
         }
         UnaryMinus => {
-            let value = match vm.stack.pop().parse() {
+            let operand = vm.stack_mut(sp).pop();
+            let value = match operand.parse() {
                 Number(x) => Number(-x).into_nanboxed(),
                 value => {
                     let expr = vm.error_location_at(*pc);
@@ -275,21 +328,22 @@ pub(crate) fn execute_bytecode<'a>(
                     }))?
                 }
             };
-            vm.stack.push(value);
+            vm.stack_mut(sp).push(value);
         }
         UnaryNot => {
-            let value = vm.stack.pop();
-            vm.stack.push(Bool(!value.is_truthy()).into_nanboxed());
+            let operand = vm.stack_mut(sp).pop();
+            vm.stack_mut(sp)
+                .push(Bool(!operand.is_truthy()).into_nanboxed());
         }
-        Equal => any_binop(vm, |_, lhs, rhs| Ok(Bool(lhs == rhs)))?,
-        NotEqual => any_binop(vm, |_, lhs, rhs| Ok(Bool(lhs != rhs)))?,
-        Less => number_binop(vm, *pc, |lhs, rhs| Bool(lhs < rhs))?,
-        LessEqual => number_binop(vm, *pc, |lhs, rhs| Bool(lhs <= rhs))?,
-        Greater => number_binop(vm, *pc, |lhs, rhs| Bool(lhs > rhs))?,
-        GreaterEqual => number_binop(vm, *pc, |lhs, rhs| Bool(lhs >= rhs))?,
+        Equal => any_binop(vm, sp, |_, lhs, rhs| Ok(Bool(lhs == rhs)))?,
+        NotEqual => any_binop(vm, sp, |_, lhs, rhs| Ok(Bool(lhs != rhs)))?,
+        Less => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs < rhs))?,
+        LessEqual => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs <= rhs))?,
+        Greater => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs > rhs))?,
+        GreaterEqual => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs >= rhs))?,
         Add => {
-            let rhs = vm.stack.short_peek_at(0);
-            let lhs = vm.stack.short_peek_at(1);
+            let rhs = vm.stack(*sp).short_peek_at(0);
+            let lhs = vm.stack(*sp).short_peek_at(1);
             let fast_path_result = lhs.data() + rhs.data();
             if fast_path_result.is_nan() {
                 #[expect(improper_ctypes_definitions)]
@@ -298,9 +352,11 @@ pub(crate) fn execute_bytecode<'a>(
                 extern "rust-cold" fn add_slow_path<'a>(
                     vm: &mut Vm<'a, '_>,
                     pc: usize,
-                ) -> Result<(), Option<Box<Error<'a>>>> {
-                    let rhs = vm.stack.pop();
-                    let lhs = vm.stack.pop();
+                    mut sp: NonNull<nanboxed::Value<'a>>,
+                ) -> Result<NonNull<nanboxed::Value<'a>>, Option<Box<Error<'a>>>> {
+                    let sp = &mut sp;
+                    let rhs = vm.stack_mut(sp).pop();
+                    let lhs = vm.stack_mut(sp).pop();
                     let result = match (lhs.parse(), rhs.parse()) {
                         (Number(lhs), Number(rhs)) => Number(lhs + rhs),
                         (String(lhs), String(rhs)) =>
@@ -315,37 +371,41 @@ pub(crate) fn execute_bytecode<'a>(
                             }))?
                         }
                     };
-                    vm.stack.push(result.into_nanboxed());
-                    Ok(())
+                    vm.stack_mut(sp).push(result.into_nanboxed());
+                    Ok(*sp)
                 }
-                add_slow_path(vm, *pc)?
+                *sp = add_slow_path(vm, *pc, *sp)?;
             }
             else {
-                vm.stack.pop();
-                vm.stack.pop();
-                vm.stack.push(Number(fast_path_result).into_nanboxed());
+                vm.stack_mut(sp).pop();
+                vm.stack_mut(sp).pop();
+                vm.stack_mut(sp)
+                    .push(Number(fast_path_result).into_nanboxed());
             }
         }
-        Subtract => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs - rhs)?,
-        Multiply => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs * rhs)?,
-        Divide => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs / rhs)?,
-        Power => nan_preserving_number_binop(vm, *pc, |lhs, rhs| lhs.powf(rhs))?,
+        Subtract => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs - rhs)?,
+        Multiply => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs * rhs)?,
+        Divide => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs / rhs)?,
+        Power => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
-            vm.stack.push(vm.env[vm.offset + slot]);
+            let value = vm.env[vm.offset + slot];
+            vm.stack_mut(sp).push(value);
         }
         Global(slot) => {
-            vm.stack.push(vm.env[slot]);
+            let value = vm.env[slot];
+            vm.stack_mut(sp).push(value);
         }
         Cell(slot) => {
-            vm.stack.push(vm.cell_vars[slot.cast()].get().get());
+            let value = vm.cell_vars[slot.cast()].get().get();
+            vm.stack_mut(sp).push(value);
         }
         Dup => {
-            let value = vm.stack.peek();
-            vm.stack.push(value);
+            let value = vm.stack(*sp).peek();
+            vm.stack_mut(sp).push(value);
         }
         StoreAttr(name) => {
-            let assignment_target = vm.stack.pop().parse();
-            let value = vm.stack.pop();
+            let assignment_target = vm.stack_mut(sp).pop().parse();
+            let value = vm.stack_mut(sp).pop();
             match assignment_target {
                 Instance(instance) => instance.attributes.borrow_mut().insert(name, value),
                 _ => {
@@ -362,9 +422,11 @@ pub(crate) fn execute_bytecode<'a>(
             fn load_attr<'a>(
                 vm: &mut Vm<'a, '_>,
                 pc: usize,
+                mut sp: NonNull<nanboxed::Value<'a>>,
                 name: InternedString,
-            ) -> Result<(), Box<Error<'a>>> {
-                let value = vm.stack.pop().parse();
+            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+                let sp = &mut sp;
+                let value = vm.stack_mut(sp).pop().parse();
                 let value = match value {
                     Instance(instance) => instance
                         .attributes
@@ -397,17 +459,17 @@ pub(crate) fn execute_bytecode<'a>(
                         at: vm.error_location_at(pc),
                     }))?,
                 };
-                vm.stack.push(value);
-                Ok(())
+                vm.stack_mut(sp).push(value);
+                Ok(*sp)
             }
-            load_attr(vm, *pc, name)?
+            *sp = load_attr(vm, *pc, *sp, name)?;
         }
         StoreLocal(slot) => {
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             vm.env[vm.offset + slot] = value;
         }
         StoreGlobal(slot) => {
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             vm.env.set(
                 vm.cell_vars,
                 vm.offset.cast(),
@@ -416,27 +478,35 @@ pub(crate) fn execute_bytecode<'a>(
             );
         }
         StoreCell(slot) => {
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             vm.cell_vars[slot.cast()].get().set(value);
         }
         DefineCell(slot) => {
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             vm.cell_vars[slot.cast()].set(GcRef::new_in(vm.env.gc, Cell::new(value)));
         }
         Call(CallInner { argument_count, stack_size_at_callsite }) => {
             execute_call(
                 vm,
                 pc,
+                sp,
                 argument_count,
                 stack_size_at_callsite,
                 BoundsCheckedPeek,
             )?;
         }
         ShortCall(CallInner { argument_count, stack_size_at_callsite }) => {
-            execute_call(vm, pc, argument_count, stack_size_at_callsite, ShortPeek)?;
+            execute_call(
+                vm,
+                pc,
+                sp,
+                argument_count,
+                stack_size_at_callsite,
+                ShortPeek,
+            )?;
         }
         Print => outline! {
-            let value = vm.stack.pop().parse();
+            let value = vm.stack_mut(sp).pop().parse();
             println!("{value}");
         },
         GlobalByName(name) => {
@@ -446,7 +516,7 @@ pub(crate) fn execute_bytecode<'a>(
             })?;
 
             let value = vm.env[u32::try_from(variable).unwrap()];
-            vm.stack.push(value);
+            vm.stack_mut(sp).push(value);
         }
         StoreGlobalByName(name) => {
             let slot = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
@@ -454,7 +524,7 @@ pub(crate) fn execute_bytecode<'a>(
                 let target: AssignmentTargetTypes::Variable = expr.target.into_variant();
                 Box::new(Error::UndefinedName { at: *target.0.name })
             })?;
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             vm.env.set(
                 vm.cell_vars,
                 vm.offset.cast(),
@@ -463,28 +533,28 @@ pub(crate) fn execute_bytecode<'a>(
             );
         }
         JumpIfTrue(target) => {
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             if value.is_truthy() {
                 *pc = target.cast() - 1;
             }
         }
         JumpIfFalse(target) => {
-            let value = vm.stack.pop();
+            let value = vm.stack_mut(sp).pop();
             if !value.is_truthy() {
                 *pc = target.cast() - 1;
             }
         }
         PopJumpIfTrue(target) => {
-            let value = vm.stack.peek();
+            let value = vm.stack(*sp).peek();
             if value.is_truthy() {
-                vm.stack.pop();
+                vm.stack_mut(sp).pop();
                 *pc = target.cast() - 1;
             }
         }
         PopJumpIfFalse(target) => {
-            let value = vm.stack.peek();
+            let value = vm.stack(*sp).peek();
             if !value.is_truthy() {
-                vm.stack.pop();
+                vm.stack_mut(sp).pop();
                 *pc = target.cast() - 1;
             }
         }
@@ -528,16 +598,16 @@ pub(crate) fn execute_bytecode<'a>(
                     compiled_body: function.compiled_body,
                 },
             ));
-            vm.stack.push(value.into_nanboxed());
+            vm.stack_mut(sp).push(value.into_nanboxed());
         }
         End => {
-            assert!(vm.stack.is_empty());
+            assert!(vm.stack(*sp).is_empty());
             return Err(None);
         }
         Pop2 => {
-            let value = vm.stack.pop();
-            vm.stack.pop();
-            vm.stack.push(value);
+            let value = vm.stack_mut(sp).pop();
+            vm.stack_mut(sp).pop();
+            vm.stack_mut(sp).push(value);
         }
         BuildClass(metadata_index) => {
             let Metadata::Class { name, methods, base_error_location } =
@@ -548,10 +618,11 @@ pub(crate) fn execute_bytecode<'a>(
             let methods = methods
                 .iter()
                 .rev()
-                .map(|method| (method.name.id(), vm.stack.pop()))
+                .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
                 .collect();
             let base = if let Some(error_location) = base_error_location {
-                match vm.stack.pop().parse() {
+                let base = vm.stack_mut(sp).pop();
+                match base.parse() {
                     Class(class) => Some(class),
                     base => Err(Box::new(Error::InvalidBase {
                         base,
@@ -573,24 +644,28 @@ pub(crate) fn execute_bytecode<'a>(
                     method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
                 });
             }
-            vm.stack.push(Class(class).into_nanboxed());
+            vm.stack_mut(sp).push(Class(class).into_nanboxed());
         }
         PrintStack => {
-            vm.print_stack(*pc);
+            vm.print_stack(*pc, *sp);
         }
-        b @ BoundMethodGetInstance => match vm.stack.peek().parse() {
-            BoundMethod(bound_method) => vm
-                .stack
-                .push(Value::Instance(bound_method.instance).into_nanboxed()),
-            value =>
-                unreachable!("invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"),
-        },
+        b @ BoundMethodGetInstance => {
+            let value = vm.stack_mut(sp).peek();
+            match value.parse() {
+                BoundMethod(bound_method) => vm
+                    .stack_mut(sp)
+                    .push(Value::Instance(bound_method.instance).into_nanboxed()),
+                value => unreachable!(
+                    "invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"
+                ),
+            }
+        }
         Super(name) => {
-            let super_class = match vm.stack.pop().parse() {
+            let super_class = match vm.stack_mut(sp).pop().parse() {
                 Value::Class(class) => class,
                 value => unreachable!("invalid base class value: {value}"),
             };
-            let this = match vm.stack.pop().parse() {
+            let this = match vm.stack_mut(sp).pop().parse() {
                 Value::Instance(this) => this,
                 value => unreachable!("`this` is not an instance: {value}"),
             };
@@ -611,12 +686,12 @@ pub(crate) fn execute_bytecode<'a>(
                         attribute: super_.attribute,
                     })
                 })?;
-            vm.stack.push(value.into_nanboxed());
+            vm.stack_mut(sp).push(value.into_nanboxed());
         }
-        ConstNil => vm.stack.push(Value::Nil.into_nanboxed()),
-        ConstTrue => vm.stack.push(Value::Bool(true).into_nanboxed()),
-        ConstFalse => vm.stack.push(Value::Bool(false).into_nanboxed()),
-        ConstNumber(number) => vm.stack.push(
+        ConstNil => vm.stack_mut(sp).push(Value::Nil.into_nanboxed()),
+        ConstTrue => vm.stack_mut(sp).push(Value::Bool(true).into_nanboxed()),
+        ConstFalse => vm.stack_mut(sp).push(Value::Bool(false).into_nanboxed()),
+        ConstNumber(number) => vm.stack_mut(sp).push(
             // SAFETY: `validate_bytecode` makes sure that `number` is not `NaN`
             unsafe { nanboxed::Value::from_f64_unchecked(number.into()) },
         ),
@@ -625,7 +700,7 @@ pub(crate) fn execute_bytecode<'a>(
         *pc = pc.unchecked_add(1);
     }
     if cfg!(miri) || previous_pc > *pc {
-        vm.collect_if_necessary();
+        vm.collect_if_necessary(*sp);
     }
     Ok(())
 }
@@ -634,12 +709,13 @@ pub(crate) fn execute_bytecode<'a>(
 #[track_caller]
 fn any_binop<'a>(
     vm: &mut Vm<'a, '_>,
+    sp: &mut NonNull<nanboxed::Value<'a>>,
     op: impl FnOnce(&mut Vm<'a, '_>, Value<'a>, Value<'a>) -> Result<Value<'a>, Box<Error<'a>>>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.pop().parse();
-    let lhs = vm.stack.pop().parse();
+    let rhs = vm.stack_mut(sp).pop().parse();
+    let lhs = vm.stack_mut(sp).pop().parse();
     let result = op(vm, lhs, rhs)?;
-    vm.stack.push(result.into_nanboxed());
+    vm.stack_mut(sp).push(result.into_nanboxed());
     Ok(())
 }
 
@@ -648,10 +724,11 @@ fn any_binop<'a>(
 fn number_binop<'a>(
     vm: &mut Vm<'a, '_>,
     pc: usize,
+    sp: &mut NonNull<nanboxed::Value<'a>>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.short_peek_at(0);
-    let lhs = vm.stack.short_peek_at(1);
+    let rhs = vm.stack(*sp).short_peek_at(0);
+    let lhs = vm.stack(*sp).short_peek_at(1);
     if lhs.data().is_nan() || rhs.data().is_nan() {
         #[expect(improper_ctypes_definitions)]
         #[cold]
@@ -659,10 +736,12 @@ fn number_binop<'a>(
         extern "rust-cold" fn number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
             pc: usize,
+            mut sp: NonNull<nanboxed::Value<'a>>,
             op: impl FnOnce(f64, f64) -> Value<'a>,
-        ) -> Result<(), Box<Error<'a>>> {
-            let rhs = vm.stack.pop();
-            let lhs = vm.stack.pop();
+        ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+            let sp = &mut sp;
+            let rhs = vm.stack_mut(sp).pop();
+            let lhs = vm.stack_mut(sp).pop();
             let result = match (lhs.parse(), rhs.parse()) {
                 (Number(lhs), Number(rhs)) => op(lhs, rhs),
                 (lhs, rhs) => {
@@ -670,15 +749,17 @@ fn number_binop<'a>(
                     Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
                 }
             };
-            vm.stack.push(result.into_nanboxed());
-            Ok(())
+            vm.stack_mut(sp).push(result.into_nanboxed());
+            Ok(*sp)
         }
-        number_binop_slow_path(vm, pc, op)
+        *sp = number_binop_slow_path(vm, pc, *sp, op)?;
+        Ok(())
     }
     else {
-        vm.stack.pop();
-        vm.stack.pop();
-        vm.stack.push(op(lhs.data(), rhs.data()).into_nanboxed());
+        vm.stack_mut(sp).pop();
+        vm.stack_mut(sp).pop();
+        vm.stack_mut(sp)
+            .push(op(lhs.data(), rhs.data()).into_nanboxed());
         Ok(())
     }
 }
@@ -688,10 +769,11 @@ fn number_binop<'a>(
 fn nan_preserving_number_binop<'a>(
     vm: &mut Vm<'a, '_>,
     pc: usize,
+    sp: &mut NonNull<nanboxed::Value<'a>>,
     op: impl Fn(f64, f64) -> f64,
 ) -> Result<(), Box<Error<'a>>> {
-    let rhs = vm.stack.short_peek_at(0);
-    let lhs = vm.stack.short_peek_at(1);
+    let rhs = vm.stack(*sp).short_peek_at(0);
+    let lhs = vm.stack(*sp).short_peek_at(1);
     let fast_path_result = op(lhs.data(), rhs.data());
     if fast_path_result.is_nan() {
         #[expect(improper_ctypes_definitions)]
@@ -700,10 +782,12 @@ fn nan_preserving_number_binop<'a>(
         extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
             pc: usize,
+            mut sp: NonNull<nanboxed::Value<'a>>,
             op: impl Fn(f64, f64) -> f64,
-        ) -> Result<(), Box<Error<'a>>> {
-            let rhs = vm.stack.pop();
-            let lhs = vm.stack.pop();
+        ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+            let sp = &mut sp;
+            let rhs = vm.stack_mut(sp).pop();
+            let lhs = vm.stack_mut(sp).pop();
             let result = match (lhs.parse(), rhs.parse()) {
                 (Number(lhs), Number(rhs)) => Number(op(lhs, rhs)).into_nanboxed(),
                 (lhs, rhs) => {
@@ -711,15 +795,17 @@ fn nan_preserving_number_binop<'a>(
                     Err(Error::InvalidBinaryOp { at: expr, lhs, op: expr.op, rhs })?
                 }
             };
-            vm.stack.push(result);
-            Ok(())
+            vm.stack_mut(sp).push(result);
+            Ok(*sp)
         }
-        nan_preserving_number_binop_slow_path(vm, pc, op)
+        *sp = nan_preserving_number_binop_slow_path(vm, pc, *sp, op)?;
+        Ok(())
     }
     else {
-        vm.stack.pop();
-        vm.stack.pop();
-        vm.stack.push(Number(fast_path_result).into_nanboxed());
+        vm.stack_mut(sp).pop();
+        vm.stack_mut(sp).pop();
+        vm.stack_mut(sp)
+            .push(Number(fast_path_result).into_nanboxed());
         Ok(())
     }
 }
@@ -756,11 +842,12 @@ impl Peeker for BoundsCheckedPeek {
 fn execute_call<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
+    sp: &mut NonNull<nanboxed::Value<'a>>,
     argument_count: u32,
     stack_size_at_callsite: u32,
     peeker: impl Peeker,
 ) -> Result<(), Option<Box<Error<'a>>>> {
-    let callee = peeker.peek_at(&vm.stack, argument_count).parse();
+    let callee = peeker.peek_at(&vm.stack(*sp), argument_count).parse();
 
     match callee {
         Function(function) => {
@@ -799,66 +886,105 @@ fn execute_call<'a>(
             vm.cell_vars = method.cells;
         }
         NativeFunction(native_fn) => {
-            // FIXME: This can be more efficient
-            let mut args: Vec<_> = (0..argument_count)
-                .map(|_| vm.stack.pop().parse())
-                .collect();
-            args.reverse();
-            let value = native_fn(args).map_err(|err| {
-                Box::new(match err {
-                    NativeError::Error(err) => err,
-                    NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                        callee,
-                        expected,
-                        at: vm.error_location_at(*pc),
-                    },
-                })
-            })?;
-            vm.stack.push(value.into_nanboxed());
+            #[cold]
+            #[inline(never)]
+            fn call_native_function<'a>(
+                vm: &mut Vm<'a, '_>,
+                pc: usize,
+                mut sp: NonNull<nanboxed::Value<'a>>,
+                argument_count: u32,
+                native_fn: fn(Vec<Value>) -> Result<Value, NativeError>,
+                callee: Value<'a>,
+            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+                let sp = &mut sp;
+                // FIXME: This can be more efficient
+                let mut args: Vec<_> = (0..argument_count)
+                    .map(|_| vm.stack_mut(sp).pop().parse())
+                    .collect();
+                args.reverse();
+                let value = native_fn(args).map_err(|err| {
+                    Box::new(match err {
+                        NativeError::Error(err) => err,
+                        NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                            callee,
+                            expected,
+                            at: vm.error_location_at(pc),
+                        },
+                    })
+                })?;
+                vm.stack_mut(sp).push(value.into_nanboxed());
+                Ok(*sp)
+            }
+            *sp = call_native_function(vm, *pc, *sp, argument_count, native_fn, callee)?;
         }
         Class(class) => {
-            let instance = GcRef::new_in(
-                vm.env.gc,
-                InstanceInner {
-                    class,
-                    attributes: RefCell::new(HashMap::default()),
-                },
-            );
-            match class
-                .lookup_method(interned::INIT)
-                .map(nanboxed::Value::parse)
-            {
-                Some(Value::Function(init)) => {
-                    if init.parameters.len() - 1 != argument_count.cast() {
-                        Err(Box::new(Error::ArityMismatch {
-                            callee,
-                            expected: init.parameters.len() - 1,
-                            at: vm.error_location_at(*pc),
-                        }))?
+            #[cold]
+            #[inline(never)]
+            fn call_class<'a>(
+                vm: &mut Vm<'a, '_>,
+                mut pc: usize,
+                mut sp: NonNull<nanboxed::Value<'a>>,
+                class: GcRef<'a, ClassInner<'a>>,
+                argument_count: u32,
+                callee: Value<'a>,
+                stack_size_at_callsite: u32,
+            ) -> Result<(usize, NonNull<nanboxed::Value<'a>>), Box<Error<'a>>> {
+                let pc = &mut pc;
+                let sp = &mut sp;
+                let instance = GcRef::new_in(
+                    vm.env.gc,
+                    InstanceInner {
+                        class,
+                        attributes: RefCell::new(HashMap::default()),
+                    },
+                );
+                match class
+                    .lookup_method(interned::INIT)
+                    .map(nanboxed::Value::parse)
+                {
+                    Some(Value::Function(init)) => {
+                        if init.parameters.len() - 1 != argument_count.cast() {
+                            Err(Box::new(Error::ArityMismatch {
+                                callee,
+                                expected: init.parameters.len() - 1,
+                                at: vm.error_location_at(*pc),
+                            }))?
+                        }
+                        *vm.stack_mut(sp).peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
+                            vm.env.gc,
+                            BoundMethodInner { method: init, instance },
+                        ))
+                        .into_nanboxed();
+                        vm.call_stack.push(CallFrame {
+                            pc: *pc,
+                            offset: vm.offset,
+                            cells: vm.cell_vars,
+                        });
+                        *pc = init.code_ptr - 1;
+                        vm.offset += stack_size_at_callsite;
+                        vm.cell_vars = init.cells;
                     }
-                    *vm.stack.peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
-                        vm.env.gc,
-                        BoundMethodInner { method: init, instance },
-                    ))
-                    .into_nanboxed();
-                    vm.call_stack.push(CallFrame {
-                        pc: *pc,
-                        offset: vm.offset,
-                        cells: vm.cell_vars,
-                    });
-                    *pc = init.code_ptr - 1;
-                    vm.offset += stack_size_at_callsite;
-                    vm.cell_vars = init.cells;
+                    Some(_) => unreachable!(),
+                    None if argument_count == 0 => vm
+                        .stack_mut(sp)
+                        .push(Value::Instance(instance).into_nanboxed()),
+                    None => Err(Box::new(Error::ArityMismatch {
+                        callee,
+                        expected: 0,
+                        at: vm.error_location_at(*pc),
+                    }))?,
                 }
-                Some(_) => unreachable!(),
-                None if argument_count == 0 =>
-                    vm.stack.push(Value::Instance(instance).into_nanboxed()),
-                None => Err(Box::new(Error::ArityMismatch {
-                    callee,
-                    expected: 0,
-                    at: vm.error_location_at(*pc),
-                }))?,
+                Ok((*pc, *sp))
             }
+            (*pc, *sp) = call_class(
+                vm,
+                *pc,
+                *sp,
+                class,
+                argument_count,
+                callee,
+                stack_size_at_callsite,
+            )?
         }
         _ => Err(Box::new(Error::Uncallable {
             callee,
@@ -867,4 +993,43 @@ fn execute_call<'a>(
     }
 
     Ok(())
+}
+
+struct SetSpOnDrop<'a, T> {
+    sp: &'a mut NonNull<T>,
+    stack: Option<Stack<T>>,
+}
+
+impl<T> Drop for SetSpOnDrop<'_, T> {
+    fn drop(&mut self) {
+        let (_, sp) = self.stack.take().unwrap().into_raw_parts();
+        *self.sp = sp;
+    }
+}
+
+impl<T> Deref for SetSpOnDrop<'_, T> {
+    type Target = Stack<T>;
+
+    fn deref(&self) -> &Self::Target {
+        self.stack.as_ref().unwrap()
+    }
+}
+
+impl<T> DerefMut for SetSpOnDrop<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.stack.as_mut().unwrap()
+    }
+}
+
+struct StackRef<'a, T> {
+    stack: ManuallyDrop<Stack<T>>,
+    _lifetime: PhantomData<&'a ()>,
+}
+
+impl<T> Deref for StackRef<'_, T> {
+    type Target = Stack<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stack
+    }
 }
