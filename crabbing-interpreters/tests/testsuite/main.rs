@@ -244,12 +244,13 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
 #[test]
 #[ignore]
 fn test_that_threaded_interpreter_is_properly_tailrecursive() {
+    let additional_features = std::env::var("TEST_FEATURES").unwrap_or_else(|_| "".to_string());
     assert_cmd_snapshot!(Command::new("cargo")
         .args([
             "run",
             "--profile=perf",
             "--quiet",
-            "--features=count_bytecode_execution",
+            &format!("--features=count_bytecode_execution,{additional_features}"),
             "--",
             "--loop=threaded",
             "--show-bytecode-execution-counts",
