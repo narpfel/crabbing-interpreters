@@ -280,19 +280,6 @@ pub fn run_bytecode<'a>(
     }
 }
 
-macro_rules! outline {
-    ($($stmt:stmt);* $(;)?) => {
-        #[allow(clippy::redundant_closure_call)]
-        (
-            #[cold]
-            #[inline(never)]
-            || {
-                $( $stmt )*
-            }
-        )()
-    };
-}
-
 #[inline(always)]
 pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
@@ -505,10 +492,19 @@ pub(crate) fn execute_bytecode<'a>(
                 ShortPeek,
             )?;
         }
-        Print => outline! {
-            let value = vm.stack_mut(sp).pop().parse();
-            println!("{value}");
-        },
+        Print => {
+            #[cold]
+            #[inline(never)]
+            extern "rust-cold" fn print<'a>(
+                vm: &mut Vm<'a, '_>,
+                mut sp: NonNull<nanboxed::Value<'a>>,
+            ) -> NonNull<nanboxed::Value<'a>> {
+                let value = vm.stack_mut(&mut sp).pop().parse();
+                println!("{value}");
+                sp
+            }
+            *sp = print(vm, *sp);
+        }
         GlobalByName(name) => {
             let variable = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
                 let expr: ExpressionTypes::Name = vm.error_location_at(*pc);
@@ -610,41 +606,53 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).push(value);
         }
         BuildClass(metadata_index) => {
-            let Metadata::Class { name, methods, base_error_location } =
-                vm.metadata[metadata_index.cast()]
-            else {
-                unreachable!()
-            };
-            let methods = methods
-                .iter()
-                .rev()
-                .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
-                .collect();
-            let base = if let Some(error_location) = base_error_location {
-                let base = vm.stack_mut(sp).pop();
-                match base.parse() {
-                    Class(class) => Some(class),
-                    base => Err(Box::new(Error::InvalidBase {
-                        base,
-                        at: vm.error_location_at(error_location),
-                    }))?,
+            #[expect(improper_ctypes_definitions)]
+            #[cold]
+            #[inline(never)]
+            extern "rust-cold" fn build_class<'a>(
+                vm: &mut Vm<'a, '_>,
+                mut sp: NonNull<nanboxed::Value<'a>>,
+                metadata_index: u32,
+            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+                let sp = &mut sp;
+                let Metadata::Class { name, methods, base_error_location } =
+                    vm.metadata[metadata_index.cast()]
+                else {
+                    unreachable!()
+                };
+                let methods = methods
+                    .iter()
+                    .rev()
+                    .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
+                    .collect();
+                let base = if let Some(error_location) = base_error_location {
+                    let base = vm.stack_mut(sp).pop();
+                    match base.parse() {
+                        Class(class) => Some(class),
+                        base => Err(Box::new(Error::InvalidBase {
+                            base,
+                            at: vm.error_location_at(error_location),
+                        }))?,
+                    }
                 }
+                else {
+                    None
+                };
+                let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
+                if let Some(base) = base {
+                    let base = Class(base).into_nanboxed();
+                    class.methods.values().for_each(|method| {
+                        let Function(method) = method.parse()
+                        else {
+                            unreachable!()
+                        };
+                        method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
+                    });
+                }
+                vm.stack_mut(sp).push(Class(class).into_nanboxed());
+                Ok(*sp)
             }
-            else {
-                None
-            };
-            let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
-            if let Some(base) = base {
-                let base = Class(base).into_nanboxed();
-                class.methods.values().for_each(|method| {
-                    let Function(method) = method.parse()
-                    else {
-                        unreachable!()
-                    };
-                    method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
-                });
-            }
-            vm.stack_mut(sp).push(Class(class).into_nanboxed());
+            *sp = build_class(vm, *sp, metadata_index)?;
         }
         PrintStack => {
             vm.print_stack(*pc, *sp);
