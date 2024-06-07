@@ -1043,3 +1043,35 @@ impl<T> Deref for StackRef<'_, T> {
         &self.stack
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Gc;
+
+    // Implementing `Stack` by using `Box` internally breaks stacked borrow rules (but not tree
+    // borrow rules), because `Box` is `Unique` and `Vm::stack` lets us get multiple immutable refs
+    // to the contained `Box`. This tests makes sure that `Stack` does not do that and is
+    // implemented in a way that is compatible with multiple immutable refs existing at the same
+    // time.
+    #[test]
+    fn multiple_stack_refs() {
+        let gc = Gc::default();
+        let global_cells = Cells::from_iter_in(&gc, [].into_iter());
+        let mut vm = Vm::new(
+            &[Bytecode::End],
+            &[],
+            &[],
+            &[],
+            Environment::new(&gc, HashMap::default(), global_cells),
+            global_cells,
+        )
+        .unwrap();
+        let mut sp = vm.stack_pointer;
+        vm.stack_mut(&mut sp)
+            .push(Value::Number(1.0).into_nanboxed());
+        let stack = vm.stack(sp);
+        let other_stack = vm.stack(sp);
+        assert_eq!(stack.peek().parse(), other_stack.peek().parse());
+    }
+}

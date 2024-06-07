@@ -1,5 +1,7 @@
 use std::fmt;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
+use std::ops::DerefMut;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::panic::Location;
@@ -9,21 +11,21 @@ use std::slice::SliceIndex;
 use crate::gc::Trace;
 
 pub(crate) struct Stack<T> {
-    stack: AbortOnOutOfBounds<Box<[T; super::USEABLE_STACK_SIZE_IN_ELEMENTS]>>,
+    stack: AbortOnOutOfBounds<T, { super::USEABLE_STACK_SIZE_IN_ELEMENTS }>,
     pointer: usize,
 }
 
 impl<T> Stack<T> {
     pub(super) fn into_raw_parts(self) -> (NonNull<T>, NonNull<T>) {
         assert!(self.pointer < self.stack.len());
-        let ptr = NonNull::new(Box::into_raw(self.stack.0)).unwrap().cast();
+        let ptr = ManuallyDrop::new(self.stack).0.cast();
         (ptr, unsafe { ptr.add(self.pointer) })
     }
 
     pub(super) unsafe fn from_raw_parts(base: NonNull<T>, sp: NonNull<T>) -> Self {
         let pointer = unsafe { sp.sub_ptr(base) };
         Self {
-            stack: AbortOnOutOfBounds(unsafe { Box::from_raw(base.cast().as_ptr()) }),
+            stack: AbortOnOutOfBounds(base.cast()),
             pointer,
         }
     }
@@ -35,7 +37,7 @@ where
 {
     pub(super) fn new(default_value: T) -> Self {
         Self {
-            stack: AbortOnOutOfBounds(
+            stack: AbortOnOutOfBounds::from(
                 Box::try_from(
                     vec![default_value; super::USEABLE_STACK_SIZE_IN_ELEMENTS].into_boxed_slice(),
                 )
@@ -95,17 +97,36 @@ where
     }
 }
 
-struct AbortOnOutOfBounds<T>(T);
+struct AbortOnOutOfBounds<T, const N: usize>(NonNull<[T; N]>);
 
-impl<T> Deref for AbortOnOutOfBounds<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl<T, const N: usize> Drop for AbortOnOutOfBounds<T, N> {
+    fn drop(&mut self) {
+        drop(unsafe { Box::from_raw(self.0.as_ptr()) })
     }
 }
 
-impl<T, Idx, const N: usize> Index<Idx> for AbortOnOutOfBounds<Box<[T; N]>>
+impl<T, const N: usize> From<Box<[T; N]>> for AbortOnOutOfBounds<T, N> {
+    fn from(boxed_array: Box<[T; N]>) -> Self {
+        let ptr = NonNull::new(Box::into_raw(boxed_array)).unwrap();
+        AbortOnOutOfBounds(ptr)
+    }
+}
+
+impl<T, const N: usize> Deref for AbortOnOutOfBounds<T, N> {
+    type Target = [T; N];
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0.cast().as_ref() }
+    }
+}
+
+impl<T, const N: usize> DerefMut for AbortOnOutOfBounds<T, N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.0.cast().as_mut() }
+    }
+}
+
+impl<T, Idx, const N: usize> Index<Idx> for AbortOnOutOfBounds<T, N>
 where
     Idx: SliceIndex<[T]> + std::fmt::Debug + Clone,
 {
@@ -113,7 +134,7 @@ where
 
     #[track_caller]
     fn index(&self, index: Idx) -> &Self::Output {
-        self.0.get(index.clone()).unwrap_or_else(
+        self.get(index.clone()).unwrap_or_else(
             #[track_caller]
             || {
                 index_failed(self.len(), index, Location::caller());
@@ -123,14 +144,14 @@ where
     }
 }
 
-impl<T, Idx, const N: usize> IndexMut<Idx> for AbortOnOutOfBounds<Box<[T; N]>>
+impl<T, Idx, const N: usize> IndexMut<Idx> for AbortOnOutOfBounds<T, N>
 where
     Idx: SliceIndex<[T]> + std::fmt::Debug + Clone,
 {
     #[track_caller]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
         let len = self.len();
-        self.0.get_mut(index.clone()).unwrap_or_else(
+        self.get_mut(index.clone()).unwrap_or_else(
             #[track_caller]
             || {
                 index_failed(len, index, Location::caller());
