@@ -1,5 +1,6 @@
 use std::fmt;
 use std::io;
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
 use crate::gc::Trace;
@@ -48,6 +49,18 @@ impl<T> Stack<T> {
         Self {
             stack,
             pointer: unsafe { stack.byte_add(Self::START_OFFSET) },
+        }
+    }
+
+    pub(super) fn into_raw_parts(self) -> (NonNull<T>, NonNull<T>) {
+        let me = ManuallyDrop::new(self);
+        (me.useable_stack_start(), me.pointer)
+    }
+
+    pub(super) unsafe fn from_raw_parts(stack: NonNull<T>, pointer: NonNull<T>) -> Self {
+        Self {
+            stack: unsafe { stack.byte_sub(Self::START_OFFSET) },
+            pointer,
         }
     }
 }

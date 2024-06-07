@@ -64,9 +64,10 @@ macro_rules! bytecode {
                     $(
                         $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => {
                             #[allow(non_snake_case)]
-                            fn $variant_name(
-                                vm: &mut Vm,
+                            fn $variant_name<'a>(
+                                vm: &mut Vm<'a, '_>,
                                 mut pc: usize,
+                                mut sp: NonNull<nanboxed::Value<'a>>,
                                 compiled_program: CompiledBytecodes,
                             ) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
@@ -81,15 +82,21 @@ macro_rules! bytecode {
                                 let result = execute_bytecode(
                                     vm,
                                     &mut pc,
+                                    &mut sp,
                                     $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                 );
                                 match result {
-                                    Err(value) => vm.set_error(value),
+                                    Err(value) => {
+                                        unsafe {
+                                            vm.set_stack_pointer(sp);
+                                        }
+                                        vm.set_error(value)
+                                    }
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
                                         let next = unsafe { compiled_program.get_unchecked(pc) };
-                                        (next.function)(vm, pc, compiled_program)
+                                        (next.function)(vm, pc, sp, compiled_program)
                                     }
                                 }
                             }
@@ -132,7 +139,8 @@ impl<'a> CompiledBytecodes<'a> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompiledBytecode {
     pub(crate) bytecode: Bytecode,
-    pub(crate) function: fn(&mut Vm, usize, CompiledBytecodes),
+    pub(crate) function:
+        for<'a> fn(&mut Vm<'a, '_>, usize, NonNull<nanboxed::Value<'a>>, CompiledBytecodes),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

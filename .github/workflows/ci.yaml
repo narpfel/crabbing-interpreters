@@ -20,6 +20,8 @@ jobs:
           - ""
           - mmap
     runs-on: ubuntu-22.04
+    env:
+      TEST_FEATURES: "${{ matrix.features }}"
     steps:
       - name: checkout
         uses: actions/checkout@v4

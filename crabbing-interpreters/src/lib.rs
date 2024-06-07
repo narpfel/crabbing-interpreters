@@ -1,10 +1,12 @@
 #![feature(closure_lifetime_binder)]
+#![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
 #![feature(integer_sign_cast)]
 #![feature(lint_reasons)]
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
+#![feature(ptr_sub_ptr)]
 #![feature(rust_cold_cc)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
@@ -434,8 +436,7 @@ pub fn run<'a>(
                             stack,
                             global_cells,
                         )?;
-                        let compiled_bytecode = unsafe { compiled_bytecodes.get_unchecked(0) };
-                        (compiled_bytecode.function)(&mut vm, 0, compiled_bytecodes);
+                        vm.run_threaded(compiled_bytecodes);
 
                         if args.show_bytecode_execution_counts {
                             let max_len = Bytecode::all_discriminants()
