@@ -26,20 +26,13 @@ syn = { version = "2.0.60", features = ["fold", "visit"] }
 insta = { version = "1.38.0", features = ["filters"] }
 insta-cmd = "0.6.0"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
+rstest = { version = "0.21.0", default-features = false }
+rstest_reuse = "0.7.0"
 
 [workspace.dependencies.ariadne]
 git = "https://github.com/narpfel/ariadne"
 branch = "underlines-for-unlabeled"
 features = ["auto-color"]
-
-[workspace.dependencies.rstest]
-git = "https://github.com/narpfel/rstest"
-branch = "by-reference-fixture"
-default-features = false
-
-[workspace.dependencies.rstest_reuse]
-git = "https://github.com/narpfel/rstest"
-branch = "by-reference-fixture"
 
 [profile.dev.package."*"]
 opt-level = "z"
