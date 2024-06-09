@@ -400,7 +400,7 @@ impl<'a> Compiler<'a> {
                 let argument_count = arguments.len().try_into().unwrap();
                 let inner = CallInner {
                     argument_count,
-                    stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
+                    stack_size_at_callsite: u32::try_from(stack_size_at_callsite.get()).unwrap(),
                 };
                 let call = if usize::try_from(argument_count).unwrap()
                     >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)

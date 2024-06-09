@@ -109,6 +109,7 @@ struct Locals<'a>(nonempty::Vec<LocalScope<'a>>);
 #[derive(Debug, Clone)]
 enum FrameEntry<'a> {
     Local(Variable<'a>),
+    Call(&'a Cell<usize>),
     ChildScope(StackFrame<'a>),
     FunctionScope(StackFrame<'a>),
 }
@@ -117,6 +118,8 @@ impl FrameEntry<'_> {
     fn as_sexpr(&self, indent: usize) -> String {
         match self {
             FrameEntry::Local(variable) => variable.as_sexpr(),
+            FrameEntry::Call(stack_size_at_callsite) =>
+                format!("(call +{})", stack_size_at_callsite.get()),
             FrameEntry::ChildScope(scope) => scope.as_sexpr("block", indent),
             FrameEntry::FunctionScope(scope) => scope.as_sexpr("function", indent),
         }
@@ -488,6 +491,15 @@ impl<'a> Scopes<'a> {
     fn is_in_function(&self) -> bool {
         self.scopes.len() != 1
     }
+
+    fn call(&mut self, stack_size_at_callsite: &'a Cell<usize>) {
+        self.scopes
+            .last_mut()
+            .locals
+            .last_mut()
+            .layout
+            .push(FrameEntry::Call(stack_size_at_callsite));
+    }
 }
 
 struct FunctionScope<'a> {
@@ -796,7 +808,7 @@ pub enum Expression<'a> {
         l_paren: Token<'a>,
         arguments: &'a [Expression<'a>],
         r_paren: Token<'a>,
-        stack_size_at_callsite: usize,
+        stack_size_at_callsite: &'a Cell<usize>,
     },
     Attribute {
         lhs: &'a Expression<'a>,
@@ -856,6 +868,7 @@ impl<'a> Expression<'a> {
                     .map(Expression::as_sexpr)
                     .collect_vec()
                     .join(" "),
+                stack_size_at_callsite = stack_size_at_callsite.get(),
             ),
             Expression::Name(variable) => variable.as_sexpr(),
             Expression::Attribute { lhs, attribute } =>
@@ -1104,20 +1117,24 @@ fn resolve_expr<'a>(
                 value: bump.alloc(resolve_expr(bump, scopes, value)?),
             }
         }
-        Call { callee, l_paren, arguments, r_paren } => Expression::Call {
-            callee: bump.alloc(resolve_expr(bump, scopes, callee)?),
-            l_paren: *l_paren,
-            arguments: bump.alloc_slice_copy(
-                &arguments
-                    .iter()
-                    .map(|arg| resolve_expr(bump, scopes, arg))
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-            r_paren: *r_paren,
-            // FIXME: adding a `+ 1` here makes test 236 fail in miri. Why? Is there an underlying
-            // issue with the GC?
-            stack_size_at_callsite: scopes.current_stack_size(),
-        },
+        Call { callee, l_paren, arguments, r_paren } => {
+            let stack_size_at_callsite = bump.alloc(Cell::new(scopes.current_stack_size()));
+            scopes.call(stack_size_at_callsite);
+            Expression::Call {
+                callee: bump.alloc(resolve_expr(bump, scopes, callee)?),
+                l_paren: *l_paren,
+                arguments: bump.alloc_slice_copy(
+                    &arguments
+                        .iter()
+                        .map(|arg| resolve_expr(bump, scopes, arg))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+                r_paren: *r_paren,
+                // FIXME: adding a `+ 1` here makes test 236 fail in miri. Why? Is there an
+                // underlying issue with the GC?
+                stack_size_at_callsite,
+            }
+        }
         Attribute { lhs, attribute } => Expression::Attribute {
             lhs: bump.alloc(resolve_expr(bump, scopes, lhs)?),
             attribute: *attribute,
@@ -1263,7 +1280,7 @@ fn iter_function_scopes<'a>(frame: &'a StackFrame<'a>) -> impl Iterator<Item = &
         .iter()
         .flat_map(|frame_entry| -> Box<dyn Iterator<Item = _>> {
             match frame_entry {
-                FrameEntry::Local(_) => Box::new(empty()),
+                FrameEntry::Local(_) | FrameEntry::Call(_) => Box::new(empty()),
                 FrameEntry::ChildScope(scope) => Box::new(iter_function_scopes(scope)),
                 FrameEntry::FunctionScope(scope) =>
                     Box::new(once(scope).chain(iter_function_scopes(scope))),
@@ -1279,6 +1296,7 @@ fn adjust_local_refs(mut offset: usize, frame: &StackFrame) {
                     variable.set_target(Target::Local(offset));
                     offset += 1;
                 },
+            FrameEntry::Call(stack_size_at_callsite) => stack_size_at_callsite.set(offset),
             FrameEntry::ChildScope(frame) => adjust_local_refs(offset, frame),
             FrameEntry::FunctionScope(frame) => adjust_local_refs(0, frame),
         }

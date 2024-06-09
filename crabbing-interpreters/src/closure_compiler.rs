@@ -443,7 +443,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
             let callee = compile_expr(bump, callee);
             let arguments =
                 &*bump.alloc_slice_fill_iter(arguments.iter().map(|arg| compile_expr(bump, arg)));
-            let stack_size_at_callsite = *stack_size_at_callsite;
+            let stack_size_at_callsite = stack_size_at_callsite.get();
             bump.alloc(
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     let callee = callee(state)?;
