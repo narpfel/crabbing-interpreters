@@ -27,8 +27,8 @@ exit_code: 0
                            (print (cell b @1))
                            (print (cell c @2))))
                      (expr (= (global f @1) (local f4 @0)))))
-               (expr (call +2 (local f3 @0)))))
-         (expr (call +2 (local f2 @0)))))
+               (expr (call +1 (local f3 @0)))))
+         (expr (call +1 (local f2 @0)))))
    (expr (call +3 (global f1 @2)))
    (expr (call +3 (global f @1))))
 

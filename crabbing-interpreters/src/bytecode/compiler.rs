@@ -452,7 +452,7 @@ impl<'a> Compiler<'a> {
         }
         let inner = CallInner {
             argument_count: u32::try_from(call.arguments.len()).unwrap(),
-            stack_size_at_callsite: u32::try_from(call.stack_size_at_callsite).unwrap(),
+            stack_size_at_callsite: u32::try_from(call.stack_size_at_callsite.get()).unwrap(),
         };
         let max_argument_count_for_short_call =
             Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA

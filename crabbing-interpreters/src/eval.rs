@@ -308,6 +308,7 @@ pub fn eval<'a>(
             stack_size_at_callsite,
             ..
         } => {
+            let stack_size_at_callsite = stack_size_at_callsite.get();
             let callee = eval(env, cell_vars, offset, callee, trace_call_stack)?;
 
             let eval_call = #[inline(always)]

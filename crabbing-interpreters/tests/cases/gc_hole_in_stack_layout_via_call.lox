@@ -1,0 +1,16 @@
+fun f() {
+    fun g() {}
+    fun h() {}
+}
+
+fun g() {
+    fun in_cell() {
+        in_cell;
+    }
+    var a = 42;
+    f();
+}
+
+f();
+g();
+print "ok";

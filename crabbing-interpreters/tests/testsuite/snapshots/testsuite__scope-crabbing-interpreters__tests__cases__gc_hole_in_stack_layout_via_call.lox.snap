@@ -3,7 +3,7 @@ source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args:
-    - crabbing-interpreters/tests/cases/gc_hole_in_stack_layout.lox
+    - crabbing-interpreters/tests/cases/gc_hole_in_stack_layout_via_call.lox
     - "--scopes"
     - "--stop-at=scopes"
 ---
@@ -14,6 +14,8 @@ exit_code: 0
    (fun f (global @1) [] []
       (block
          (fun g (local @0) [] []
+            (block))
+         (fun h (local @1) [] []
             (block))))
    (fun g (global @2) [] [None]
       (block
