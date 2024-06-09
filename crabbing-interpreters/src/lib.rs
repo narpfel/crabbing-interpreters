@@ -180,6 +180,9 @@ impl IndentLines for str {
 struct Args {
     /// filename
     filename: Option<PathBuf>,
+    #[arg(long)]
+    /// print stack layout
+    layout: bool,
     #[arg(short, long)]
     scopes: bool,
     /// print bytecode
@@ -268,7 +271,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
             (0..program.global_cell_count)
                 .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
-        let result = execute(&mut globals, 0, program.stmts, global_cells, &|| ());
+        let result = execute(&mut globals, program.stmts, global_cells, &|| ());
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
@@ -330,6 +333,10 @@ pub fn run<'a>(
             scope::resolve_names(bump, globals, ast)
         })?;
 
+        if args.layout {
+            println!("{}\n", program.scopes.as_sexpr("layout", 3));
+        }
+
         if args.scopes {
             print!("(program");
             if !program.stmts.is_empty() {
@@ -363,7 +370,7 @@ pub fn run<'a>(
             Environment::new(gc, global_name_offsets, global_cells)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
-        let (bytecode, constants, metadata, error_locations) =
+        let (bytecode, constants, metadata, error_locations, defined_local_slots) =
             time("cmp", args.times, || compile_program(gc, program.stmts));
         let compiled_bytecodes = time("thr", args.times, || {
             bytecode
@@ -412,10 +419,9 @@ pub fn run<'a>(
             args.times,
             || -> Result<Value, ControlFlow<Value, Box<dyn Report>>> {
                 let result = match args.r#loop {
-                    Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells, &|| ())?,
+                    Loop::Ast => execute(&mut stack, program.stmts, global_cells, &|| ())?,
                     Loop::Closures => execute_closures(&mut State {
                         env: &mut stack,
-                        offset: 0,
                         cell_vars: global_cells,
                         trace_call_stack: &|| (),
                     })?,
@@ -426,6 +432,7 @@ pub fn run<'a>(
                         &error_locations,
                         stack,
                         global_cells,
+                        defined_local_slots,
                     )?)?,
                     Loop::Threaded => {
                         let mut vm = Vm::new(
@@ -435,6 +442,7 @@ pub fn run<'a>(
                             &error_locations,
                             stack,
                             global_cells,
+                            defined_local_slots,
                         )?;
                         vm.run_threaded(compiled_bytecodes);
 

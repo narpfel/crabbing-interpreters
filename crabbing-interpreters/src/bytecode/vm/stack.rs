@@ -35,7 +35,7 @@ impl<T> Stack<T>
 where
     T: Copy,
 {
-    pub(super) fn new(default_value: T) -> Self {
+    pub(crate) fn new(default_value: T) -> Self {
         Self {
             stack: AbortOnOutOfBounds::from(
                 Box::try_from(
@@ -67,6 +67,33 @@ where
 
     pub(super) fn peek_at(&self, index: u32) -> T {
         self.stack[self.pointer - 1 - usize::try_from(index).unwrap()]
+    }
+
+    pub(crate) fn get_from_beginning(&self, index: usize) -> T {
+        self[index]
+    }
+
+    pub(crate) fn get_in_frame(&self, index: usize) -> T {
+        self[self.pointer + index]
+    }
+}
+
+impl<T> Stack<T> {
+    pub(crate) fn push_frame(&mut self, frame_size: usize) {
+        self.pointer += frame_size;
+    }
+
+    pub(crate) fn pop_frame(&mut self, frame_size: usize) {
+        self.pointer -= frame_size;
+    }
+
+    pub(crate) fn get_from_beginning_mut(&mut self, index: usize) -> &mut T {
+        &mut self[index]
+    }
+
+    pub(crate) fn get_in_frame_mut(&mut self, index: usize) -> &mut T {
+        let index = self.pointer + index;
+        &mut self[index]
     }
 
     pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
@@ -176,4 +203,18 @@ where
         len,
         index,
     )
+}
+
+impl<T> Index<usize> for Stack<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.stack[index]
+    }
+}
+
+impl<T> IndexMut<usize> for Stack<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.stack[index]
+    }
 }

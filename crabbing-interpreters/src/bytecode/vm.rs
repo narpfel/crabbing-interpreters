@@ -13,6 +13,7 @@ use Bytecode::*;
 
 use super::CompiledBytecodes;
 use crate::bytecode::compiler::ContainingExpression;
+use crate::bytecode::compiler::LocalSlotsDefinedInFrame;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
 use crate::bytecode::vm::stack::Stack;
@@ -30,6 +31,7 @@ use crate::interner::InternedString;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
+use crate::scope::Slot;
 use crate::scope::Target;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
@@ -123,6 +125,7 @@ pub(crate) struct Vm<'a, 'b> {
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
+    defined_local_slots: Vec<LocalSlotsDefinedInFrame>,
 }
 
 impl Drop for Vm<'_, '_> {
@@ -139,6 +142,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         error_locations: &'b [ContainingExpression<'a>],
         env: Environment<'a>,
         global_cells: Cells<'a>,
+        defined_local_slots: Vec<LocalSlotsDefinedInFrame>,
     ) -> Result<Self, InvalidBytecode> {
         let gc = env.gc;
         validate_bytecode(bytecode, metadata)?;
@@ -161,6 +165,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
             error: None,
+            defined_local_slots,
         })
     }
 
@@ -194,12 +199,13 @@ impl<'a, 'b> Vm<'a, 'b> {
     }
 
     #[inline(always)]
-    fn collect_if_necessary(&self, sp: NonNull<nanboxed::Value<'a>>) {
+    fn collect_if_necessary(&self, pc: usize, sp: NonNull<nanboxed::Value<'a>>) {
         if self.env.gc.collection_necessary() {
             #[cold]
             #[inline(never)]
             extern "rust-cold" fn do_collect<'a>(
                 vm: &Vm<'a, '_>,
+                pc: usize,
                 sp: NonNull<nanboxed::Value<'a>>,
             ) {
                 vm.constants.trace();
@@ -207,9 +213,12 @@ impl<'a, 'b> Vm<'a, 'b> {
                 vm.call_stack.trace();
                 vm.cell_vars.trace();
                 vm.env.trace();
+                for &offset in vm.defined_local_slots_at(pc) {
+                    vm.env.get(vm.cell_vars, Slot::Local(offset)).trace();
+                }
                 unsafe { vm.env.gc.sweep() };
             }
-            do_collect(self, sp);
+            do_collect(self, pc, sp);
         }
     }
 
@@ -248,6 +257,27 @@ impl<'a, 'b> Vm<'a, 'b> {
                         depth -= 1;
                     },
                 ContainingExpression::Exit { at: _ } => depth += 1,
+            }
+        }
+        unreachable!()
+    }
+
+    fn defined_local_slots_at(&self, pc: usize) -> &[usize] {
+        let index = self
+            .defined_local_slots
+            .partition_point(|containing_expr| containing_expr.at() <= pc);
+
+        let mut depth = 0;
+        for containing_expr in self.defined_local_slots[..index].iter().rev() {
+            match containing_expr {
+                LocalSlotsDefinedInFrame::Enter { at: _, defined } =>
+                    if depth == 0 {
+                        return defined;
+                    }
+                    else {
+                        depth -= 1;
+                    },
+                LocalSlotsDefinedInFrame::Exit { at: _ } => depth += 1,
             }
         }
         unreachable!()
@@ -375,11 +405,11 @@ pub(crate) fn execute_bytecode<'a>(
         Divide => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs / rhs)?,
         Power => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
-            let value = vm.env[vm.offset + slot];
+            let value = vm.env.get(vm.cell_vars, Slot::Local(slot.cast()));
             vm.stack_mut(sp).push(value);
         }
         Global(slot) => {
-            let value = vm.env[slot];
+            let value = vm.env.get(vm.cell_vars, Slot::Global(slot.cast()));
             vm.stack_mut(sp).push(value);
         }
         Cell(slot) => {
@@ -453,16 +483,12 @@ pub(crate) fn execute_bytecode<'a>(
         }
         StoreLocal(slot) => {
             let value = vm.stack_mut(sp).pop();
-            vm.env[vm.offset + slot] = value;
+            vm.env.set(vm.cell_vars, Target::Local(slot.cast()), value);
         }
         StoreGlobal(slot) => {
             let value = vm.stack_mut(sp).pop();
-            vm.env.set(
-                vm.cell_vars,
-                vm.offset.cast(),
-                Target::GlobalBySlot(slot.cast()),
-                value,
-            );
+            vm.env
+                .set(vm.cell_vars, Target::GlobalBySlot(slot.cast()), value);
         }
         StoreCell(slot) => {
             let value = vm.stack_mut(sp).pop();
@@ -511,7 +537,7 @@ pub(crate) fn execute_bytecode<'a>(
                 Box::new(Error::UndefinedName { at: *expr.0.name })
             })?;
 
-            let value = vm.env[u32::try_from(variable).unwrap()];
+            let value = vm.env.get(vm.cell_vars, Slot::Global(variable));
             vm.stack_mut(sp).push(value);
         }
         StoreGlobalByName(name) => {
@@ -521,12 +547,7 @@ pub(crate) fn execute_bytecode<'a>(
                 Box::new(Error::UndefinedName { at: *target.0.name })
             })?;
             let value = vm.stack_mut(sp).pop();
-            vm.env.set(
-                vm.cell_vars,
-                vm.offset.cast(),
-                Target::GlobalBySlot(slot),
-                value,
-            );
+            vm.env.set(vm.cell_vars, Target::GlobalBySlot(slot), value);
         }
         JumpIfTrue(target) => {
             let value = vm.stack_mut(sp).pop();
@@ -561,11 +582,14 @@ pub(crate) fn execute_bytecode<'a>(
             *pc += target.cast();
         }
         Return => {
+            let old_offset = vm.offset;
             CallFrame {
                 pc: *pc,
                 offset: vm.offset,
                 cells: vm.cell_vars,
             } = vm.call_stack.pop();
+            vm.env
+                .pop_frame(usize::try_from(old_offset - vm.offset).unwrap());
         }
         BuildFunction(metadata_index) => {
             let Metadata::Function { function, code_size } = vm.metadata[metadata_index.cast()]
@@ -710,7 +734,7 @@ pub(crate) fn execute_bytecode<'a>(
         *pc = pc.unchecked_add(1);
     }
     if cfg!(miri) || previous_pc > *pc {
-        vm.collect_if_necessary(*sp);
+        vm.collect_if_necessary(*pc, *sp);
     }
     Ok(())
 }
@@ -876,6 +900,8 @@ fn execute_call<'a>(
             *pc = function.code_ptr - 1;
             vm.offset += stack_size_at_callsite;
             vm.cell_vars = function.cells;
+            vm.env
+                .push_frame(usize::try_from(stack_size_at_callsite).unwrap())
         }
         BoundMethod(bound_method) => {
             let method = bound_method.method;
@@ -894,6 +920,8 @@ fn execute_call<'a>(
             *pc = method.code_ptr - 1;
             vm.offset += stack_size_at_callsite;
             vm.cell_vars = method.cells;
+            vm.env
+                .push_frame(usize::try_from(stack_size_at_callsite).unwrap())
         }
         NativeFunction(native_fn) => {
             #[cold]
@@ -973,6 +1001,8 @@ fn execute_call<'a>(
                         *pc = init.code_ptr - 1;
                         vm.offset += stack_size_at_callsite;
                         vm.cell_vars = init.cells;
+                        vm.env
+                            .push_frame(usize::try_from(stack_size_at_callsite).unwrap())
                     }
                     Some(_) => unreachable!(),
                     None if argument_count == 0 => vm
@@ -1065,6 +1095,7 @@ mod tests {
             &[],
             Environment::new(&gc, HashMap::default(), global_cells),
             global_cells,
+            vec![],
         )
         .unwrap();
         let mut sp = vm.stack_pointer;

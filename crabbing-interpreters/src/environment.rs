@@ -1,11 +1,10 @@
 use std::cell::Cell;
-use std::ops::Index;
-use std::ops::IndexMut;
 use std::sync::OnceLock;
 use std::time::Instant;
 
 use rustc_hash::FxHashMap as HashMap;
 
+use crate::bytecode::vm::stack::Stack;
 use crate::eval::Error;
 use crate::gc::Gc;
 use crate::gc::GcRef;
@@ -27,7 +26,7 @@ pub(crate) const ENV_SIZE: usize = 100_000;
 pub(crate) const ENV_SIZE: usize = 1_000;
 
 pub struct Environment<'a> {
-    stack: Box<[Value<'a>; ENV_SIZE]>,
+    stack: Stack<Value<'a>>,
     globals: HashMap<InternedString, usize>,
     is_global_defined: Box<[bool]>,
     pub(crate) gc: &'a Gc,
@@ -40,10 +39,7 @@ impl<'a> Environment<'a> {
         globals: HashMap<InternedString, usize>,
         global_cells: Cells<'a>,
     ) -> Self {
-        let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Unboxed::Nil.into_nanboxed(); ENV_SIZE]
-            .into_boxed_slice()
-            .try_into()
-            .unwrap();
+        let mut stack = Stack::new(Unboxed::Nil.into_nanboxed());
         let mut is_global_defined = vec![false; globals.len()].into_boxed_slice();
         if let Some(&slot) = globals.get(&interned::CLOCK) {
             stack[slot] = Unboxed::NativeFunction(|arguments| {
@@ -67,13 +63,20 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub(crate) fn get(&self, cell_vars: Cells<'a>, offset: usize, slot: Slot) -> Value<'a> {
-        let index = match slot {
-            Slot::Local(slot) => offset + slot,
-            Slot::Global(slot) => slot,
-            Slot::Cell(slot) => return cell_vars[slot].get().get(),
-        };
-        self.stack[index]
+    pub(crate) fn push_frame(&mut self, frame_size: usize) {
+        self.stack.push_frame(frame_size)
+    }
+
+    pub(crate) fn pop_frame(&mut self, frame_size: usize) {
+        self.stack.pop_frame(frame_size)
+    }
+
+    pub(crate) fn get(&self, cell_vars: Cells<'a>, slot: Slot) -> Value<'a> {
+        match slot {
+            Slot::Local(slot) => self.stack.get_in_frame(slot),
+            Slot::Global(slot) => self.stack.get_from_beginning(slot),
+            Slot::Cell(slot) => cell_vars[slot].get().get(),
+        }
     }
 
     pub(crate) fn get_global_slot_by_id(&self, id: InternedString) -> Option<usize> {
@@ -102,49 +105,33 @@ impl<'a> Environment<'a> {
     fn define_impl(
         &mut self,
         cell_vars: Cells<'a>,
-        offset: usize,
         target: Target,
         value: Value<'a>,
         set_cell: impl FnOnce(&Cell<GcRef<'a, Cell<Value<'a>>>>, Value<'a>),
     ) {
-        let index = match target {
-            Target::Local(slot) => offset + slot,
+        let target = match target {
+            Target::Local(slot) => self.stack.get_in_frame_mut(slot),
             Target::GlobalByName => unreachable!(),
             Target::GlobalBySlot(slot) => {
                 // FIXME: this is only necessary when called from `define`, not `set`.
                 if let Some(is_defined) = self.is_global_defined.get_mut(slot) {
                     *is_defined = true;
                 }
-                slot
+                self.stack.get_from_beginning_mut(slot)
             }
-            Target::Cell(slot) => {
-                set_cell(&cell_vars[slot], value);
-                return;
-            }
+            Target::Cell(slot) => return set_cell(&cell_vars[slot], value),
         };
-        self.stack[index] = value;
+        *target = value;
     }
 
-    pub(crate) fn define(
-        &mut self,
-        cell_vars: Cells<'a>,
-        offset: usize,
-        target: Target,
-        value: Value<'a>,
-    ) {
-        self.define_impl(cell_vars, offset, target, value, |cell, value| {
+    pub(crate) fn define(&mut self, cell_vars: Cells<'a>, target: Target, value: Value<'a>) {
+        self.define_impl(cell_vars, target, value, |cell, value| {
             cell.set(GcRef::new_in(self.gc, Cell::new(value)))
         })
     }
 
-    pub(crate) fn set(
-        &mut self,
-        cell_vars: Cells<'a>,
-        offset: usize,
-        target: Target,
-        value: Value<'a>,
-    ) {
-        self.define_impl(cell_vars, offset, target, value, |cell, value| {
+    pub(crate) fn set(&mut self, cell_vars: Cells<'a>, target: Target, value: Value<'a>) {
+        self.define_impl(cell_vars, target, value, |cell, value| {
             cell.get().set(value)
         })
     }
@@ -169,19 +156,5 @@ impl<'a> Environment<'a> {
                 self.gc.sweep();
             }
         }
-    }
-}
-
-impl<'a> Index<u32> for Environment<'a> {
-    type Output = Value<'a>;
-
-    fn index(&self, index: u32) -> &Self::Output {
-        &self.stack[usize::try_from(index).unwrap()]
-    }
-}
-
-impl<'a> IndexMut<u32> for Environment<'a> {
-    fn index_mut(&mut self, index: u32) -> &mut Self::Output {
-        &mut self.stack[usize::try_from(index).unwrap()]
     }
 }

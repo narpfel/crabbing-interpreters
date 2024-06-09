@@ -44,6 +44,11 @@ enum Interpreter {
 
 impl From<Interpreter> for Command {
     fn from(interpreter: Interpreter) -> Self {
+        #[cfg(feature = "miri_tests")]
+        let features = std::env::var("TEST_FEATURES").unwrap_or_else(|_| "".to_string());
+        #[cfg(feature = "miri_tests")]
+        let miri_args = ["miri", "run", "-q", "--features", &features, "--"];
+
         match interpreter {
             Interpreter::Native(Loop::Ast) => Command::new(get_cargo_bin("crabbing-interpreters")),
             Interpreter::Native(Loop::Closures) => {
@@ -65,7 +70,7 @@ impl From<Interpreter> for Command {
             Interpreter::Miri(Loop::Ast) => {
                 let mut command = Command::new("cargo");
                 command
-                    .args(&["miri", "run", "-q", "--"])
+                    .args(&miri_args)
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
@@ -73,7 +78,8 @@ impl From<Interpreter> for Command {
             Interpreter::Miri(Loop::Closures) => {
                 let mut command = Command::new("cargo");
                 command
-                    .args(&["miri", "run", "-q", "--", "--loop=closures"])
+                    .args(&miri_args)
+                    .arg("--loop=closures")
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
@@ -81,7 +87,8 @@ impl From<Interpreter> for Command {
             Interpreter::Miri(Loop::Bytecode) => {
                 let mut command = Command::new("cargo");
                 command
-                    .args(&["miri", "run", "-q", "--", "--loop=bytecode"])
+                    .args(&miri_args)
+                    .arg("--loop=bytecode")
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }
@@ -89,7 +96,8 @@ impl From<Interpreter> for Command {
             Interpreter::Miri(Loop::Threaded) => {
                 let mut command = Command::new("cargo");
                 command
-                    .args(&["miri", "run", "-q", "--", "--loop=threaded"])
+                    .args(&miri_args)
+                    .arg("--loop=threaded")
                     .env("MIRIFLAGS", "-Zmiri-disable-isolation");
                 command
             }

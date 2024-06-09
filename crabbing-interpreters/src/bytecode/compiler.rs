@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::bytecode::vm::stack::Stack;
@@ -6,6 +7,7 @@ use crate::bytecode::Bytecode::*;
 use crate::bytecode::CallInner;
 use crate::gc::Gc;
 use crate::gc::GcStr;
+use crate::nonempty;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
 use crate::parse::FunctionKind;
@@ -26,6 +28,8 @@ struct Compiler<'a> {
     constants: Vec<nanboxed::Value<'a>>,
     metadata: Vec<Metadata<'a>>,
     error_locations: Vec<ContainingExpression<'a>>,
+    defined_local_slots: Vec<LocalSlotsDefinedInFrame>,
+    frame_stack: nonempty::Vec<BTreeSet<usize>>,
 }
 
 #[derive(Clone, Copy)]
@@ -93,6 +97,22 @@ impl ContainingExpression<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum LocalSlotsDefinedInFrame {
+    Enter { at: usize, defined: Vec<usize> },
+    Exit { at: usize },
+}
+
+impl LocalSlotsDefinedInFrame {
+    pub(crate) fn at(&self) -> usize {
+        match self {
+            LocalSlotsDefinedInFrame::Enter { at, defined: _ }
+            | LocalSlotsDefinedInFrame::Exit { at } => *at,
+        }
+    }
+}
+
+#[expect(clippy::type_complexity, reason = "FIXME")]
 pub(crate) fn compile_program<'a>(
     gc: &'a Gc,
     program: &'a [Statement<'a>],
@@ -101,6 +121,7 @@ pub(crate) fn compile_program<'a>(
     Vec<nanboxed::Value<'a>>,
     Vec<Metadata<'a>>,
     Vec<ContainingExpression<'a>>,
+    Vec<LocalSlotsDefinedInFrame>,
 ) {
     let mut compiler = Compiler {
         gc,
@@ -108,6 +129,8 @@ pub(crate) fn compile_program<'a>(
         constants: Vec::new(),
         metadata: Vec::new(),
         error_locations: Vec::new(),
+        defined_local_slots: Vec::new(),
+        frame_stack: nonempty::Vec::default(),
     };
 
     for stmt in program {
@@ -122,12 +145,22 @@ pub(crate) fn compile_program<'a>(
         constants,
         metadata,
         error_locations,
+        defined_local_slots,
+        frame_stack,
     } = compiler;
-    (code, constants, metadata, error_locations)
+    assert_eq!(frame_stack.len(), 1);
+    (
+        code,
+        constants,
+        metadata,
+        error_locations,
+        defined_local_slots,
+    )
 }
 
 impl<'a> Compiler<'a> {
     fn compile_stmt(&mut self, stmt: &'a Statement<'a>) {
+        self.enter_statement(self.code.len());
         match stmt {
             Statement::Expression(expr) => {
                 self.compile_expr(expr);
@@ -257,6 +290,7 @@ impl<'a> Compiler<'a> {
                 self.compile_store(target);
             }
         }
+        self.exit_statement(self.code.len());
     }
 
     fn compile_expr(&mut self, expr: &'a Expression<'a>) {
@@ -366,7 +400,7 @@ impl<'a> Compiler<'a> {
                 let argument_count = arguments.len().try_into().unwrap();
                 let inner = CallInner {
                     argument_count,
-                    stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
+                    stack_size_at_callsite: u32::try_from(stack_size_at_callsite.get()).unwrap(),
                 };
                 let call = if usize::try_from(argument_count).unwrap()
                     >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
@@ -403,6 +437,13 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_store(&mut self, variable: &Variable<'_>) {
+        match variable.target() {
+            Target::Local(slot) | Target::GlobalBySlot(slot) => {
+                // FIXME: this should only be necessary in `compile_define`
+                self.frame_stack.last_mut().insert(slot);
+            }
+            Target::Cell(_) | Target::GlobalByName => (),
+        }
         let op = match variable.target() {
             Target::Local(slot) => StoreLocal(slot.try_into().unwrap()),
             Target::GlobalByName => StoreGlobalByName(variable.name.id()),
@@ -415,13 +456,22 @@ impl<'a> Compiler<'a> {
     fn compile_define(&mut self, variable: &Variable<'_>) {
         match variable.target() {
             Target::Cell(slot) => self.code.push(DefineCell(slot.try_into().unwrap())),
-            _ => self.compile_store(variable),
+            _ => {
+                match variable.target() {
+                    Target::Local(slot) | Target::GlobalBySlot(slot) => {
+                        self.frame_stack.last_mut().insert(slot);
+                    }
+                    Target::Cell(_) | Target::GlobalByName => (),
+                }
+                self.compile_store(variable);
+            }
         }
     }
 
     fn compile_function(&mut self, function: &'a Function<'a>, kind: FunctionKind) {
         let begin_index = self.code.len();
         self.code.push(BeginFunction(0));
+        self.frame_stack.push(BTreeSet::new());
 
         let skip_this_if_method = match kind {
             FunctionKind::Function => 0,
@@ -450,6 +500,7 @@ impl<'a> Compiler<'a> {
         let meta_index = self.metadata.len();
         self.metadata
             .push(Metadata::Function { function, code_size });
+        self.frame_stack.pop().unwrap();
         self.code
             .push(BuildFunction(meta_index.try_into().unwrap()));
     }
@@ -459,7 +510,20 @@ impl<'a> Compiler<'a> {
             .push(ContainingExpression::Enter { at, expr });
     }
 
+    fn enter_statement(&mut self, at: usize) {
+        self.defined_local_slots
+            .push(LocalSlotsDefinedInFrame::Enter {
+                at,
+                defined: self.frame_stack.last().iter().copied().collect(),
+            });
+    }
+
     fn exit_expression(&mut self, at: usize) {
         self.error_locations.push(ContainingExpression::Exit { at });
+    }
+
+    fn exit_statement(&mut self, at: usize) {
+        self.defined_local_slots
+            .push(LocalSlotsDefinedInFrame::Exit { at });
     }
 }
