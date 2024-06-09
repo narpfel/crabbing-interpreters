@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::iter::from_fn;
 
 use rustc_hash::FxHashMap as HashMap;
 
@@ -150,7 +151,9 @@ pub struct ClassInner<'a> {
 
 impl<'a> ClassInner<'a> {
     fn mro(&self) -> impl Iterator<Item = &Self> {
-        itertools::unfold(Some(self), |class| {
+        let mut class = Some(self);
+        from_fn(move || {
+            let class = &mut class;
             std::mem::replace(class, class.and_then(|class| class.base.as_deref()))
         })
     }
