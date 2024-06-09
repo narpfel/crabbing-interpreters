@@ -14,7 +14,7 @@ exit_code: 0
    (class Foo (global @1) ∅
       (method getClosure [(cell this @0)] [None]
          (block
-            (fun f (local @1) [] [Some(0)]
+            (fun f (local @0) [] [Some(0)]
                (block
                   (fun g (local @0) [] [Some(0)]
                      (block
@@ -23,7 +23,7 @@ exit_code: 0
                               (return (call +0 (attr (cell this @0) toString)))))
                         (return (local h @0))))
                   (return (local g @0))))
-            (return (local f @1))))
+            (return (local f @0))))
       (method toString [(local this @0)] []
          (block
             (return "Foo"))))

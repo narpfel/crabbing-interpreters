@@ -15,20 +15,20 @@ exit_code: 0
    (fun f1 (global @2) [] [None]
       (block
          (var a (cell @0) "a")
-         (fun f2 (local @1) [] [Some(0), None]
+         (fun f2 (local @0) [] [Some(0), None]
             (block
                (var b (cell @1) "b")
-               (fun f3 (local @1) [] [Some(0), Some(1), None]
+               (fun f3 (local @0) [] [Some(0), Some(1), None]
                   (block
                      (var c (cell @2) "c")
-                     (fun f4 (local @1) [] [Some(0), Some(1), Some(2)]
+                     (fun f4 (local @0) [] [Some(0), Some(1), Some(2)]
                         (block
                            (print (cell a @0))
                            (print (cell b @1))
                            (print (cell c @2))))
-                     (expr (= (global f @1) (local f4 @1)))))
-               (expr (call +2 (local f3 @1)))))
-         (expr (call +2 (local f2 @1)))))
+                     (expr (= (global f @1) (local f4 @0)))))
+               (expr (call +2 (local f3 @0)))))
+         (expr (call +2 (local f2 @0)))))
    (expr (call +3 (global f1 @2)))
    (expr (call +3 (global f @1))))
 

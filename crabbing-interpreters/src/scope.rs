@@ -2,6 +2,8 @@ use std::cell::Cell;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter;
+use std::iter::empty;
+use std::iter::once;
 use std::primitive::usize;
 use std::ptr;
 
@@ -95,8 +97,56 @@ impl<'a> CellRef<'a> {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct LocalScope<'a> {
+    names: HashMap<InternedString, Variable<'a>>,
+    layout: StackFrame<'a>,
+}
+
 #[derive(Debug, Default)]
-struct Locals<'a>(nonempty::Vec<HashMap<InternedString, Variable<'a>>>);
+struct Locals<'a>(nonempty::Vec<LocalScope<'a>>);
+
+#[derive(Debug, Clone)]
+enum FrameEntry<'a> {
+    Local(Variable<'a>),
+    ChildScope(StackFrame<'a>),
+    FunctionScope(StackFrame<'a>),
+}
+
+impl FrameEntry<'_> {
+    fn as_sexpr(&self, indent: usize) -> String {
+        match self {
+            FrameEntry::Local(variable) => variable.as_sexpr(),
+            FrameEntry::ChildScope(scope) => scope.as_sexpr("block", indent),
+            FrameEntry::FunctionScope(scope) => scope.as_sexpr("function", indent),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct StackFrame<'a>(Vec<FrameEntry<'a>>);
+
+impl<'a> StackFrame<'a> {
+    fn iter(&self) -> std::slice::Iter<'_, FrameEntry<'a>> {
+        self.0.iter()
+    }
+
+    fn push(&mut self, entry: FrameEntry<'a>) {
+        self.0.push(entry)
+    }
+
+    pub(crate) fn as_sexpr(&self, frame_type: &str, indent: usize) -> String {
+        format!(
+            "({frame_type}{}{})",
+            if self.0.is_empty() { "" } else { "\n" },
+            self.iter()
+                .map(|entry| entry.as_sexpr(indent))
+                .join("\n")
+                .indent_lines(indent)
+                .trim_end(),
+        )
+    }
+}
 
 #[derive(Debug, Default)]
 struct Scope<'a> {
@@ -210,25 +260,52 @@ impl<'a, T> ErrorAtToken<'a, T> {
 }
 
 impl<'a> Locals<'a> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn first(&self) -> &LocalScope<'a> {
+        self.0.first()
+    }
+
+    fn last(&self) -> &LocalScope<'a> {
+        self.0.last()
+    }
+
+    fn last_mut(&mut self) -> &mut LocalScope<'a> {
+        self.0.last_mut()
+    }
+
+    fn iter(&self) -> std::slice::Iter<'_, LocalScope<'a>> {
+        self.0.iter()
+    }
+
     fn push(&mut self) {
         self.0.push(Default::default())
     }
 
     fn pop(&mut self) {
-        self.0.pop();
+        let LocalScope { names: _, layout } = self.0.pop().unwrap();
+        self.last_mut().layout.push(FrameEntry::ChildScope(layout));
     }
 
     fn lookup(&self, name: &'a Name<'a>) -> Option<Variable<'a>> {
-        self.0
-            .iter()
+        self.iter()
             .rev()
-            .find_map(|scope| scope.get(&name.id()))
+            .find_map(|scope| scope.names.get(&name.id()))
             .cloned()
             .map(|variable| variable.at(name))
     }
+
+    fn define(&mut self, variable: Variable<'a>) {
+        let innermost_scope = self.last_mut();
+        innermost_scope.layout.push(FrameEntry::Local(variable));
+        let was_present = innermost_scope.names.insert(variable.name.id(), variable);
+        debug_assert!(was_present.is_none());
+    }
 }
 
-impl Scope<'_> {
+impl<'a> Scope<'a> {
     fn new(is_init: IsInit) -> Self {
         Self { is_init, ..Self::default() }
     }
@@ -239,6 +316,10 @@ impl Scope<'_> {
 
     fn pop(&mut self) {
         self.locals.pop()
+    }
+
+    fn define(&mut self, variable: Variable<'a>) {
+        self.locals.define(variable);
     }
 }
 
@@ -286,9 +367,7 @@ impl<'a> Scopes<'a> {
         else {
             Variable::local(self.bump, name, slot)
         };
-        let last = self.scopes.last_mut().locals.0.last_mut();
-        let was_present = last.insert(name.id(), variable);
-        debug_assert!(was_present.is_none());
+        self.scopes.last_mut().define(variable);
         self.offset += 1;
         variable
     }
@@ -340,7 +419,7 @@ impl<'a> Scopes<'a> {
     }
 
     fn lookup_local_innermost(&self, name: InternedString) -> Option<Variable<'a>> {
-        let last = self.scopes.last().locals.0.last();
+        let last = &self.scopes.last().locals.last().names;
         last.get(&name).cloned()
     }
 
@@ -365,6 +444,14 @@ impl<'a> Scopes<'a> {
         let old_offset = std::mem::take(&mut self.offset);
         let (parameters, body) = f(self)?;
         let scope = self.pop();
+        let locals = scope.locals;
+        let layout = locals.last().layout.clone();
+        self.scopes
+            .last_mut()
+            .locals
+            .last_mut()
+            .layout
+            .push(FrameEntry::FunctionScope(layout));
         self.offset = old_offset;
         Ok(FunctionScope { parameters, body, cells: scope.cells })
     }
@@ -373,11 +460,12 @@ impl<'a> Scopes<'a> {
         self.scopes
             .last()
             .locals
-            .0
             .iter()
             .rev()
-            .find_map(|map| {
-                map.values()
+            .find_map(|scope| {
+                scope
+                    .names
+                    .values()
                     .filter_map(|var| var.as_local())
                     .max()
                     .map(|n| n + 1)
@@ -394,7 +482,7 @@ impl<'a> Scopes<'a> {
     }
 
     fn is_in_globals(&self) -> bool {
-        self.scopes.len() == 1 && self.scopes.last().locals.0.len() == 1
+        self.scopes.len() == 1 && self.scopes.last().locals.len() == 1
     }
 
     fn is_in_function(&self) -> bool {
@@ -817,6 +905,7 @@ pub(crate) struct Program<'a> {
     pub(crate) stmts: &'a [Statement<'a>],
     pub(crate) global_name_offsets: HashMap<InternedString, Variable<'a>>,
     pub(crate) global_cell_count: usize,
+    pub(crate) scopes: StackFrame<'a>,
 }
 
 pub(crate) fn resolve_names<'a>(
@@ -838,10 +927,13 @@ pub(crate) fn resolve_names<'a>(
         .cells
         .values()
         .all(|cell_ref| matches!(cell_ref, CellRef::Local(_))));
+    let LocalScope { names, layout } = scopes.scopes.first().locals.first().clone();
+    iter_function_scopes(&layout).for_each(|scope| adjust_local_refs(0, scope));
     Ok(Program {
         stmts,
-        global_name_offsets: scopes.scopes.first().locals.0.first().clone(),
+        global_name_offsets: names,
         global_cell_count: scopes.scopes.first().cells.len(),
+        scopes: layout,
     })
 }
 
@@ -1163,5 +1255,32 @@ fn is_function_init(name: &Name, kind: FunctionKindWithBase) -> IsInit {
     }
     else {
         IsInit::No
+    }
+}
+
+fn iter_function_scopes<'a>(frame: &'a StackFrame<'a>) -> impl Iterator<Item = &'a StackFrame<'a>> {
+    frame
+        .iter()
+        .flat_map(|frame_entry| -> Box<dyn Iterator<Item = _>> {
+            match frame_entry {
+                FrameEntry::Local(_) => Box::new(empty()),
+                FrameEntry::ChildScope(scope) => Box::new(iter_function_scopes(scope)),
+                FrameEntry::FunctionScope(scope) =>
+                    Box::new(once(scope).chain(iter_function_scopes(scope))),
+            }
+        })
+}
+
+fn adjust_local_refs(mut offset: usize, frame: &StackFrame) {
+    for entry in frame.iter() {
+        match entry {
+            FrameEntry::Local(variable) =>
+                if let Target::Local(_) = variable.target() {
+                    variable.set_target(Target::Local(offset));
+                    offset += 1;
+                },
+            FrameEntry::ChildScope(frame) => adjust_local_refs(offset, frame),
+            FrameEntry::FunctionScope(frame) => adjust_local_refs(0, frame),
+        }
     }
 }

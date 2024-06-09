@@ -20,7 +20,7 @@ exit_code: 0
          (fun in_cell (cell @0) [] [Some(0)]
             (block
                (expr (cell in_cell @0))))
-         (var a (local @1) 42.0)
+         (var a (local @0) 42.0)
          (expr (call +2 (global f @1)))))
    (expr (call +3 (global f @1)))
    (expr (call +3 (global g @2)))

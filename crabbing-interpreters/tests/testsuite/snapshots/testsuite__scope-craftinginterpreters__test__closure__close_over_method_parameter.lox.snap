@@ -15,10 +15,10 @@ exit_code: 0
    (class Foo (global @2) ∅
       (method method [(local this @0) (cell param @0)] [None]
          (block
-            (fun f_ (local @2) [] [Some(0)]
+            (fun f_ (local @1) [] [Some(0)]
                (block
                   (print (cell param @0))))
-            (expr (= (global f @1) (local f_ @2))))))
+            (expr (= (global f @1) (local f_ @1))))))
    (expr (call +3 (attr (call +3 (global Foo @2)) method) "param"))
    (expr (call +3 (global f @1))))
 
