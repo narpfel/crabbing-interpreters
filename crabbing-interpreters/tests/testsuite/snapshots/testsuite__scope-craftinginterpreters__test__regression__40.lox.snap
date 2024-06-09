@@ -18,11 +18,11 @@ exit_code: 0
    (fun callCaller (global @2) [] [None]
       (block
          (var capturedVar (cell @0) "before")
-         (var a (local @1) "a")
-         (fun f (local @2) [] [Some(0)]
+         (var a (local @0) "a")
+         (fun f (local @1) [] [Some(0)]
             (block
                (expr (= (cell capturedVar @0) "after"))))
-         (expr (call +3 (global caller @1) (local f @2)))))
+         (expr (call +3 (global caller @1) (local f @1)))))
    (expr (call +3 (global callCaller @2))))
 
 ----- stderr -----

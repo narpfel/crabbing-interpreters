@@ -180,6 +180,9 @@ impl IndentLines for str {
 struct Args {
     /// filename
     filename: Option<PathBuf>,
+    #[arg(long)]
+    /// print stack layout
+    layout: bool,
     #[arg(short, long)]
     scopes: bool,
     /// print bytecode
@@ -329,6 +332,10 @@ pub fn run<'a>(
         let program = time("scp", args.times, move || {
             scope::resolve_names(bump, globals, ast)
         })?;
+
+        if args.layout {
+            println!("{}\n", program.scopes.as_sexpr("layout", 3));
+        }
 
         if args.scopes {
             print!("(program");

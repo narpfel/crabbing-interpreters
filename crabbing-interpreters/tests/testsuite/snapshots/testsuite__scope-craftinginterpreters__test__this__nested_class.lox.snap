@@ -15,7 +15,7 @@ exit_code: 0
       (method method [(cell this @0)] [None]
          (block
             (print (cell this @0))
-            (fun f (local @1) [] [Some(0)]
+            (fun f (local @0) [] [Some(0)]
                (block
                   (print (cell this @0))
                   (class Inner (local @0) ∅
@@ -23,7 +23,7 @@ exit_code: 0
                         (block
                            (print (local this @0)))))
                   (expr (call +1 (attr (call +1 (local Inner @0)) method)))))
-            (expr (call +2 (local f @1))))))
+            (expr (call +2 (local f @0))))))
    (expr (call +2 (attr (call +2 (global Outer @1)) method))))
 
 ----- stderr -----

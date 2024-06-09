@@ -19,10 +19,10 @@ exit_code: 0
             ∅
             (block
                (var i (cell @0) "i")
-               (fun g (local @1) [] [Some(0)]
+               (fun g (local @0) [] [Some(0)]
                   (block
                      (print (cell i @0))))
-               (return (local g @1))))))
+               (return (local g @0))))))
    (var h (global @2) (call +2 (global f @1)))
    (expr (call +3 (global h @2))))
 

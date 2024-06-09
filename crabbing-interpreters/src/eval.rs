@@ -673,6 +673,7 @@ mod tests {
             stmts: [scope::Statement::Expression(scoped_ast)],
             global_name_offsets,
             global_cell_count: 0,
+            scopes: _,
         }) = scope::resolve_names(bump, &[], program)
         else {
             unreachable!()
