@@ -1,9 +1,6 @@
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
 use std::ops::Deref;
-use std::ops::DerefMut;
 use std::ptr::NonNull;
 
 use rustc_hash::FxHashMap as HashMap;
@@ -16,6 +13,8 @@ use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
 use crate::bytecode::vm::stack::Stack;
+use crate::bytecode::vm::stack_ref::SetSpOnDrop;
+use crate::bytecode::vm::stack_ref::StackRef;
 use crate::bytecode::Bytecode;
 use crate::bytecode::CallInner;
 use crate::environment::Environment;
@@ -181,16 +180,14 @@ impl<'a, 'b> Vm<'a, 'b> {
     }
 
     fn stack(&self, sp: NonNull<nanboxed::Value<'a>>) -> StackRef<nanboxed::Value<'a>> {
-        let stack = ManuallyDrop::new(unsafe { Stack::from_raw_parts(self.stack_base, sp) });
-        StackRef { stack, _lifetime: PhantomData }
+        StackRef::new(self, sp)
     }
 
     fn stack_mut<'slf>(
         &'slf mut self,
         sp: &'slf mut NonNull<nanboxed::Value<'a>>,
-    ) -> SetSpOnDrop<nanboxed::Value<'a>> {
-        let stack = Some(unsafe { Stack::from_raw_parts(self.stack_base, *sp) });
-        SetSpOnDrop { sp, stack }
+    ) -> SetSpOnDrop<'slf, nanboxed::Value<'a>> {
+        SetSpOnDrop::new(self.stack_base, sp)
     }
 
     #[inline(always)]
@@ -1005,42 +1002,78 @@ fn execute_call<'a>(
     Ok(())
 }
 
-struct SetSpOnDrop<'a, T> {
-    sp: &'a mut NonNull<T>,
-    stack: Option<Stack<T>>,
-}
+mod stack_ref {
+    use std::marker::PhantomData;
+    use std::mem::ManuallyDrop;
+    use std::ops::Deref;
+    use std::ptr::NonNull;
 
-impl<T> Drop for SetSpOnDrop<'_, T> {
-    fn drop(&mut self) {
-        let (_, sp) = self.stack.take().unwrap().into_raw_parts();
-        *self.sp = sp;
+    use crate::bytecode::vm::stack::Stack;
+    use crate::bytecode::vm::Vm;
+    use crate::value::nanboxed;
+
+    pub(super) struct SetSpOnDrop<'a, T> {
+        sp: &'a mut NonNull<T>,
+        stack: ManuallyDrop<Stack<T>>,
     }
-}
 
-impl<T> Deref for SetSpOnDrop<'_, T> {
-    type Target = Stack<T>;
-
-    fn deref(&self) -> &Self::Target {
-        self.stack.as_ref().unwrap()
+    impl<'a, T> SetSpOnDrop<'a, T> {
+        pub(super) fn new(stack_base: NonNull<T>, sp: &'a mut NonNull<T>) -> Self {
+            let stack = ManuallyDrop::new(unsafe { Stack::from_raw_parts(stack_base, *sp) });
+            Self { sp, stack }
+        }
     }
-}
 
-impl<T> DerefMut for SetSpOnDrop<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.stack.as_mut().unwrap()
+    impl<'a, T> SetSpOnDrop<'a, T>
+    where
+        T: Copy,
+    {
+        pub(super) fn pop(&mut self) -> T {
+            self.stack.pop()
+        }
+
+        pub(super) fn push(&mut self, value: T) {
+            self.stack.push(value);
+        }
+
+        pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
+            self.stack.peek_at_mut(index)
+        }
     }
-}
 
-struct StackRef<'a, T> {
-    stack: ManuallyDrop<Stack<T>>,
-    _lifetime: PhantomData<&'a ()>,
-}
+    impl<T> Drop for SetSpOnDrop<'_, T> {
+        fn drop(&mut self) {
+            let (_, sp) = unsafe { ManuallyDrop::take(&mut self.stack) }.into_raw_parts();
+            *self.sp = sp;
+        }
+    }
 
-impl<T> Deref for StackRef<'_, T> {
-    type Target = Stack<T>;
+    impl<T> Deref for SetSpOnDrop<'_, T> {
+        type Target = Stack<T>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.stack
+        fn deref(&self) -> &Self::Target {
+            &self.stack
+        }
+    }
+
+    pub(super) struct StackRef<'a, T> {
+        stack: ManuallyDrop<Stack<T>>,
+        _lifetime: PhantomData<&'a ()>,
+    }
+
+    impl<'vm, 'a> StackRef<'vm, nanboxed::Value<'a>> {
+        pub(super) fn new(vm: &'vm Vm<'a, '_>, sp: NonNull<nanboxed::Value<'a>>) -> Self {
+            let stack = ManuallyDrop::new(unsafe { Stack::from_raw_parts(vm.stack_base, sp) });
+            StackRef { stack, _lifetime: PhantomData }
+        }
+    }
+
+    impl<T> Deref for StackRef<'_, T> {
+        type Target = Stack<T>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.stack
+        }
     }
 }
 
