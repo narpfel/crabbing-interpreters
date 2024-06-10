@@ -631,7 +631,7 @@ pub fn execute<'a>(
                     target.target(),
                     Value::Nil.into_nanboxed(),
                 );
-                let methods: HashMap<_, _> = methods
+                let methods = methods
                     .iter()
                     .map(|method| (method.name.id(), eval_function(env.gc, cell_vars, method)))
                     .collect();
