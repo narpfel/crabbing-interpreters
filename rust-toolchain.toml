@@ -1,3 +1,3 @@
 [toolchain]
-channel = "nightly-2024-06-04"
+channel = "nightly-2024-06-11"
 components = ["rustc-codegen-cranelift", "miri"]
