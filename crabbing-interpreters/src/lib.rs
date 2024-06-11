@@ -452,6 +452,11 @@ pub fn run<'a>(
                                     Bytecode::name(discriminant),
                                 );
                             }
+                            eprintln!(
+                                "{:>max_len$}     : {:>12}",
+                                "Total",
+                                vm.execution_counts().iter().sum::<u64>(),
+                            );
                         }
 
                         match vm.error() {

@@ -66,3 +66,4 @@ BoundMethodGetInstance (42):      3000000
              ConstTrue (45):      2000000
             ConstFalse (46):      3000000
            ConstNumber (47):     29000005
+                 Total     :    184000023
