@@ -1092,7 +1092,7 @@ fn execute_call_method<'a>(
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
         }
-        execute_call(vm, pc, sp, argument_count, stack_size_at_callsite, peeker)?
+        execute_call(vm, pc, sp, argument_count, stack_size_at_callsite, peeker)
     }
     else {
         match callee {
@@ -1133,9 +1133,8 @@ fn execute_call_method<'a>(
             }
             _ => unreachable!("classes can only contain functions"),
         }
+        Ok(())
     }
-
-    Ok(())
 }
 
 mod stack_ref {
