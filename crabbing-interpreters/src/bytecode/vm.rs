@@ -1089,7 +1089,8 @@ fn execute_call_method<'a>(
 
     if instance.parse() == Value::Nil {
         unsafe {
-            vm.stack_mut(sp).swap(argument_count, argument_count + 1);
+            let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
+            result.unwrap();
         }
         execute_call(vm, pc, sp, argument_count, stack_size_at_callsite, peeker)?
     }
@@ -1158,7 +1159,7 @@ mod stack_ref {
             Self { sp, stack }
         }
 
-        pub(super) unsafe fn swap(&mut self, i: u32, j: u32) {
+        pub(super) unsafe fn swap(&mut self, i: u32, j: u32) -> Result<(), ()> {
             unsafe { self.stack.swap(i, j) }
         }
     }

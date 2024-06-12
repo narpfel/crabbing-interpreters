@@ -30,11 +30,12 @@ impl<T> Stack<T> {
         }
     }
 
-    pub(super) unsafe fn swap(&mut self, i: u32, j: u32) {
+    #[track_caller]
+    pub(super) unsafe fn swap(&mut self, i: u32, j: u32) -> Result<(), ()> {
         self.stack.swap(
             self.pointer - 1 - usize::try_from(i).unwrap(),
             self.pointer - 1 - usize::try_from(j).unwrap(),
-        );
+        )
     }
 }
 
@@ -105,6 +106,28 @@ where
 }
 
 struct AbortOnOutOfBounds<T, const N: usize>(NonNull<[T; N]>);
+
+impl<T, const N: usize> AbortOnOutOfBounds<T, N> {
+    #[track_caller]
+    fn swap(&mut self, i: usize, j: usize) -> Result<(), ()> {
+        if i != j {
+            match self.deref_mut().get_many_mut([i, j]) {
+                Ok([x, y]) => {
+                    std::mem::swap(x, y);
+                    Ok(())
+                }
+                Err(_) => {
+                    index_failed::<T, _>(self.len(), i, Location::caller());
+                    index_failed::<T, _>(self.len(), j, Location::caller());
+                    Err(())
+                }
+            }
+        }
+        else {
+            Ok(())
+        }
+    }
+}
 
 impl<T, const N: usize> Drop for AbortOnOutOfBounds<T, N> {
     fn drop(&mut self) {

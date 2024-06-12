@@ -121,7 +121,7 @@ where
 }
 
 impl<T> Stack<T> {
-    pub(super) unsafe fn swap(&mut self, i: u32, j: u32) {
+    pub(super) unsafe fn swap(&mut self, i: u32, j: u32) -> Result<(), ()> {
         debug_assert_ne!(i, j);
         let i_offset = peek_offset(i);
         let j_offset = peek_offset(j);
@@ -133,6 +133,7 @@ impl<T> Stack<T> {
                 self.pointer.offset(j_offset).as_mut(),
             );
         }
+        Ok(())
     }
 
     pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
