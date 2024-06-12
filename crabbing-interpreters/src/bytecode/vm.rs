@@ -727,7 +727,7 @@ pub(crate) fn execute_bytecode<'a>(
             vm.print_stack(*pc, *sp);
         }
         b @ BoundMethodGetInstance => {
-            let value = vm.stack_mut(sp).peek();
+            let value = vm.stack(*sp).peek();
             match value.parse() {
                 BoundMethod(bound_method) => vm
                     .stack_mut(sp)
