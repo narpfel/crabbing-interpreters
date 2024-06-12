@@ -448,6 +448,52 @@ pub(crate) fn execute_bytecode<'a>(
             }
             *sp = load_attr(vm, *pc, *sp, name)?;
         }
+        LoadMethod(name) => {
+            #[inline(never)]
+            fn load_method<'a>(
+                vm: &mut Vm<'a, '_>,
+                pc: usize,
+                mut sp: NonNull<nanboxed::Value<'a>>,
+                name: InternedString,
+            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+                let sp = &mut sp;
+                let nanboxed_value = vm.stack_mut(sp).pop();
+                let value = nanboxed_value.parse();
+                let (instance, method) = match value {
+                    Instance(instance) => instance
+                        .attributes
+                        .borrow()
+                        .get(&name)
+                        .copied()
+                        .map(|attribute| (Value::Nil.into_nanboxed(), attribute))
+                        .or_else(|| {
+                            instance
+                                .class
+                                .lookup_method(name)
+                                .map(|method| match method.parse() {
+                                    Value::Function(_) => (nanboxed_value, method),
+                                    _ => unreachable!(),
+                                })
+                        })
+                        .ok_or_else(|| {
+                            let expr = vm.error_location_at(pc);
+                            Box::new(Error::UndefinedProperty {
+                                at: expr,
+                                lhs: value,
+                                attribute: expr.attribute,
+                            })
+                        })?,
+                    _ => Err(Box::new(Error::NoProperty {
+                        lhs: value,
+                        at: vm.error_location_at(pc),
+                    }))?,
+                };
+                vm.stack_mut(sp).push(method);
+                vm.stack_mut(sp).push(instance);
+                Ok(*sp)
+            }
+            *sp = load_method(vm, *pc, *sp, name)?;
+        }
         StoreLocal(slot) => {
             let value = vm.stack_mut(sp).pop();
             vm.env[vm.offset + slot] = value;
@@ -481,6 +527,26 @@ pub(crate) fn execute_bytecode<'a>(
         }
         ShortCall(CallInner { argument_count, stack_size_at_callsite }) => {
             execute_call(
+                vm,
+                pc,
+                sp,
+                argument_count,
+                stack_size_at_callsite,
+                ShortPeek,
+            )?;
+        }
+        CallMethod(CallInner { argument_count, stack_size_at_callsite }) => {
+            execute_call_method(
+                vm,
+                pc,
+                sp,
+                argument_count,
+                stack_size_at_callsite,
+                BoundsCheckedPeek,
+            )?;
+        }
+        ShortCallMethod(CallInner { argument_count, stack_size_at_callsite }) => {
+            execute_call_method(
                 vm,
                 pc,
                 sp,
@@ -602,6 +668,12 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).pop();
             vm.stack_mut(sp).push(value);
         }
+        Pop23 => {
+            let value = vm.stack_mut(sp).pop();
+            vm.stack_mut(sp).pop();
+            vm.stack_mut(sp).pop();
+            vm.stack_mut(sp).push(value);
+        }
         BuildClass(metadata_index) => {
             #[expect(improper_ctypes_definitions)]
             #[cold]
@@ -660,6 +732,7 @@ pub(crate) fn execute_bytecode<'a>(
                 BoundMethod(bound_method) => vm
                     .stack_mut(sp)
                     .push(Value::Instance(bound_method.instance).into_nanboxed()),
+                Instance(_) => vm.stack_mut(sp).push(value),
                 value => unreachable!(
                     "invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"
                 ),
@@ -818,7 +891,7 @@ fn nan_preserving_number_binop<'a>(
 }
 
 trait Peeker {
-    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    fn peek_at<T>(&self, stack: &Stack<T>, index: u32) -> T
     where
         T: Copy;
 }
@@ -826,7 +899,7 @@ trait Peeker {
 struct ShortPeek;
 
 impl Peeker for ShortPeek {
-    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    fn peek_at<T>(&self, stack: &Stack<T>, index: u32) -> T
     where
         T: Copy,
     {
@@ -837,7 +910,7 @@ impl Peeker for ShortPeek {
 struct BoundsCheckedPeek;
 
 impl Peeker for BoundsCheckedPeek {
-    fn peek_at<T>(self, stack: &Stack<T>, index: u32) -> T
+    fn peek_at<T>(&self, stack: &Stack<T>, index: u32) -> T
     where
         T: Copy,
     {
@@ -1002,6 +1075,68 @@ fn execute_call<'a>(
     Ok(())
 }
 
+#[inline(always)]
+fn execute_call_method<'a>(
+    vm: &mut Vm<'a, '_>,
+    pc: &mut usize,
+    sp: &mut NonNull<nanboxed::Value<'a>>,
+    argument_count: u32,
+    stack_size_at_callsite: u32,
+    peeker: impl Peeker,
+) -> Result<(), Option<Box<Error<'a>>>> {
+    let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1).parse();
+    let instance = peeker.peek_at(&vm.stack(*sp), argument_count);
+
+    if instance.parse() == Value::Nil {
+        unsafe {
+            vm.stack_mut(sp).swap(argument_count, argument_count + 1);
+        }
+        execute_call(vm, pc, sp, argument_count, stack_size_at_callsite, peeker)?
+    }
+    else {
+        match callee {
+            Function(function) => {
+                if function.parameters.len() - 1 != argument_count.cast() {
+                    #[expect(improper_ctypes_definitions)]
+                    #[cold]
+                    #[inline(never)]
+                    extern "rust-cold" fn arity_mismatch<'a>(
+                        vm: &Vm<'a, '_>,
+                        pc: usize,
+                        instance: nanboxed::Value<'a>,
+                        function: GcRef<'a, FunctionInner<'a>>,
+                    ) -> Result<!, Option<Box<Error<'a>>>> {
+                        let Value::Instance(instance) = instance.parse()
+                        else {
+                            unreachable!()
+                        };
+                        Err(Box::new(Error::ArityMismatch {
+                            callee: Value::BoundMethod(GcRef::new_in(
+                                vm.env.gc,
+                                BoundMethodInner { method: function, instance },
+                            )),
+                            expected: function.parameters.len() - 1,
+                            at: vm.error_location_at(pc),
+                        }))?
+                    }
+                    arity_mismatch(vm, *pc, instance, function)?
+                }
+                vm.call_stack.push(CallFrame {
+                    pc: *pc,
+                    offset: vm.offset,
+                    cells: vm.cell_vars,
+                });
+                *pc = function.code_ptr - 1;
+                vm.offset += stack_size_at_callsite;
+                vm.cell_vars = function.cells;
+            }
+            _ => unreachable!("classes can only contain functions"),
+        }
+    }
+
+    Ok(())
+}
+
 mod stack_ref {
     use std::marker::PhantomData;
     use std::mem::ManuallyDrop;
@@ -1021,6 +1156,10 @@ mod stack_ref {
         pub(super) fn new(stack_base: NonNull<T>, sp: &'a mut NonNull<T>) -> Self {
             let stack = ManuallyDrop::new(unsafe { Stack::from_raw_parts(stack_base, *sp) });
             Self { sp, stack }
+        }
+
+        pub(super) unsafe fn swap(&mut self, i: u32, j: u32) {
+            unsafe { self.stack.swap(i, j) }
         }
     }
 

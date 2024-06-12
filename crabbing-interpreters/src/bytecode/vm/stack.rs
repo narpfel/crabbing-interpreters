@@ -29,6 +29,13 @@ impl<T> Stack<T> {
             pointer,
         }
     }
+
+    pub(super) unsafe fn swap(&mut self, i: u32, j: u32) {
+        self.stack.swap(
+            self.pointer - 1 - usize::try_from(i).unwrap(),
+            self.pointer - 1 - usize::try_from(j).unwrap(),
+        );
+    }
 }
 
 impl<T> Stack<T>

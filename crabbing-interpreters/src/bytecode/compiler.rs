@@ -355,30 +355,53 @@ impl<'a> Compiler<'a> {
                 arguments,
                 r_paren: _,
                 stack_size_at_callsite,
-            } => {
-                // TODO: if callee is an attribute lookup, compile into `LookupMethod` and
-                // `CallMethod` as described here:
-                // https://doc.pypy.org/en/latest/interpreter-optimizations.html#lookup-method-call-method
-                self.compile_expr(callee);
-                for arg in *arguments {
-                    self.compile_expr(arg);
+            } => match callee {
+                Expression::Attribute { lhs, attribute } => {
+                    self.enter_expression(self.code.len(), callee);
+                    self.compile_expr(lhs);
+                    self.code.push(LoadMethod(attribute.id()));
+                    self.exit_expression(self.code.len());
+                    for arg in *arguments {
+                        self.compile_expr(arg);
+                    }
+                    let argument_count = arguments.len().try_into().unwrap();
+                    let inner = CallInner {
+                        argument_count,
+                        stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
+                    };
+                    let call = if usize::try_from(argument_count).unwrap()
+                        >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
+                    {
+                        CallMethod(inner)
+                    }
+                    else {
+                        ShortCallMethod(inner)
+                    };
+                    self.code.push(call);
+                    self.code.push(Pop23);
                 }
-                let argument_count = arguments.len().try_into().unwrap();
-                let inner = CallInner {
-                    argument_count,
-                    stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
-                };
-                let call = if usize::try_from(argument_count).unwrap()
-                    >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
-                {
-                    Call(inner)
+                _ => {
+                    self.compile_expr(callee);
+                    for arg in *arguments {
+                        self.compile_expr(arg);
+                    }
+                    let argument_count = arguments.len().try_into().unwrap();
+                    let inner = CallInner {
+                        argument_count,
+                        stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
+                    };
+                    let call = if usize::try_from(argument_count).unwrap()
+                        >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
+                    {
+                        Call(inner)
+                    }
+                    else {
+                        ShortCall(inner)
+                    };
+                    self.code.push(call);
+                    self.code.push(Pop2);
                 }
-                else {
-                    ShortCall(inner)
-                };
-                self.code.push(call);
-                self.code.push(Pop2);
-            }
+            },
             Expression::Attribute { lhs, attribute } => {
                 self.compile_expr(lhs);
                 self.code.push(LoadAttr(attribute.id()));
