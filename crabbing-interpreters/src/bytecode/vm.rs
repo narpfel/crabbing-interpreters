@@ -1100,6 +1100,7 @@ fn execute_call_method<'a>(
     }
 }
 
+#[inline(always)]
 fn execute_function_call<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
