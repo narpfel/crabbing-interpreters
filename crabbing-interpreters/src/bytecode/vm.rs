@@ -930,40 +930,26 @@ fn execute_call<'a>(
     let callee = peeker.peek_at(&vm.stack(*sp), argument_count).parse();
 
     match callee {
-        Function(function) => {
-            if function.parameters.len() != argument_count.cast() {
-                Err(Box::new(Error::ArityMismatch {
-                    callee,
-                    expected: function.parameters.len(),
-                    at: vm.error_location_at(*pc),
-                }))?
-            }
-            vm.call_stack.push(CallFrame {
-                pc: *pc,
-                offset: vm.offset,
-                cells: vm.cell_vars,
-            });
-            *pc = function.code_ptr - 1;
-            vm.offset += stack_size_at_callsite;
-            vm.cell_vars = function.cells;
-        }
+        Function(function) => execute_function_call(
+            vm,
+            pc,
+            function,
+            function.parameters.len(),
+            argument_count,
+            stack_size_at_callsite,
+            || callee,
+        )?,
         BoundMethod(bound_method) => {
             let method = bound_method.method;
-            if method.parameters.len() - 1 != argument_count.cast() {
-                Err(Box::new(Error::ArityMismatch {
-                    callee,
-                    expected: method.parameters.len() - 1,
-                    at: vm.error_location_at(*pc),
-                }))?
-            }
-            vm.call_stack.push(CallFrame {
-                pc: *pc,
-                offset: vm.offset,
-                cells: vm.cell_vars,
-            });
-            *pc = method.code_ptr - 1;
-            vm.offset += stack_size_at_callsite;
-            vm.cell_vars = method.cells;
+            execute_function_call(
+                vm,
+                pc,
+                method,
+                method.parameters.len() - 1,
+                argument_count,
+                stack_size_at_callsite,
+                || callee,
+            )?
         }
         NativeFunction(native_fn) => {
             #[cold]
@@ -1008,7 +994,7 @@ fn execute_call<'a>(
                 argument_count: u32,
                 callee: Value<'a>,
                 stack_size_at_callsite: u32,
-            ) -> Result<(usize, NonNull<nanboxed::Value<'a>>), Box<Error<'a>>> {
+            ) -> Result<(usize, NonNull<nanboxed::Value<'a>>), Option<Box<Error<'a>>>> {
                 let pc = &mut pc;
                 let sp = &mut sp;
                 let instance = GcRef::new_in(
@@ -1023,26 +1009,20 @@ fn execute_call<'a>(
                     .map(nanboxed::Value::parse)
                 {
                     Some(Value::Function(init)) => {
-                        if init.parameters.len() - 1 != argument_count.cast() {
-                            Err(Box::new(Error::ArityMismatch {
-                                callee,
-                                expected: init.parameters.len() - 1,
-                                at: vm.error_location_at(*pc),
-                            }))?
-                        }
                         *vm.stack_mut(sp).peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
                             vm.env.gc,
                             BoundMethodInner { method: init, instance },
                         ))
                         .into_nanboxed();
-                        vm.call_stack.push(CallFrame {
-                            pc: *pc,
-                            offset: vm.offset,
-                            cells: vm.cell_vars,
-                        });
-                        *pc = init.code_ptr - 1;
-                        vm.offset += stack_size_at_callsite;
-                        vm.cell_vars = init.cells;
+                        execute_function_call(
+                            vm,
+                            pc,
+                            init,
+                            init.parameters.len() - 1,
+                            argument_count,
+                            stack_size_at_callsite,
+                            || callee,
+                        )?
                     }
                     Some(_) => unreachable!(),
                     None if argument_count == 0 => vm
@@ -1096,45 +1076,55 @@ fn execute_call_method<'a>(
     }
     else {
         match callee {
-            Function(function) => {
-                if function.parameters.len() - 1 != argument_count.cast() {
-                    #[expect(improper_ctypes_definitions)]
-                    #[cold]
-                    #[inline(never)]
-                    extern "rust-cold" fn arity_mismatch<'a>(
-                        vm: &Vm<'a, '_>,
-                        pc: usize,
-                        instance: nanboxed::Value<'a>,
-                        function: GcRef<'a, FunctionInner<'a>>,
-                    ) -> Result<!, Option<Box<Error<'a>>>> {
-                        let Value::Instance(instance) = instance.parse()
-                        else {
-                            unreachable!()
-                        };
-                        Err(Box::new(Error::ArityMismatch {
-                            callee: Value::BoundMethod(GcRef::new_in(
-                                vm.env.gc,
-                                BoundMethodInner { method: function, instance },
-                            )),
-                            expected: function.parameters.len() - 1,
-                            at: vm.error_location_at(pc),
-                        }))?
-                    }
-                    arity_mismatch(vm, *pc, instance, function)?
-                }
-                vm.call_stack.push(CallFrame {
-                    pc: *pc,
-                    offset: vm.offset,
-                    cells: vm.cell_vars,
-                });
-                *pc = function.code_ptr - 1;
-                vm.offset += stack_size_at_callsite;
-                vm.cell_vars = function.cells;
-            }
+            Function(function) => execute_function_call(
+                vm,
+                pc,
+                function,
+                function.parameters.len() - 1,
+                argument_count,
+                stack_size_at_callsite,
+                || {
+                    let Value::Instance(instance) = instance.parse()
+                    else {
+                        unreachable!()
+                    };
+                    Value::BoundMethod(GcRef::new_in(
+                        vm.env.gc,
+                        BoundMethodInner { method: function, instance },
+                    ))
+                },
+            )?,
             _ => unreachable!("classes can only contain functions"),
         }
         Ok(())
     }
+}
+
+fn execute_function_call<'a>(
+    vm: &mut Vm<'a, '_>,
+    pc: &mut usize,
+    function: GcRef<'a, FunctionInner<'a>>,
+    parameter_count: usize,
+    argument_count: u32,
+    stack_size_at_callsite: u32,
+    callee: impl FnOnce() -> Value<'a>,
+) -> Result<(), Option<Box<Error<'a>>>> {
+    if parameter_count != argument_count.cast() {
+        Err(Box::new(Error::ArityMismatch {
+            callee: callee(),
+            expected: parameter_count,
+            at: vm.error_location_at(*pc),
+        }))?
+    }
+    vm.call_stack.push(CallFrame {
+        pc: *pc,
+        offset: vm.offset,
+        cells: vm.cell_vars,
+    });
+    *pc = function.code_ptr - 1;
+    vm.offset += stack_size_at_callsite;
+    vm.cell_vars = function.cells;
+    Ok(())
 }
 
 mod stack_ref {
