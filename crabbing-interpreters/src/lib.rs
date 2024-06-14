@@ -1,6 +1,7 @@
 #![feature(closure_lifetime_binder)]
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
+#![feature(get_many_mut)]
 #![feature(integer_sign_cast)]
 #![feature(lint_reasons)]
 #![feature(macro_metavar_expr)]

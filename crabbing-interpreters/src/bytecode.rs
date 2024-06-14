@@ -195,12 +195,15 @@ bytecode! {
         Dup,
         StoreAttr(InternedString),
         LoadAttr(InternedString),
+        LoadMethod(InternedString),
         StoreLocal(u32),
         StoreGlobal(u32),
         StoreCell(u32),
         DefineCell(u32),
         Call(CallInner),
         ShortCall(CallInner),
+        CallMethod(CallInner),
+        ShortCallMethod(CallInner),
         Print,
         GlobalByName(InternedString),
         StoreGlobalByName(InternedString),
@@ -214,6 +217,7 @@ bytecode! {
         BuildFunction(u32),
         End,
         Pop2,
+        Pop23,
         BuildClass(u32),
         #[allow(unused)]
         PrintStack,
@@ -251,6 +255,7 @@ impl fmt::Display for Bytecode {
             Dup => write!(f, "dup"),
             StoreAttr(string) => write!(f, "store_attr {string}"),
             LoadAttr(string) => write!(f, "load_attr {string}"),
+            LoadMethod(string) => write!(f, "load_method {string}"),
             StoreLocal(slot) => write!(f, "store_local {slot}"),
             StoreGlobal(slot) => write!(f, "store_global {slot}"),
             StoreCell(slot) => write!(f, "store_cell {slot}"),
@@ -260,6 +265,14 @@ impl fmt::Display for Bytecode {
             ShortCall(CallInner { argument_count, stack_size_at_callsite }) => write!(
                 f,
                 "call +{stack_size_at_callsite} arity={argument_count} (short)",
+            ),
+            CallMethod(CallInner { argument_count, stack_size_at_callsite }) => write!(
+                f,
+                "call +{stack_size_at_callsite} arity={argument_count} (method)",
+            ),
+            ShortCallMethod(CallInner { argument_count, stack_size_at_callsite }) => write!(
+                f,
+                "call +{stack_size_at_callsite} arity={argument_count} (method+short)",
             ),
             Print => write!(f, "print"),
             GlobalByName(string) => write!(f, "global_by_name {string}"),
@@ -274,6 +287,7 @@ impl fmt::Display for Bytecode {
             BuildFunction(meta_index) => write!(f, "build_function {meta_index}"),
             End => write!(f, "end"),
             Pop2 => write!(f, "pop2"),
+            Pop23 => write!(f, "pop23"),
             BuildClass(meta_index) => write!(f, "build_class {meta_index}"),
             PrintStack => write!(f, "print_stack"),
             BoundMethodGetInstance => write!(f, "bound_method_get_instance"),
@@ -330,6 +344,15 @@ fn validate_bytecode(
                 {
                     return Err(vm::InvalidBytecode::TooManyArgsInShortCall);
                 },
+            Bytecode::ShortCallMethod(CallInner {
+                argument_count,
+                stack_size_at_callsite: _,
+            }) =>
+                if usize::try_from(argument_count).unwrap()
+                    >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 2)
+                {
+                    return Err(vm::InvalidBytecode::TooManyArgsInShortCall);
+                },
             Bytecode::ConstNumber(number) =>
                 if f64::from(number).is_nan() {
                     return Err(vm::InvalidBytecode::ConstNumberIsNaN);
@@ -355,17 +378,20 @@ fn validate_bytecode(
             | Bytecode::Dup
             | Bytecode::StoreAttr(_)
             | Bytecode::LoadAttr(_)
+            | Bytecode::LoadMethod(_)
             | Bytecode::StoreLocal(_)
             | Bytecode::StoreGlobal(_)
             | Bytecode::StoreCell(_)
             | Bytecode::DefineCell(_)
             | Bytecode::Call(_)
+            | Bytecode::CallMethod(_)
             | Bytecode::Print
             | Bytecode::GlobalByName(_)
             | Bytecode::StoreGlobalByName(_)
             | Bytecode::Return
             | Bytecode::End
             | Bytecode::Pop2
+            | Bytecode::Pop23
             | Bytecode::BuildClass(_)
             | Bytecode::PrintStack
             | Bytecode::BoundMethodGetInstance
