@@ -1,5 +1,7 @@
 use std::fmt;
 
+use variant_types::IntoVariant as _;
+
 use crate::bytecode::vm::stack::Stack;
 use crate::bytecode::Bytecode;
 use crate::bytecode::Bytecode::*;
@@ -13,6 +15,7 @@ use crate::parse::LiteralKind;
 use crate::parse::UnaryOpKind;
 use crate::scope::AssignmentTarget;
 use crate::scope::Expression;
+use crate::scope::ExpressionTypes;
 use crate::scope::Function;
 use crate::scope::Statement;
 use crate::scope::Target;
@@ -349,57 +352,17 @@ impl<'a> Compiler<'a> {
                     }
                 }
             }
-            Expression::Call {
-                callee,
-                l_paren: _,
-                arguments,
-                r_paren: _,
-                stack_size_at_callsite,
-            } => match callee {
+            Expression::Call { callee, .. } => match callee {
                 Expression::Attribute { lhs, attribute } => {
                     self.enter_expression(self.code.len(), callee);
                     self.compile_expr(lhs);
                     self.code.push(LoadMethod(attribute.id()));
                     self.exit_expression(self.code.len());
-                    for arg in *arguments {
-                        self.compile_expr(arg);
-                    }
-                    let argument_count = arguments.len().try_into().unwrap();
-                    let inner = CallInner {
-                        argument_count,
-                        stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
-                    };
-                    let call = if usize::try_from(argument_count).unwrap()
-                        >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 2)
-                    {
-                        CallMethod(inner)
-                    }
-                    else {
-                        ShortCallMethod(inner)
-                    };
-                    self.code.push(call);
-                    self.code.push(Pop23);
+                    self.compile_call(&expr.into_variant(), 2, CallMethod, ShortCallMethod, Pop23);
                 }
                 _ => {
                     self.compile_expr(callee);
-                    for arg in *arguments {
-                        self.compile_expr(arg);
-                    }
-                    let argument_count = arguments.len().try_into().unwrap();
-                    let inner = CallInner {
-                        argument_count,
-                        stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
-                    };
-                    let call = if usize::try_from(argument_count).unwrap()
-                        >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
-                    {
-                        Call(inner)
-                    }
-                    else {
-                        ShortCall(inner)
-                    };
-                    self.code.push(call);
-                    self.code.push(Pop2);
+                    self.compile_call(&expr.into_variant(), 1, Call, ShortCall, Pop2);
                 }
             },
             Expression::Attribute { lhs, attribute } => {
@@ -475,6 +438,34 @@ impl<'a> Compiler<'a> {
             .push(Metadata::Function { function, code_size });
         self.code
             .push(BuildFunction(meta_index.try_into().unwrap()));
+    }
+
+    fn compile_call(
+        &mut self,
+        call: &ExpressionTypes::Call<'a>,
+        stack_slot_count_occupied_by_callee: usize,
+        long_call: impl FnOnce(CallInner) -> Bytecode,
+        short_call: impl FnOnce(CallInner) -> Bytecode,
+        pop: Bytecode,
+    ) {
+        for arg in call.arguments {
+            self.compile_expr(arg);
+        }
+        let inner = CallInner {
+            argument_count: u32::try_from(call.arguments.len()).unwrap(),
+            stack_size_at_callsite: u32::try_from(call.stack_size_at_callsite).unwrap(),
+        };
+        let max_argument_count_for_short_call =
+            Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA
+                - stack_slot_count_occupied_by_callee;
+        let call = if call.arguments.len() >= max_argument_count_for_short_call {
+            long_call(inner)
+        }
+        else {
+            short_call(inner)
+        };
+        self.code.push(call);
+        self.code.push(pop);
     }
 
     fn enter_expression(&mut self, at: usize, expr: &'a Expression<'a>) {
