@@ -370,7 +370,7 @@ impl<'a> Compiler<'a> {
                         stack_size_at_callsite: u32::try_from(*stack_size_at_callsite).unwrap(),
                     };
                     let call = if usize::try_from(argument_count).unwrap()
-                        >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 1)
+                        >= (Stack::<nanboxed::Value>::ELEMENT_COUNT_IN_GUARD_AREA - 2)
                     {
                         CallMethod(inner)
                     }
