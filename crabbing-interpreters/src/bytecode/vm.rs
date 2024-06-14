@@ -402,97 +402,45 @@ pub(crate) fn execute_bytecode<'a>(
             };
         }
         LoadAttr(name) => {
-            #[inline(never)]
-            fn load_attr<'a>(
-                vm: &mut Vm<'a, '_>,
-                pc: usize,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-                name: InternedString,
-            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
-                let sp = &mut sp;
-                let value = vm.stack_mut(sp).pop().parse();
-                let value = match value {
-                    Instance(instance) => instance
-                        .attributes
-                        .borrow()
-                        .get(&name)
-                        .copied()
-                        .or_else(|| {
-                            instance
-                                .class
-                                .lookup_method(name)
-                                .map(|method| match method.parse() {
-                                    Value::Function(method) => Value::BoundMethod(GcRef::new_in(
-                                        vm.env.gc,
-                                        BoundMethodInner { method, instance },
-                                    ))
-                                    .into_nanboxed(),
-                                    _ => unreachable!(),
-                                })
-                        })
-                        .ok_or_else(|| {
-                            let expr = vm.error_location_at(pc);
-                            Box::new(Error::UndefinedProperty {
-                                at: expr,
-                                lhs: value,
-                                attribute: expr.attribute,
-                            })
-                        })?,
-                    _ => Err(Box::new(Error::NoProperty {
-                        lhs: value,
-                        at: vm.error_location_at(pc),
-                    }))?,
-                };
-                vm.stack_mut(sp).push(value);
-                Ok(*sp)
-            }
-            *sp = load_attr(vm, *pc, *sp, name)?;
+            *sp = execute_attribute_lookup(
+                vm,
+                *pc,
+                *sp,
+                name,
+                |vm, sp, Attribute(attribute)| vm.stack_mut(sp).push(attribute),
+                |vm, sp, Attribute(method), instance| {
+                    let Value::Instance(instance) = instance.parse()
+                    else {
+                        unreachable!()
+                    };
+                    let Value::Function(method) = method.parse()
+                    else {
+                        unreachable!()
+                    };
+                    let bound_method = Value::BoundMethod(GcRef::new_in(
+                        vm.env.gc,
+                        BoundMethodInner { method, instance },
+                    ))
+                    .into_nanboxed();
+                    vm.stack_mut(sp).push(bound_method);
+                },
+            )?;
         }
         LoadMethod(name) => {
-            #[inline(never)]
-            fn load_method<'a>(
-                vm: &mut Vm<'a, '_>,
-                pc: usize,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-                name: InternedString,
-            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
-                let sp = &mut sp;
-                let nanboxed_value = vm.stack_mut(sp).pop();
-                let value = nanboxed_value.parse();
-                let (instance, method) = match value {
-                    Instance(instance) => instance
-                        .attributes
-                        .borrow()
-                        .get(&name)
-                        .copied()
-                        .map(|attribute| (Value::Nil.into_nanboxed(), attribute))
-                        .or_else(|| {
-                            instance
-                                .class
-                                .lookup_method(name)
-                                .map(|method| match method.parse() {
-                                    Value::Function(_) => (nanboxed_value, method),
-                                    _ => unreachable!(),
-                                })
-                        })
-                        .ok_or_else(|| {
-                            let expr = vm.error_location_at(pc);
-                            Box::new(Error::UndefinedProperty {
-                                at: expr,
-                                lhs: value,
-                                attribute: expr.attribute,
-                            })
-                        })?,
-                    _ => Err(Box::new(Error::NoProperty {
-                        lhs: value,
-                        at: vm.error_location_at(pc),
-                    }))?,
-                };
-                vm.stack_mut(sp).push(method);
-                vm.stack_mut(sp).push(instance);
-                Ok(*sp)
-            }
-            *sp = load_method(vm, *pc, *sp, name)?;
+            *sp = execute_attribute_lookup(
+                vm,
+                *pc,
+                *sp,
+                name,
+                |vm, sp, Attribute(attribute)| {
+                    vm.stack_mut(sp).push(attribute);
+                    vm.stack_mut(sp).push(Value::Nil.into_nanboxed());
+                },
+                |vm, sp, Attribute(method), instance| {
+                    vm.stack_mut(sp).push(method);
+                    vm.stack_mut(sp).push(instance);
+                },
+            )?;
         }
         StoreLocal(slot) => {
             let value = vm.stack_mut(sp).pop();
@@ -1126,6 +1074,54 @@ fn execute_function_call<'a>(
     vm.offset += stack_size_at_callsite;
     vm.cell_vars = function.cells;
     Ok(())
+}
+
+struct Attribute<'a>(nanboxed::Value<'a>);
+
+#[inline(never)]
+fn execute_attribute_lookup<'a>(
+    vm: &mut Vm<'a, '_>,
+    pc: usize,
+    mut sp: NonNull<nanboxed::Value<'a>>,
+    name: InternedString,
+    push_attribute: impl FnOnce(&mut Vm<'a, '_>, &mut NonNull<nanboxed::Value<'a>>, Attribute<'a>),
+    push_method: impl FnOnce(
+        &mut Vm<'a, '_>,
+        &mut NonNull<nanboxed::Value<'a>>,
+        Attribute<'a>,
+        nanboxed::Value<'a>,
+    ),
+) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+    let sp = &mut sp;
+    let nanboxed_value = vm.stack_mut(sp).pop();
+    let value = nanboxed_value.parse();
+    let () = match value {
+        Instance(instance) => instance
+            .attributes
+            .borrow()
+            .get(&name)
+            .copied()
+            .map(|attr| push_attribute(vm, sp, Attribute(attr)))
+            .or_else(|| {
+                instance
+                    .class
+                    .lookup_method(name)
+                    .map(|method| push_method(vm, sp, Attribute(method), nanboxed_value))
+            })
+            .ok_or_else(|| {
+                let expr = vm.error_location_at(pc);
+                Box::new(Error::UndefinedProperty {
+                    at: expr,
+                    lhs: value,
+                    attribute: expr.attribute,
+                })
+            })?,
+        _ => Err(Box::new(Error::NoProperty {
+            lhs: value,
+            at: vm.error_location_at(pc),
+        }))?,
+    };
+    Ok(*sp)
 }
 
 mod stack_ref {
