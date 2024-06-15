@@ -117,7 +117,6 @@ pub(crate) struct Vm<'a, 'b> {
     env: Environment<'a>,
     stack_base: NonNull<nanboxed::Value<'a>>,
     stack_pointer: NonNull<nanboxed::Value<'a>>,
-    offset: u32,
     call_stack: Stack<CallFrame<'a>>,
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
@@ -151,7 +150,6 @@ impl<'a, 'b> Vm<'a, 'b> {
             env,
             stack_base,
             stack_pointer,
-            offset: 0,
             call_stack: Stack::new(CallFrame {
                 pc: 0,
                 offset: 0,
@@ -252,7 +250,7 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn run_threaded(&mut self, compiled_bytecodes: CompiledBytecodes) {
         let compiled_bytecode = unsafe { compiled_bytecodes.get_unchecked(0) };
-        (compiled_bytecode.function)(self, 0, self.stack_pointer, compiled_bytecodes);
+        (compiled_bytecode.function)(self, 0, self.stack_pointer, 0, compiled_bytecodes);
     }
 }
 
@@ -261,9 +259,10 @@ pub fn run_bytecode<'a>(
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
     let mut pc = 0;
     let mut sp = vm.stack_pointer;
+    let mut offset = 0;
     loop {
         let bytecode = vm.bytecode[pc];
-        match execute_bytecode(vm, &mut pc, &mut sp, bytecode) {
+        match execute_bytecode(vm, &mut pc, &mut sp, &mut offset, bytecode) {
             Ok(()) => (),
             Err(None) => {
                 assert_eq!(vm.stack_base, sp);
@@ -282,6 +281,7 @@ pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
     sp: &mut NonNull<nanboxed::Value<'a>>,
+    offset: &mut u32,
     bytecode: Bytecode,
 ) -> Result<(), Option<Box<Error<'a>>>> {
     #[cfg(feature = "count_bytecode_execution")]
@@ -372,7 +372,7 @@ pub(crate) fn execute_bytecode<'a>(
         Divide => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs / rhs)?,
         Power => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
-            let value = vm.env[vm.offset + slot];
+            let value = vm.env[*offset + slot];
             vm.stack_mut(sp).push(value);
         }
         Global(slot) => {
@@ -444,13 +444,13 @@ pub(crate) fn execute_bytecode<'a>(
         }
         StoreLocal(slot) => {
             let value = vm.stack_mut(sp).pop();
-            vm.env[vm.offset + slot] = value;
+            vm.env[*offset + slot] = value;
         }
         StoreGlobal(slot) => {
             let value = vm.stack_mut(sp).pop();
             vm.env.set(
                 vm.cell_vars,
-                vm.offset.cast(),
+                offset.cast(),
                 Target::GlobalBySlot(slot.cast()),
                 value,
             );
@@ -468,6 +468,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm,
                 pc,
                 sp,
+                offset,
                 argument_count,
                 stack_size_at_callsite,
                 BoundsCheckedPeek,
@@ -478,6 +479,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm,
                 pc,
                 sp,
+                offset,
                 argument_count,
                 stack_size_at_callsite,
                 ShortPeek,
@@ -488,6 +490,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm,
                 pc,
                 sp,
+                offset,
                 argument_count,
                 stack_size_at_callsite,
                 BoundsCheckedPeek,
@@ -498,6 +501,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm,
                 pc,
                 sp,
+                offset,
                 argument_count,
                 stack_size_at_callsite,
                 ShortPeek,
@@ -534,7 +538,7 @@ pub(crate) fn execute_bytecode<'a>(
             let value = vm.stack_mut(sp).pop();
             vm.env.set(
                 vm.cell_vars,
-                vm.offset.cast(),
+                offset.cast(),
                 Target::GlobalBySlot(slot),
                 value,
             );
@@ -574,7 +578,7 @@ pub(crate) fn execute_bytecode<'a>(
         Return => {
             CallFrame {
                 pc: *pc,
-                offset: vm.offset,
+                offset: *offset,
                 cells: vm.cell_vars,
             } = vm.call_stack.pop();
         }
@@ -871,6 +875,7 @@ fn execute_call<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
     sp: &mut NonNull<nanboxed::Value<'a>>,
+    offset: &mut u32,
     argument_count: u32,
     stack_size_at_callsite: u32,
     peeker: impl Peeker,
@@ -881,6 +886,7 @@ fn execute_call<'a>(
         Function(function) => execute_function_call(
             vm,
             pc,
+            offset,
             function,
             function.parameters.len(),
             argument_count,
@@ -892,6 +898,7 @@ fn execute_call<'a>(
             execute_function_call(
                 vm,
                 pc,
+                offset,
                 method,
                 method.parameters.len() - 1,
                 argument_count,
@@ -932,19 +939,23 @@ fn execute_call<'a>(
             *sp = call_native_function(vm, *pc, *sp, argument_count, native_fn, callee)?;
         }
         Class(class) => {
+            #[expect(clippy::too_many_arguments)]
             #[cold]
             #[inline(never)]
             fn call_class<'a>(
                 vm: &mut Vm<'a, '_>,
                 mut pc: usize,
                 mut sp: NonNull<nanboxed::Value<'a>>,
+                mut offset: u32,
                 class: GcRef<'a, ClassInner<'a>>,
                 argument_count: u32,
                 callee: Value<'a>,
                 stack_size_at_callsite: u32,
-            ) -> Result<(usize, NonNull<nanboxed::Value<'a>>), Option<Box<Error<'a>>>> {
+            ) -> Result<(usize, NonNull<nanboxed::Value<'a>>, u32), Option<Box<Error<'a>>>>
+            {
                 let pc = &mut pc;
                 let sp = &mut sp;
+                let offset = &mut offset;
                 let instance = GcRef::new_in(
                     vm.env.gc,
                     InstanceInner {
@@ -965,6 +976,7 @@ fn execute_call<'a>(
                         execute_function_call(
                             vm,
                             pc,
+                            offset,
                             init,
                             init.parameters.len() - 1,
                             argument_count,
@@ -982,12 +994,13 @@ fn execute_call<'a>(
                         at: vm.error_location_at(*pc),
                     }))?,
                 }
-                Ok((*pc, *sp))
+                Ok((*pc, *sp, *offset))
             }
-            (*pc, *sp) = call_class(
+            (*pc, *sp, *offset) = call_class(
                 vm,
                 *pc,
                 *sp,
+                *offset,
                 class,
                 argument_count,
                 callee,
@@ -1008,6 +1021,7 @@ fn execute_call_method<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
     sp: &mut NonNull<nanboxed::Value<'a>>,
+    offset: &mut u32,
     argument_count: u32,
     stack_size_at_callsite: u32,
     peeker: impl Peeker,
@@ -1020,13 +1034,22 @@ fn execute_call_method<'a>(
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
         }
-        execute_call(vm, pc, sp, argument_count, stack_size_at_callsite, peeker)
+        execute_call(
+            vm,
+            pc,
+            sp,
+            offset,
+            argument_count,
+            stack_size_at_callsite,
+            peeker,
+        )
     }
     else {
         match callee {
             Function(function) => execute_function_call(
                 vm,
                 pc,
+                offset,
                 function,
                 function.parameters.len() - 1,
                 argument_count,
@@ -1048,10 +1071,12 @@ fn execute_call_method<'a>(
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 #[inline(always)]
 fn execute_function_call<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut usize,
+    offset: &mut u32,
     function: GcRef<'a, FunctionInner<'a>>,
     parameter_count: usize,
     argument_count: u32,
@@ -1067,11 +1092,11 @@ fn execute_function_call<'a>(
     }
     vm.call_stack.push(CallFrame {
         pc: *pc,
-        offset: vm.offset,
+        offset: *offset,
         cells: vm.cell_vars,
     });
     *pc = function.code_ptr - 1;
-    vm.offset += stack_size_at_callsite;
+    *offset += stack_size_at_callsite;
     vm.cell_vars = function.cells;
     Ok(())
 }

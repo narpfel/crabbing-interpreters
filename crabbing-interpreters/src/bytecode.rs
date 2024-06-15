@@ -68,6 +68,7 @@ macro_rules! bytecode {
                                 vm: &mut Vm<'a, '_>,
                                 mut pc: usize,
                                 mut sp: NonNull<nanboxed::Value<'a>>,
+                                mut offset: u32,
                                 compiled_program: CompiledBytecodes,
                             ) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
@@ -83,6 +84,7 @@ macro_rules! bytecode {
                                     vm,
                                     &mut pc,
                                     &mut sp,
+                                    &mut offset,
                                     $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                 );
                                 match result {
@@ -96,7 +98,7 @@ macro_rules! bytecode {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
                                         let next = unsafe { compiled_program.get_unchecked(pc) };
-                                        (next.function)(vm, pc, sp, compiled_program)
+                                        (next.function)(vm, pc, sp, offset, compiled_program)
                                     }
                                 }
                             }
@@ -140,7 +142,7 @@ impl<'a> CompiledBytecodes<'a> {
 pub(crate) struct CompiledBytecode {
     pub(crate) bytecode: Bytecode,
     pub(crate) function:
-        for<'a> fn(&mut Vm<'a, '_>, usize, NonNull<nanboxed::Value<'a>>, CompiledBytecodes),
+        for<'a> fn(&mut Vm<'a, '_>, usize, NonNull<nanboxed::Value<'a>>, u32, CompiledBytecodes),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
