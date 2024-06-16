@@ -63,11 +63,10 @@ Bytecode execution counts
                   Pop2 (42):      6000000
                  Pop23 (43):      2000000
             BuildClass (44):      2000000
-            PrintStack (45):            0
-BoundMethodGetInstance (46):      3000000
-                 Super (47):      1000000
-              ConstNil (48):      7000000
-             ConstTrue (49):      2000000
-            ConstFalse (50):      3000000
-           ConstNumber (51):     29000005
+BoundMethodGetInstance (45):      3000000
+                 Super (46):      1000000
+              ConstNil (47):      7000000
+             ConstTrue (48):      2000000
+            ConstFalse (49):      3000000
+           ConstNumber (50):     29000005
                  Total     :    184000023
