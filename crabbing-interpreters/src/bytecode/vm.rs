@@ -1,6 +1,5 @@
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::ops::Deref;
 use std::ptr::NonNull;
 
 use rustc_hash::FxHashMap as HashMap;
@@ -210,16 +209,6 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     fn get_constant(&self, index: u32) -> nanboxed::Value<'a> {
         self.constants[index.cast()]
-    }
-
-    #[inline(never)]
-    fn print_stack(&self, pc: usize, sp: NonNull<nanboxed::Value<'a>>) {
-        println!(
-            "stack at {:>4}    {}: {:#?}",
-            pc,
-            self.bytecode[pc],
-            self.stack(sp).deref(),
-        );
     }
 
     #[cold]
@@ -674,9 +663,6 @@ pub(crate) fn execute_bytecode<'a>(
                 Ok(*sp)
             }
             *sp = build_class(vm, *sp, metadata_index)?;
-        }
-        PrintStack => {
-            vm.print_stack(*pc, *sp);
         }
         b @ BoundMethodGetInstance => {
             let value = vm.stack(*sp).peek();
