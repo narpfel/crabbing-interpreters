@@ -10,7 +10,6 @@ use ariadne::Color::Green;
 use ariadne::Color::Magenta;
 use ariadne::Color::Red;
 use crabbing_interpreters_derive_report::Report;
-use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant;
 
 use crate::environment::Environment;
@@ -18,6 +17,7 @@ use crate::gc::Gc;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace as _;
+use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;

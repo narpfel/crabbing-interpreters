@@ -2,7 +2,6 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::ptr::NonNull;
 
-use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoEnum;
 use variant_types::IntoVariant;
 use Bytecode::*;
@@ -23,6 +22,7 @@ use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace;
+use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::scope::AssignmentTargetTypes;
@@ -1233,7 +1233,7 @@ mod tests {
             &[],
             &[],
             &[],
-            Environment::new(&gc, HashMap::default(), global_cells),
+            Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells),
             global_cells,
         )
         .unwrap();
