@@ -13,7 +13,6 @@ enum IndexResult<'a, K, V> {
 pub(crate) struct HashMap<K, V> {
     data: Vec<Option<(K, V)>>,
     length: usize,
-    mask: usize,
     build_hasher: BuildHasherDefault<FxHasher>,
 }
 
@@ -41,9 +40,9 @@ where
         }
         else {
             if self.load_factor() >= 0.8 {
-                self.mask = ((self.mask * 2) | 1).max(0b111);
+                let new_capacity = (self.capacity() * 2).max(8);
                 let data = std::mem::take(&mut self.data);
-                self.data.resize_with(self.capacity(), || None);
+                self.data.resize_with(new_capacity, || None);
                 for (k, v) in data.into_iter().flatten() {
                     match self.index(&k) {
                         IndexResult::Present(_, _, _) => unreachable!(),
@@ -62,13 +61,13 @@ where
     fn index(&self, key: &K) -> IndexResult<K, V> {
         #[expect(clippy::as_conversions)]
         let hash = self.build_hasher.hash_one(key) as usize;
-        let mut index = hash & self.mask;
+        let mut index = hash & self.mask();
         while let Some(Some((k, v))) = self.data.get(index) {
             if k == key {
                 return IndexResult::Present(index, k, v);
             }
             index += 1;
-            index &= self.mask;
+            index &= self.mask();
         }
         IndexResult::NotPresent(index)
     }
@@ -76,7 +75,11 @@ where
 
 impl<K, V> HashMap<K, V> {
     fn capacity(&self) -> usize {
-        self.mask + 1
+        self.data.len()
+    }
+
+    fn mask(&self) -> usize {
+        self.capacity().wrapping_sub(1)
     }
 
     fn load_factor(&self) -> f64 {
@@ -96,7 +99,6 @@ impl<K, V> Default for HashMap<K, V> {
         Self {
             data: Default::default(),
             length: 0,
-            mask: 0,
             build_hasher: BuildHasherDefault::default(),
         }
     }
