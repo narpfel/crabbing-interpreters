@@ -4,13 +4,12 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::from_fn;
 
-use rustc_hash::FxHashMap as HashMap;
-
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace;
+use crate::hash_map::HashMap;
 use crate::interner::InternedString;
 use crate::scope::Statement;
 use crate::scope::Variable;

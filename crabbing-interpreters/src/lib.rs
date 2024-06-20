@@ -60,6 +60,7 @@ mod closure_compiler;
 mod environment;
 mod eval;
 mod gc;
+mod hash_map;
 mod interner;
 mod nonempty;
 mod parse;

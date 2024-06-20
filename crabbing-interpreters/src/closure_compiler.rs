@@ -5,7 +5,6 @@ use std::iter::Skip;
 use std::slice;
 
 use bumpalo::Bump;
-use rustc_hash::FxHashMap as HashMap;
 use variant_types::IntoVariant as _;
 
 use crate::environment::Environment;
@@ -15,6 +14,7 @@ use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace as _;
+use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
