@@ -1028,7 +1028,7 @@ fn execute_call_method<'a>(
     let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1);
     let instance = peeker.peek_at(&vm.stack(*sp), argument_count);
 
-    if instance.parse() == Value::Nil {
+    if instance.eq_nanboxed(Value::Nil.into_nanboxed()) {
         unsafe {
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
