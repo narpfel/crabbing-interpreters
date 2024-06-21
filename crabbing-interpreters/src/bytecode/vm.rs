@@ -1025,7 +1025,7 @@ fn execute_call_method<'a>(
     stack_size_at_callsite: u32,
     peeker: impl Peeker,
 ) -> Result<(), Option<Box<Error<'a>>>> {
-    let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1).parse();
+    let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1);
     let instance = peeker.peek_at(&vm.stack(*sp), argument_count);
 
     if instance.parse() == Value::Nil {
@@ -1045,7 +1045,7 @@ fn execute_call_method<'a>(
     }
     else {
         vm.stack_mut(sp).push(instance);
-        match callee {
+        match callee.parse() {
             Function(function) => execute_function_call(
                 vm,
                 pc,
