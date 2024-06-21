@@ -32,6 +32,7 @@ use crate::scope::Target;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
+use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
@@ -108,6 +109,12 @@ unsafe impl Trace for CallFrame<'_> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CachedMethod<'a> {
+    class: Class<'a>,
+    method: nanboxed::Value<'a>,
+}
+
 pub(crate) struct Vm<'a, 'b> {
     bytecode: &'b [Bytecode],
     constants: &'b [nanboxed::Value<'a>],
@@ -120,6 +127,7 @@ pub(crate) struct Vm<'a, 'b> {
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
+    inline_cache: Box<[Option<CachedMethod<'a>>]>,
 }
 
 impl Drop for Vm<'_, '_> {
@@ -157,6 +165,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             cell_vars: global_cells,
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
             error: None,
+            inline_cache: vec![None; bytecode.len()].into_boxed_slice(),
         })
     }
 
@@ -1114,10 +1123,16 @@ fn execute_attribute_lookup<'a>(
             .copied()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
             .or_else(|| {
-                instance
-                    .class
-                    .lookup_method(name)
-                    .map(|method| push_method(vm, sp, Attribute(method), nanboxed_value))
+                let method = match vm.inline_cache[pc] {
+                    Some(CachedMethod { class, method }) if class == instance.class => method,
+                    _ => {
+                        let method = instance.class.lookup_method(name)?;
+                        vm.inline_cache[pc] = Some(CachedMethod { class: instance.class, method });
+                        method
+                    }
+                };
+                push_method(vm, sp, Attribute(method), nanboxed_value);
+                Some(())
             })
             .ok_or_else(|| {
                 let expr = vm.error_location_at(pc);
