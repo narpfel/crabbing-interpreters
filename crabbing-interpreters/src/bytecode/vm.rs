@@ -890,6 +890,8 @@ fn execute_call<'a>(
         )?,
         BoundMethod(bound_method) => {
             let method = bound_method.method;
+            vm.stack_mut(sp)
+                .push(Value::Instance(bound_method.instance).into_nanboxed());
             execute_function_call(
                 vm,
                 pc,
@@ -968,6 +970,8 @@ fn execute_call<'a>(
                             BoundMethodInner { method: init, instance },
                         ))
                         .into_nanboxed();
+                        vm.stack_mut(sp)
+                            .push(Value::Instance(instance).into_nanboxed());
                         execute_function_call(
                             vm,
                             pc,
@@ -1040,6 +1044,7 @@ fn execute_call_method<'a>(
         )
     }
     else {
+        vm.stack_mut(sp).push(instance);
         match callee {
             Function(function) => execute_function_call(
                 vm,
