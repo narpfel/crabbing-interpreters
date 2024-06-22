@@ -1,3 +1,5 @@
+#![feature(closure_lifetime_binder)]
+
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -241,20 +243,36 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
     }
 }
 
-#[test]
+#[rstest]
+#[case::panic_unwind(for <'a> |cmd: &'a mut Command| -> &'a mut Command { cmd })]
+#[case::panic_abort(
+    for <'a> |cmd: &'a mut Command| -> &'a mut Command {
+        cmd
+            .env("RUSTFLAGS", "-C panic=abort")
+            .args([
+                "-Zbuild-std=panic_abort,std",
+                "-Zbuild-std-features=panic_immediate_abort",
+                "--target=x86_64-unknown-linux-gnu",
+            ])
+    }
+)]
 #[ignore]
-fn test_that_threaded_interpreter_is_properly_tailrecursive() {
+fn test_that_threaded_interpreter_is_properly_tailrecursive(
+    #[case] apply_panic_strategy: impl for<'a> FnOnce(&'a mut Command) -> &'a mut Command,
+) {
     let additional_features = std::env::var("TEST_FEATURES").unwrap_or_else(|_| "".to_string());
-    assert_cmd_snapshot!(Command::new("cargo")
-        .args([
-            "run",
-            "--profile=perf",
-            "--quiet",
-            &format!("--features=count_bytecode_execution,{additional_features}"),
-            "--",
-            "--loop=threaded",
-            "--show-bytecode-execution-counts",
-            "tests/tailrec/test_tailrec.lox",
-        ])
-        .stdout(Stdio::null()));
+    assert_cmd_snapshot!(
+        "that_threaded_interpreter_is_properly_tailrecursive",
+        apply_panic_strategy(Command::new("cargo").arg("run"))
+            .args([
+                "--profile=perf",
+                "--quiet",
+                &format!("--features=count_bytecode_execution,{additional_features}"),
+                "--",
+                "--loop=threaded",
+                "--show-bytecode-execution-counts",
+                "tests/tailrec/test_tailrec.lox",
+            ])
+            .stdout(Stdio::null()),
+    );
 }
