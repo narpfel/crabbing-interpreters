@@ -1123,9 +1123,8 @@ fn execute_attribute_lookup<'a>(
     let sp = &mut sp;
     let nanboxed_value = vm.stack_mut(sp).pop();
     let () = match nanboxed_value.parse() {
-        value @ Instance(instance) => instance
-            .attributes
-            .borrow()
+        value @ Instance(instance) => unsafe { instance.attributes.try_borrow_unguarded() }
+            .unwrap()
             .get(&name)
             .copied()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
