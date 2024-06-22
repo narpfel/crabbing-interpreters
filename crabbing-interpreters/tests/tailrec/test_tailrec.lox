@@ -1040,6 +1040,10 @@ class ClassWithLongCallMethod {
     ) {}
 }
 
+class ClassWithInit {
+    init() {}
+}
+
 for (var i = 0; i < 1000000; i = i + 1) {
     nil;
     -1;
@@ -2130,6 +2134,8 @@ for (var i = 0; i < 1000000; i = i + 1) {
         514,
         515,
     );
+
+    ClassWithInit();
 }
 
 fun f() {

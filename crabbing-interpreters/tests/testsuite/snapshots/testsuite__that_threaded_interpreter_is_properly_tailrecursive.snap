@@ -18,7 +18,7 @@ exit_code: 0
 
 ----- stderr -----
 Bytecode execution counts
-                   Pop ( 0):     34000000
+                   Pop ( 0):     35000000
                  Const ( 1):      6000000
             UnaryMinus ( 2):      1000000
               UnaryNot ( 3):      1000000
@@ -34,18 +34,18 @@ Bytecode execution counts
                 Divide (13):      1000000
                  Power (14):      1000000
                  Local (15):     12000001
-                Global (16):      5000000
+                Global (16):      6000000
                   Cell (17):      6000001
                    Dup (18):      5000000
              StoreAttr (19):      1000000
               LoadAttr (20):      1000000
             LoadMethod (21):      3000000
-            StoreLocal (22):   1043000001
-           StoreGlobal (23):      1000005
+            StoreLocal (22):   1044000001
+           StoreGlobal (23):      1000006
              StoreCell (24):      1000000
             DefineCell (25):      1000001
                   Call (26):      1000000
-             ShortCall (27):      7000000
+             ShortCall (27):      8000000
             CallMethod (28):      1000000
        ShortCallMethod (29):      2000000
                  Print (30):      1000000
@@ -56,17 +56,17 @@ Bytecode execution counts
          PopJumpIfTrue (35):      1000000
         PopJumpIfFalse (36):      2000000
                   Jump (37):      1000002
-         BeginFunction (38):      3000004
-                Return (39):      7000000
-         BuildFunction (40):      3000004
+         BeginFunction (38):      3000005
+                Return (39):      8000000
+         BuildFunction (40):      3000005
                    End (41):            1
-                  Pop2 (42):      8000000
+                  Pop2 (42):      9000000
                  Pop23 (43):      3000000
-            BuildClass (44):      2000001
-BoundMethodGetInstance (45):            0
+            BuildClass (44):      2000002
+BoundMethodGetInstance (45):      1000000
                  Super (46):      1000000
               ConstNil (47):      9000000
              ConstTrue (48):      2000000
             ConstFalse (49):      3000000
            ConstNumber (50):   1061000005
-                 Total     :   2263000030
+                 Total     :   2270000034
