@@ -1119,9 +1119,8 @@ fn execute_attribute_lookup<'a>(
 ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
     let sp = &mut sp;
     let nanboxed_value = vm.stack_mut(sp).pop();
-    let value = nanboxed_value.parse();
-    let () = match value {
-        Instance(instance) => instance
+    let () = match nanboxed_value.parse() {
+        value @ Instance(instance) => instance
             .attributes
             .borrow()
             .get(&name)
@@ -1147,7 +1146,7 @@ fn execute_attribute_lookup<'a>(
                     attribute: expr.attribute,
                 })
             })?,
-        _ => Err(Box::new(Error::NoProperty {
+        value => Err(Box::new(Error::NoProperty {
             lhs: value,
             at: vm.error_location_at(pc),
         }))?,
