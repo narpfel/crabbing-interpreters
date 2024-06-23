@@ -414,13 +414,12 @@ impl<'a> Compiler<'a> {
             FunctionKind::Method => 1,
         };
 
-        for param in function.parameters.iter().skip(skip_this_if_method).rev() {
-            self.compile_define(param);
+        if kind == FunctionKind::Method {
+            self.compile_define(&function.parameters[0]);
         }
 
-        if kind == FunctionKind::Method {
-            self.code.push(BoundMethodGetInstance);
-            self.compile_define(&function.parameters[0]);
+        for param in function.parameters.iter().skip(skip_this_if_method).rev() {
+            self.compile_define(param);
         }
 
         for stmt in function.body {

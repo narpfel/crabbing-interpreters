@@ -84,6 +84,10 @@ impl<'a> Value<'a> {
     pub fn is_truthy(self) -> bool {
         self.parse().is_truthy()
     }
+
+    pub(crate) fn eq_nanboxed(self, other: Self) -> bool {
+        self.data == other.data
+    }
 }
 
 unsafe impl Trace for Value<'_> {

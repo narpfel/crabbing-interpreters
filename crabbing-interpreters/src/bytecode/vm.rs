@@ -406,6 +406,7 @@ pub(crate) fn execute_bytecode<'a>(
                 *sp,
                 name,
                 |vm, sp, Attribute(attribute)| vm.stack_mut(sp).push(attribute),
+                #[cfg_attr(panic = "abort", inline(never))]
                 |vm, sp, Attribute(method), instance| {
                     let Value::Instance(instance) = instance.parse()
                     else {
@@ -434,6 +435,7 @@ pub(crate) fn execute_bytecode<'a>(
                     vm.stack_mut(sp).push(attribute);
                     vm.stack_mut(sp).push(Value::Nil.into_nanboxed());
                 },
+                #[cfg_attr(all(panic = "abort", not(feature = "mmap")), inline(never))]
                 |vm, sp, Attribute(method), instance| {
                     vm.stack_mut(sp).push(method);
                     vm.stack_mut(sp).push(instance);
@@ -890,6 +892,8 @@ fn execute_call<'a>(
         )?,
         BoundMethod(bound_method) => {
             let method = bound_method.method;
+            vm.stack_mut(sp)
+                .push(Value::Instance(bound_method.instance).into_nanboxed());
             execute_function_call(
                 vm,
                 pc,
@@ -968,6 +972,8 @@ fn execute_call<'a>(
                             BoundMethodInner { method: init, instance },
                         ))
                         .into_nanboxed();
+                        vm.stack_mut(sp)
+                            .push(Value::Instance(instance).into_nanboxed());
                         execute_function_call(
                             vm,
                             pc,
@@ -1021,10 +1027,10 @@ fn execute_call_method<'a>(
     stack_size_at_callsite: u32,
     peeker: impl Peeker,
 ) -> Result<(), Option<Box<Error<'a>>>> {
-    let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1).parse();
+    let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1);
     let instance = peeker.peek_at(&vm.stack(*sp), argument_count);
 
-    if instance.parse() == Value::Nil {
+    if instance.eq_nanboxed(Value::Nil.into_nanboxed()) {
         unsafe {
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
@@ -1040,7 +1046,8 @@ fn execute_call_method<'a>(
         )
     }
     else {
-        match callee {
+        vm.stack_mut(sp).push(instance);
+        match callee.parse() {
             Function(function) => execute_function_call(
                 vm,
                 pc,
@@ -1098,7 +1105,8 @@ fn execute_function_call<'a>(
 
 struct Attribute<'a>(nanboxed::Value<'a>);
 
-#[inline(never)]
+#[cfg_attr(panic = "abort", inline(always))]
+#[cfg_attr(not(panic = "abort"), inline(never))]
 fn execute_attribute_lookup<'a>(
     vm: &mut Vm<'a, '_>,
     pc: usize,
@@ -1114,11 +1122,9 @@ fn execute_attribute_lookup<'a>(
 ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
     let sp = &mut sp;
     let nanboxed_value = vm.stack_mut(sp).pop();
-    let value = nanboxed_value.parse();
-    let () = match value {
-        Instance(instance) => instance
-            .attributes
-            .borrow()
+    let () = match nanboxed_value.parse() {
+        Instance(instance) => unsafe { instance.attributes.try_borrow_unguarded() }
+            .unwrap()
             .get(&name)
             .copied()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
@@ -1138,12 +1144,12 @@ fn execute_attribute_lookup<'a>(
                 let expr = vm.error_location_at(pc);
                 Box::new(Error::UndefinedProperty {
                     at: expr,
-                    lhs: value,
+                    lhs: nanboxed_value.parse(),
                     attribute: expr.attribute,
                 })
             })?,
         _ => Err(Box::new(Error::NoProperty {
-            lhs: value,
+            lhs: nanboxed_value.parse(),
             at: vm.error_location_at(pc),
         }))?,
     };
