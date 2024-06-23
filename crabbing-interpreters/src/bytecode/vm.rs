@@ -1123,7 +1123,7 @@ fn execute_attribute_lookup<'a>(
     let sp = &mut sp;
     let nanboxed_value = vm.stack_mut(sp).pop();
     let () = match nanboxed_value.parse() {
-        value @ Instance(instance) => unsafe { instance.attributes.try_borrow_unguarded() }
+        Instance(instance) => unsafe { instance.attributes.try_borrow_unguarded() }
             .unwrap()
             .get(&name)
             .copied()
@@ -1144,12 +1144,12 @@ fn execute_attribute_lookup<'a>(
                 let expr = vm.error_location_at(pc);
                 Box::new(Error::UndefinedProperty {
                     at: expr,
-                    lhs: value,
+                    lhs: nanboxed_value.parse(),
                     attribute: expr.attribute,
                 })
             })?,
-        value => Err(Box::new(Error::NoProperty {
-            lhs: value,
+        _ => Err(Box::new(Error::NoProperty {
+            lhs: nanboxed_value.parse(),
             at: vm.error_location_at(pc),
         }))?,
     };
