@@ -10,9 +10,6 @@ use insta_cmd::assert_cmd_snapshot;
 use insta_cmd::get_cargo_bin;
 use rstest::fixture;
 use rstest::rstest;
-// FIXME: rstest PR 244
-#[allow(clippy::single_component_path_imports)]
-use rstest_reuse;
 use rstest_reuse::apply;
 use rstest_reuse::template;
 
