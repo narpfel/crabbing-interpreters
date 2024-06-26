@@ -74,14 +74,9 @@ where
         let state = head.get().state;
         match state {
             State::Unvisited => {
-                head.set(GcHead {
-                    state: State::VisitingChildren,
-                    ..head.get()
-                });
-                self.value().value.trace();
                 head.set(GcHead { state: State::Done, ..head.get() });
+                self.value().value.trace();
             }
-            State::VisitingChildren => (),
             State::Done => (),
         }
     }
@@ -186,7 +181,6 @@ impl Gc {
         self.iter_with(|head| match head.state {
             State::Unvisited => Action::Drop,
             State::Done => Action::Keep,
-            State::VisitingChildren => unreachable!(),
         });
     }
 
@@ -261,7 +255,6 @@ struct GcHead {
 #[derive(Debug, Clone, Copy)]
 enum State {
     Unvisited,
-    VisitingChildren,
     Done,
 }
 
