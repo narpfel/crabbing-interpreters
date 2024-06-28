@@ -3,7 +3,6 @@
 #![feature(debug_closure_helpers)]
 #![feature(get_many_mut)]
 #![feature(integer_sign_cast)]
-#![feature(lint_reasons)]
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
