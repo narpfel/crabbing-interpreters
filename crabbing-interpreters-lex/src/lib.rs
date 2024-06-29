@@ -310,27 +310,34 @@ impl<'a> Error<'a> {
     }
 }
 
-pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, Error<'a>>>;
+mod wrap_defining_use_for_token_iter {
+    use super::*;
 
-pub fn lex<'a>(bump: &'a Bump, filename: &'a Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
-    let src = bump.alloc_str(src);
-    let source_file = &*bump.alloc(SourceFile { file: filename, src });
-    let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
-        let loc = Loc {
-            span: Span { start: span.start, end: span.end },
+    pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, Error<'a>>>;
+
+    pub fn lex<'a>(bump: &'a Bump, filename: &'a Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
+        let src = bump.alloc_str(src);
+        let source_file = &*bump.alloc(SourceFile { file: filename, src });
+        let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
+            let loc = Loc {
+                span: Span { start: span.start, end: span.end },
+                source_file,
+            };
+            Ok(Token {
+                kind: kind.map_err(|()| Error { at: loc })?,
+                loc,
+            })
+        });
+        let eof_loc = Loc {
+            span: Span { start: src.len(), end: src.len() },
             source_file,
         };
-        Ok(Token {
-            kind: kind.map_err(|()| Error { at: loc })?,
-            loc,
-        })
-    });
-    let eof_loc = Loc {
-        span: Span { start: src.len(), end: src.len() },
-        source_file,
-    };
-    (tokens, eof_loc)
+        (tokens, eof_loc)
+    }
 }
+
+pub use wrap_defining_use_for_token_iter::lex;
+pub use wrap_defining_use_for_token_iter::TokenIter;
 
 #[cfg(test)]
 mod test {
