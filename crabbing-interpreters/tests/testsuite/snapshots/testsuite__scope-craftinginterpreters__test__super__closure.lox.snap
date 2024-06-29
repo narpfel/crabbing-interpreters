@@ -18,10 +18,10 @@ exit_code: 0
    (class Derived (global @2) (global Base @1)
       (method getClosure [(cell this @1)] [None, None]
          (block
-            (fun closure (local @1) [] [Some(1), Some(0)]
+            (fun closure (local @0) [] [Some(1), Some(0)]
                (block
                   (return (call +0 (super (cell super @1) (cell super @0) toString)))))
-            (return (local closure @1))))
+            (return (local closure @0))))
       (method toString [(local this @0)] [None]
          (block
             (return "Derived"))))

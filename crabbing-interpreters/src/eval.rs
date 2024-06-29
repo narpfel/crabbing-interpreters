@@ -308,6 +308,7 @@ pub fn eval<'a>(
             stack_size_at_callsite,
             ..
         } => {
+            let stack_size_at_callsite = stack_size_at_callsite.get();
             let callee = eval(env, cell_vars, offset, callee, trace_call_stack)?;
 
             let eval_call = #[inline(always)]
@@ -674,7 +675,7 @@ pub(crate) fn eval_function<'a>(
         parameters,
         body,
         cells,
-        compiled_body,
+        compiled_body: _,
     } = function;
 
     let cells = GcRef::from_iter_in(
@@ -692,7 +693,7 @@ pub(crate) fn eval_function<'a>(
             parameters,
             code: body,
             cells,
-            compiled_body: *compiled_body,
+            compiled_body: function.compiled_body(),
             code_ptr: 0,
         },
     ))
@@ -735,6 +736,7 @@ mod tests {
             stmts: [scope::Statement::Expression(scoped_ast)],
             global_name_offsets,
             global_cell_count: 0,
+            scopes: _,
         }) = scope::resolve_names(bump, &[], program)
         else {
             unreachable!()

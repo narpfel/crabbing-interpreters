@@ -1,0 +1,31 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/gc_hole_in_stack_layout_via_call.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f (global @1) [] []
+      (block
+         (fun g (local @0) [] []
+            (block))
+         (fun h (local @1) [] []
+            (block))))
+   (fun g (global @2) [] [None]
+      (block
+         (fun in_cell (cell @0) [] [Some(0)]
+            (block
+               (expr (cell in_cell @0))))
+         (var a (local @0) 42.0)
+         (expr (call +1 (global f @1)))))
+   (expr (call +3 (global f @1)))
+   (expr (call +3 (global g @2)))
+   (print "ok"))
+
+----- stderr -----
