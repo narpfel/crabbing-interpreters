@@ -675,7 +675,7 @@ pub(crate) fn eval_function<'a>(
         parameters,
         body,
         cells,
-        compiled_body,
+        compiled_body: _,
     } = function;
 
     let cells = GcRef::from_iter_in(
@@ -693,7 +693,7 @@ pub(crate) fn eval_function<'a>(
             parameters,
             code: body,
             cells,
-            compiled_body: *compiled_body,
+            compiled_body: function.compiled_body(),
             code_ptr: 0,
         },
     ))

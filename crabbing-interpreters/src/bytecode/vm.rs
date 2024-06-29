@@ -606,7 +606,7 @@ pub(crate) fn execute_bytecode<'a>(
                     code: function.body,
                     cells,
                     code_ptr,
-                    compiled_body: function.compiled_body,
+                    compiled_body: function.compiled_body(),
                 },
             ));
             vm.stack_mut(sp).push(value.into_nanboxed());

@@ -514,7 +514,7 @@ pub struct Function<'a> {
     pub(crate) parameters: &'a [Variable<'a>],
     pub(crate) body: &'a [Statement<'a>],
     pub(crate) cells: &'a [Option<usize>],
-    pub(crate) compiled_body: &'a Execute<'a>,
+    pub(crate) compiled_body: &'a Cell<Either<&'a Bump, &'a Execute<'a>>>,
 }
 
 impl Debug for Function<'_> {
@@ -528,7 +528,18 @@ impl Debug for Function<'_> {
     }
 }
 
-impl Function<'_> {
+impl<'a> Function<'a> {
+    pub(crate) fn compiled_body(&self) -> &'a Execute<'a> {
+        match self.compiled_body.get() {
+            Either::Right(compiled_body) => compiled_body,
+            Either::Left(bump) => {
+                let body = compile_block(bump, self.body);
+                self.compiled_body.set(Either::Right(body));
+                body
+            }
+        }
+    }
+
     fn as_sexpr(&self, indent: usize, kind: FunctionKind, target: Option<Variable>) -> String {
         let Self {
             name,
@@ -1229,7 +1240,7 @@ fn resolve_function<'a>(
         parameters,
         body,
         cells,
-        compiled_body: compile_block(bump, body),
+        compiled_body: bump.alloc(Cell::new(Either::Left(bump))),
     })
 }
 
