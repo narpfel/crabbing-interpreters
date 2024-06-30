@@ -389,7 +389,8 @@ pub(crate) fn execute_bytecode<'a>(
             let assignment_target = vm.stack_mut(sp).pop();
             let value = vm.stack_mut(sp).pop();
             match assignment_target.parse() {
-                Instance(instance) => instance.attributes.borrow_mut().insert(name, value),
+                Instance(instance) =>
+                    unsafe { &mut *instance.attributes.as_ptr() }.insert(name, value),
                 _ => {
                     let expr: ExpressionTypes::Assign = vm.error_location_at(*pc);
                     Err(Box::new(Error::NoFields {
