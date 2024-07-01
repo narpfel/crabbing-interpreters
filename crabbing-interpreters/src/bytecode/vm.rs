@@ -692,12 +692,12 @@ pub(crate) fn execute_bytecode<'a>(
             let value = vm.stack_mut(sp).pop();
             let super_class = match value.parse() {
                 Value::Class(class) => class,
-                value => unreachable!("invalid base class value: {value}"),
+                _ => unreachable!("invalid base class value: {}", value.parse()),
             };
             let value = vm.stack_mut(sp).pop();
             let this = match value.parse() {
                 Value::Instance(this) => this,
-                value => unreachable!("`this` is not an instance: {value}"),
+                _ => unreachable!("`this` is not an instance: {}", value.parse()),
             };
             let value = super_class
                 .lookup_method(name)
