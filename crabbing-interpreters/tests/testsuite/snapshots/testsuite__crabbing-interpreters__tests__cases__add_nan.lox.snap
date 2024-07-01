@@ -1,0 +1,13 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/add_nan.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+NaN
+
+----- stderr -----
