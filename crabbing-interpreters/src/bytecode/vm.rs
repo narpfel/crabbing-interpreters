@@ -317,8 +317,8 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp)
                 .push(Bool(!operand.is_truthy()).into_nanboxed());
         }
-        Equal => any_binop(vm, sp, |_, lhs, rhs| Ok(Bool(lhs == rhs)))?,
-        NotEqual => any_binop(vm, sp, |_, lhs, rhs| Ok(Bool(lhs != rhs)))?,
+        Equal => any_binop(vm, sp, |_, lhs, rhs| Bool(lhs == rhs)),
+        NotEqual => any_binop(vm, sp, |_, lhs, rhs| Bool(lhs != rhs)),
         Less => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs < rhs))?,
         LessEqual => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs <= rhs))?,
         Greater => number_binop(vm, *pc, sp, |lhs, rhs| Bool(lhs > rhs))?,
@@ -740,13 +740,12 @@ pub(crate) fn execute_bytecode<'a>(
 fn any_binop<'a>(
     vm: &mut Vm<'a, '_>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
-    op: impl FnOnce(&mut Vm<'a, '_>, Value<'a>, Value<'a>) -> Result<Value<'a>, Box<Error<'a>>>,
-) -> Result<(), Box<Error<'a>>> {
+    op: impl FnOnce(&mut Vm<'a, '_>, Value<'a>, Value<'a>) -> Value<'a>,
+) {
     let rhs = vm.stack_mut(sp).pop().parse();
     let lhs = vm.stack_mut(sp).pop().parse();
-    let result = op(vm, lhs, rhs)?;
+    let result = op(vm, lhs, rhs);
     vm.stack_mut(sp).push(result.into_nanboxed());
-    Ok(())
 }
 
 #[inline(always)]
