@@ -360,6 +360,14 @@ impl<'a> Compiler<'a> {
                     self.exit_expression(self.code.len());
                     self.compile_call(&expr.into_variant(), 2, CallMethod, ShortCallMethod, Pop23);
                 }
+                Expression::Super { super_, this, attribute } => {
+                    self.enter_expression(self.code.len(), callee);
+                    self.compile_load(this);
+                    self.compile_load(super_);
+                    self.code.push(SuperForCall(attribute.id()));
+                    self.exit_expression(self.code.len());
+                    self.compile_call(&expr.into_variant(), 2, CallMethod, ShortCallMethod, Pop23);
+                }
                 _ => {
                     self.compile_expr(callee);
                     self.compile_call(&expr.into_variant(), 1, Call, ShortCall, Pop2);

@@ -718,6 +718,35 @@ pub(crate) fn execute_bytecode<'a>(
                 })?;
             vm.stack_mut(sp).push(value.into_nanboxed());
         }
+        SuperForCall(name) => {
+            // FIXME: could use `peek_at_mut` here to avoid popping and pushing `this`
+            let value = vm.stack_mut(sp).pop();
+            let super_class = match value.parse() {
+                Value::Class(class) => class,
+                _ => unreachable!("invalid base class value: {}", value.parse()),
+            };
+            let this = vm.stack_mut(sp).pop();
+            let method = match vm.inline_cache[*pc] {
+                Some(CachedMethod { class, method }) if class == super_class => method,
+                _ => {
+                    let method = super_class.lookup_method(name).ok_or_else(
+                        #[inline(always)]
+                        || {
+                            let at = vm.error_location_at(*pc);
+                            Box::new(Error::UndefinedSuperProperty {
+                                at,
+                                super_: this.parse(),
+                                attribute: at.attribute,
+                            })
+                        },
+                    )?;
+                    vm.inline_cache[*pc] = Some(CachedMethod { class: super_class, method });
+                    method
+                }
+            };
+            vm.stack_mut(sp).push(method);
+            vm.stack_mut(sp).push(this);
+        }
         ConstNil => vm.stack_mut(sp).push(Value::Nil.into_nanboxed()),
         ConstTrue => vm.stack_mut(sp).push(Value::Bool(true).into_nanboxed()),
         ConstFalse => vm.stack_mut(sp).push(Value::Bool(false).into_nanboxed()),
