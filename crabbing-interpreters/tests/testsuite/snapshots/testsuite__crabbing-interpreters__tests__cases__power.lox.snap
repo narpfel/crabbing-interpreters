@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/power.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+8
+2.8284271247461903
+
+----- stderr -----
