@@ -223,6 +223,7 @@ bytecode! {
         BuildClass(u32),
         BoundMethodGetInstance,
         Super(InternedString),
+        SuperForCall(InternedString),
         ConstNil,
         ConstTrue,
         ConstFalse,
@@ -291,6 +292,7 @@ impl fmt::Display for Bytecode {
             BuildClass(meta_index) => write!(f, "build_class {meta_index}"),
             BoundMethodGetInstance => write!(f, "bound_method_get_instance"),
             Super(name) => write!(f, "super {name}"),
+            SuperForCall(name) => write!(f, "super {name} (immediate_call)"),
             ConstNil => write!(f, "const_nil"),
             ConstTrue => write!(f, "const_true"),
             ConstFalse => write!(f, "const_false"),
@@ -394,6 +396,7 @@ fn validate_bytecode(
             | Bytecode::BuildClass(_)
             | Bytecode::BoundMethodGetInstance
             | Bytecode::Super(_)
+            | Bytecode::SuperForCall(_)
             | Bytecode::ConstNil
             | Bytecode::ConstTrue
             | Bytecode::ConstFalse => (),
