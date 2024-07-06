@@ -1199,8 +1199,6 @@ fn resolve_function<'a>(
                     let super_ = &*bump.alloc(Name::new(interned::SUPER, super_));
                     let super_ = scopes.add(super_).unwrap();
                     scopes.local_to_cell(super_);
-                    // FIXME: ugly hack to avoid a hole in the stack layout of *every* method
-                    scopes.offset -= 1;
                 }
                 // FIXME: this allocates one `this` per method, also the source location is
                 // wrong
@@ -1260,10 +1258,6 @@ fn cell_slots<'a>(
                 };
                 match variable.target() {
                     Target::Local(_) => {
-                        // FIXME: this leaves holes in the stack, wasting space. A better approach
-                        // would be to record the scope structure (not popping local scopes on
-                        // scope exit) and making an additional pass over all variables, assigning
-                        // a dense stack layout
                         let slot = scopes.local_to_cell(*variable);
                         cells[i] = Some(slot);
                     }
