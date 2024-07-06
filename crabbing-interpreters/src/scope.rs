@@ -1199,8 +1199,6 @@ fn resolve_function<'a>(
                     let super_ = &*bump.alloc(Name::new(interned::SUPER, super_));
                     let super_ = scopes.add(super_).unwrap();
                     scopes.local_to_cell(super_);
-                    // FIXME: ugly hack to avoid a hole in the stack layout of *every* method
-                    scopes.offset -= 1;
                 }
                 // FIXME: this allocates one `this` per method, also the source location is
                 // wrong
