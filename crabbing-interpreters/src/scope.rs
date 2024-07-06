@@ -1258,10 +1258,6 @@ fn cell_slots<'a>(
                 };
                 match variable.target() {
                     Target::Local(_) => {
-                        // FIXME: this leaves holes in the stack, wasting space. A better approach
-                        // would be to record the scope structure (not popping local scopes on
-                        // scope exit) and making an additional pass over all variables, assigning
-                        // a dense stack layout
                         let slot = scopes.local_to_cell(*variable);
                         cells[i] = Some(slot);
                     }
