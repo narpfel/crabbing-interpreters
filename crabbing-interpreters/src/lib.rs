@@ -201,6 +201,7 @@ struct Args {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum StopAt {
+    Ast,
     Scopes,
     Bytecode,
 }
@@ -326,6 +327,11 @@ pub fn run<'a>(
         let ast = time("ast", args.times, || {
             parse(program, bump, tokens, eof_loc, &mut interner)
         })?;
+
+        if args.stop_at == Some(StopAt::Ast) {
+            return Ok(());
+        }
+
         let globals = bump.alloc_slice_copy(&[Name::new(
             interner.intern("clock"),
             bump.alloc(Loc::debug_loc(bump, "clock")),
@@ -348,9 +354,11 @@ pub fn run<'a>(
                 write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
             }
             println!("{})", sexpr.trim_end());
-            if args.stop_at == Some(StopAt::Scopes) {
-                return Ok(());
-            }
+        }
+        if args.stop_at == Some(StopAt::Scopes) {
+            return Ok(());
+        }
+        if args.scopes {
             println!();
         }
 
@@ -408,10 +416,11 @@ pub fn run<'a>(
             for (i, bytecode) in bytecode.iter().enumerate() {
                 println!("{i:>DEBUG_INDENT$}   {bytecode}");
             }
-
-            if args.stop_at == Some(StopAt::Bytecode) {
-                return Ok(());
-            }
+        }
+        if args.stop_at == Some(StopAt::Bytecode) {
+            return Ok(());
+        }
+        if args.bytecode {
             println!()
         }
 
