@@ -348,9 +348,11 @@ pub fn run<'a>(
                 write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
             }
             println!("{})", sexpr.trim_end());
-            if args.stop_at == Some(StopAt::Scopes) {
-                return Ok(());
-            }
+        }
+        if args.stop_at == Some(StopAt::Scopes) {
+            return Ok(());
+        }
+        if args.scopes {
             println!();
         }
 
@@ -408,10 +410,11 @@ pub fn run<'a>(
             for (i, bytecode) in bytecode.iter().enumerate() {
                 println!("{i:>DEBUG_INDENT$}   {bytecode}");
             }
-
-            if args.stop_at == Some(StopAt::Bytecode) {
-                return Ok(());
-            }
+        }
+        if args.stop_at == Some(StopAt::Bytecode) {
+            return Ok(());
+        }
+        if args.bytecode {
             println!()
         }
 
