@@ -201,6 +201,7 @@ struct Args {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum StopAt {
+    Ast,
     Scopes,
     Bytecode,
 }
@@ -326,6 +327,11 @@ pub fn run<'a>(
         let ast = time("ast", args.times, || {
             parse(program, bump, tokens, eof_loc, &mut interner)
         })?;
+
+        if args.stop_at == Some(StopAt::Ast) {
+            return Ok(());
+        }
+
         let globals = bump.alloc_slice_copy(&[Name::new(
             interner.intern("clock"),
             bump.alloc(Loc::debug_loc(bump, "clock")),
