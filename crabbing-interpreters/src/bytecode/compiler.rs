@@ -1,5 +1,6 @@
 use std::fmt;
 
+use indexmap::IndexMap;
 use variant_types::IntoVariant as _;
 
 use crate::bytecode::vm::stack::Stack;
@@ -26,7 +27,7 @@ use crate::value::Value;
 struct Compiler<'a> {
     gc: &'a Gc,
     code: Vec<Bytecode>,
-    constants: Vec<nanboxed::Value<'a>>,
+    constants: IndexMap<&'a str, nanboxed::Value<'a>>,
     metadata: Vec<Metadata<'a>>,
     error_locations: Vec<ContainingExpression<'a>>,
 }
@@ -108,7 +109,7 @@ pub(crate) fn compile_program<'a>(
     let mut compiler = Compiler {
         gc,
         code: Vec::new(),
-        constants: Vec::new(),
+        constants: IndexMap::new(),
         metadata: Vec::new(),
         error_locations: Vec::new(),
     };
@@ -126,6 +127,7 @@ pub(crate) fn compile_program<'a>(
         metadata,
         error_locations,
     } = compiler;
+    let constants = constants.into_values().collect();
     (code, constants, metadata, error_locations)
 }
 
@@ -265,23 +267,22 @@ impl<'a> Compiler<'a> {
     fn compile_expr(&mut self, expr: &'a Expression<'a>) {
         self.enter_expression(self.code.len(), expr);
         match expr {
-            Expression::Literal(literal) => {
-                // FIXME: deduplicate constants
-                match literal.kind {
-                    LiteralKind::Number(x) => {
-                        self.code.push(ConstNumber(x.into()));
-                    }
-                    LiteralKind::String(s) => {
-                        self.constants
-                            .push(Value::String(GcStr::new_in(self.gc, s)).into_nanboxed());
-                        self.code
-                            .push(Const((self.constants.len() - 1).try_into().unwrap()));
-                    }
-                    LiteralKind::True => self.code.push(ConstTrue),
-                    LiteralKind::False => self.code.push(ConstFalse),
-                    LiteralKind::Nil => self.code.push(ConstNil),
+            Expression::Literal(literal) => match literal.kind {
+                LiteralKind::Number(x) => {
+                    self.code.push(ConstNumber(x.into()));
                 }
-            }
+                LiteralKind::String(s) => {
+                    let entry = self.constants.entry(s);
+                    let index = entry.index();
+                    entry.or_insert_with(|| {
+                        Value::String(GcStr::new_in(self.gc, s)).into_nanboxed()
+                    });
+                    self.code.push(Const(index.try_into().unwrap()));
+                }
+                LiteralKind::True => self.code.push(ConstTrue),
+                LiteralKind::False => self.code.push(ConstFalse),
+                LiteralKind::Nil => self.code.push(ConstNil),
+            },
             Expression::Unary(operator, operand) => {
                 self.compile_expr(operand);
                 let op = match operator.kind {

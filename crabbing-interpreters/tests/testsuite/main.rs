@@ -281,3 +281,16 @@ fn test_that_threaded_interpreter_is_properly_tailrecursive(
             .stdout(Stdio::null()),
     );
 }
+
+#[apply(interpreter)]
+fn test_that_constants_are_deduplicated(interpreter: Interpreter) {
+    assert_cmd_snapshot!(
+        "test_that_constants_are_deduplicated",
+        Command::from(interpreter).args([
+            "--scopes",
+            "--bytecode",
+            "--stop-at=bytecode",
+            "tests/cases/deduplicated_constants.lox",
+        ]),
+    )
+}
