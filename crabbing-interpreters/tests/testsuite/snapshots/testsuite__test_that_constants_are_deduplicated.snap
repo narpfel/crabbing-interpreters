@@ -1,0 +1,40 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--scopes"
+    - "--bytecode"
+    - "--stop-at=bytecode"
+    - tests/cases/deduplicated_constants.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print "a")
+   (print "b")
+   (print "a"))
+
+Interned strings
+     s.0:  "clock"
+     s.1:  "init"
+     s.2:  "this"
+     s.3:  "super"
+
+Metadata
+
+Constants
+       0:  "a"
+       1:  "b"
+
+Bytecode
+       0   const 0
+       1   print
+       2   const 1
+       3   print
+       4   const 0
+       5   print
+       6   end
+
+----- stderr -----

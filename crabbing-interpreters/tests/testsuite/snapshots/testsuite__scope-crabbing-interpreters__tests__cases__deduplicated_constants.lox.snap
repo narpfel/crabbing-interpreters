@@ -1,0 +1,18 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/deduplicated_constants.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print "a")
+   (print "b")
+   (print "a"))
+
+----- stderr -----
