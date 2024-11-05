@@ -11,7 +11,6 @@
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
-#![feature(strict_provenance)]
 #![warn(clippy::as_conversions)]
 
 use std::cell::Cell;
