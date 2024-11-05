@@ -180,7 +180,7 @@ impl<'a> Index<u32> for Environment<'a> {
     }
 }
 
-impl<'a> IndexMut<u32> for Environment<'a> {
+impl IndexMut<u32> for Environment<'_> {
     fn index_mut(&mut self, index: u32) -> &mut Self::Output {
         &mut self.stack[usize::try_from(index).unwrap()]
     }

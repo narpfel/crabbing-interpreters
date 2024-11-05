@@ -328,7 +328,6 @@ pub(crate) fn execute_bytecode<'a>(
             let lhs = vm.stack(*sp).short_peek_at(1);
             let fast_path_result = lhs.data() + rhs.data();
             if fast_path_result.is_nan() {
-                #[expect(improper_ctypes_definitions)]
                 #[cold]
                 #[inline(never)]
                 extern "rust-cold" fn add_slow_path<'a>(
@@ -628,7 +627,6 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).push(value);
         }
         BuildClass(metadata_index) => {
-            #[expect(improper_ctypes_definitions)]
             #[cold]
             #[inline(never)]
             extern "rust-cold" fn build_class<'a>(
@@ -788,7 +786,6 @@ fn number_binop<'a>(
     let rhs = vm.stack(*sp).short_peek_at(0);
     let lhs = vm.stack(*sp).short_peek_at(1);
     if lhs.data().is_nan() || rhs.data().is_nan() {
-        #[expect(improper_ctypes_definitions)]
         #[cold]
         #[inline(never)]
         extern "rust-cold" fn number_binop_slow_path<'a>(
@@ -834,7 +831,6 @@ fn nan_preserving_number_binop<'a>(
     let lhs = vm.stack(*sp).short_peek_at(1);
     let fast_path_result = op(lhs.data(), rhs.data());
     if fast_path_result.is_nan() {
-        #[expect(improper_ctypes_definitions)]
         #[cold]
         #[inline(never)]
         extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
@@ -1211,7 +1207,7 @@ mod stack_ref {
         }
     }
 
-    impl<'a, T> SetSpOnDrop<'a, T>
+    impl<T> SetSpOnDrop<'_, T>
     where
         T: Copy,
     {
