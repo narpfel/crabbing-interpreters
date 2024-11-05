@@ -350,12 +350,12 @@ impl<'a> Scopes<'a> {
 
     fn add(&mut self, name: &'a Name<'a>) -> Result<Variable<'a>, Error<'a>> {
         if self.is_in_globals() {
-            return Ok(self
+            Ok(self
                 .lookup_local_innermost(name.id())
-                .unwrap_or_else(|| self.add_unconditionally(name)));
+                .unwrap_or_else(|| self.add_unconditionally(name)))
         }
         else if self.lookup_local_innermost(name.id()).is_some() {
-            return Err(Error::DuplicateDefinition { at: *name });
+            Err(Error::DuplicateDefinition { at: *name })
         }
         else {
             Ok(self.add_unconditionally(name))

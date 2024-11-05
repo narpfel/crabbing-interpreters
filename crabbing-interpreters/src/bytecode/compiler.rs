@@ -45,7 +45,7 @@ pub enum Metadata<'a> {
     },
 }
 
-impl<'s> fmt::Debug for Metadata<'s> {
+impl fmt::Debug for Metadata<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Metadata::Function { function, code_size } => f

@@ -1207,7 +1207,7 @@ mod stack_ref {
         }
     }
 
-    impl<'a, T> SetSpOnDrop<'a, T>
+    impl<T> SetSpOnDrop<'_, T>
     where
         T: Copy,
     {
