@@ -191,14 +191,12 @@ where
     }
 }
 
-fn index_failed<T, Idx>(len: usize, index: Idx, location: &Location)
+#[cold]
+#[inline(never)]
+extern "C" fn index_failed<T, Idx>(len: usize, index: Idx, location: &Location)
 where
     Idx: SliceIndex<[T]> + std::fmt::Debug + Clone,
 {
-    #![cfg_attr(not(debug_assertions), expect(unused_variables))]
-    // only enabled in debug mode because it breaks tail-call optimisation in the threaded
-    // interpreter loop
-    #[cfg(debug_assertions)]
     eprintln!(
         "thread '{}' panicked at {}:\nindex operation failed: the len is {} but the index is `{:?}`",
         std::thread::current().name().unwrap_or("<unknown>"),
