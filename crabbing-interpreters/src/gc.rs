@@ -239,7 +239,7 @@ where
 
 impl<T> GcValue<'_, [T]> {
     fn ptr_from_raw_parts(memory: NonNull<u8>, length: usize) -> NonNull<Self> {
-        NonNull::from_raw_parts(memory.cast(), length)
+        NonNull::from_raw_parts(memory, length)
     }
 }
 
