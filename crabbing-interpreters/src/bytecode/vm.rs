@@ -753,6 +753,9 @@ pub(crate) fn execute_bytecode<'a>(
             unsafe { nanboxed::Value::from_f64_unchecked(number.into()) },
         ),
     }
+    // SAFETY: we only run with bytecode validated by `validate_bytecode` which checks that (1)
+    // there are no out-of-bounds jumps and (2) the code ends with an `End` opcode. Therefore, this
+    // addition will never overflow.
     unsafe {
         *pc = pc.unchecked_add(1);
     }

@@ -210,7 +210,10 @@ impl Gc {
                         self.last.set(prev);
                     }
 
-                    (head.drop)(head_ptr.cast(), head.length)
+                    // SAFETY: we have removed the value from the list of gc’d values, so it will
+                    // not be seen again in a future collection. Therefore, this is the only `drop`
+                    // call for this value.
+                    unsafe { (head.drop)(head_ptr.cast(), head.length) }
                 }
             }
         }
@@ -248,7 +251,9 @@ struct GcHead {
     prev: Option<NonNull<Cell<GcHead>>>,
     next: Option<NonNull<Cell<GcHead>>>,
     length: usize,
-    drop: fn(NonNull<()>, usize),
+    /// SAFETY: This must only be called once, and it must be a deallocation function matching the
+    /// allocation function used to allocate this gc value.
+    drop: unsafe fn(NonNull<()>, usize),
     state: State,
 }
 
