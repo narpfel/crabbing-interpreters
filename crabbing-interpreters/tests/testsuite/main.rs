@@ -47,6 +47,8 @@ impl From<Interpreter> for Command {
         let features = std::env::var("TEST_FEATURES").unwrap_or_else(|_| "".to_string());
         #[cfg(feature = "miri_tests")]
         let miri_args = ["miri", "run", "-q", "--features", &features, "--"];
+        #[cfg(feature = "miri_tests")]
+        const MIRIFLAGS: &str = "-Zmiri-disable-isolation -Zmiri-deterministic-floats";
 
         match interpreter {
             Interpreter::Native(Loop::Ast) => Command::new(get_cargo_bin("crabbing-interpreters")),
@@ -68,9 +70,7 @@ impl From<Interpreter> for Command {
             #[cfg(feature = "miri_tests")]
             Interpreter::Miri(Loop::Ast) => {
                 let mut command = Command::new("cargo");
-                command
-                    .args(&miri_args)
-                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                command.args(&miri_args).env("MIRIFLAGS", MIRIFLAGS);
                 command
             }
             #[cfg(feature = "miri_tests")]
@@ -79,7 +79,7 @@ impl From<Interpreter> for Command {
                 command
                     .args(&miri_args)
                     .arg("--loop=closures")
-                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                    .env("MIRIFLAGS", MIRIFLAGS);
                 command
             }
             #[cfg(feature = "miri_tests")]
@@ -88,7 +88,7 @@ impl From<Interpreter> for Command {
                 command
                     .args(&miri_args)
                     .arg("--loop=bytecode")
-                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                    .env("MIRIFLAGS", MIRIFLAGS);
                 command
             }
             #[cfg(feature = "miri_tests")]
@@ -97,7 +97,7 @@ impl From<Interpreter> for Command {
                 command
                     .args(&miri_args)
                     .arg("--loop=threaded")
-                    .env("MIRIFLAGS", "-Zmiri-disable-isolation");
+                    .env("MIRIFLAGS", MIRIFLAGS);
                 command
             }
         }

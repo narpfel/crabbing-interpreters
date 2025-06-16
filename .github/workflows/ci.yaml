@@ -56,7 +56,7 @@ jobs:
           ulimit -s $((8192 * 10))
           ulimit -a
 
-          cargo miri test \
+          MIRIFLAGS=-Zmiri-deterministic-floats cargo miri test \
             --lib \
             --features=${{ matrix.features }}
 
