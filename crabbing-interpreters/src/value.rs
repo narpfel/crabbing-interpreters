@@ -1,3 +1,6 @@
+// TODO: apply this only to the actual comparison of `NativeFunction`
+#![expect(unpredictable_function_pointer_comparisons)]
+
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;

@@ -185,7 +185,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         &self.execution_counts
     }
 
-    fn stack(&self, sp: NonNull<nanboxed::Value<'a>>) -> StackRef<nanboxed::Value<'a>> {
+    fn stack(&self, sp: NonNull<nanboxed::Value<'a>>) -> StackRef<'_, nanboxed::Value<'a>> {
         StackRef::new(self, sp)
     }
 

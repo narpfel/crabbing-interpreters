@@ -1,12 +1,9 @@
 #![feature(closure_lifetime_binder)]
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
-#![feature(get_many_mut)]
-#![feature(integer_sign_cast)]
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
-#![feature(ptr_sub_ptr)]
 #![feature(rust_cold_cc)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
@@ -276,7 +273,7 @@ fn repl() -> Result<(), Box<dyn Report>> {
         match result {
             Ok(value) | Err(ControlFlow::Return(value)) =>
                 if !matches!(value, Value::Nil) {
-                    println!("\x1B[38;2;170;034;255m\x1B[1m=> {}\x1B[0m", value);
+                    println!("\x1B[38;2;170;034;255m\x1B[1m=> {value}\x1B[0m");
                 },
             Err(ControlFlow::Error(err)) => err.print(),
         }

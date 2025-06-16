@@ -723,6 +723,7 @@ mod tests {
         Gc::default()
     }
 
+    #[expect(clippy::result_large_err)]
     fn eval_str<'a>(gc: &'a Gc, bump: &'a Bump, src: &'a str) -> Result<Value<'a>, Error<'a>> {
         let (tokens, _) = crate::lex(bump, Path::new("<src>"), ";");
         let Ok(&[semi]) = tokens.collect::<Result<Vec<_>, _>>().as_deref()
