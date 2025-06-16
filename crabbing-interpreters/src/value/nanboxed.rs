@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem::transmute;
-use std::panic::Location;
 use std::ptr::NonNull;
 
 use crate::gc::GcRef;
@@ -55,20 +54,7 @@ impl<'a> Value<'a> {
         }
         else {
             let tag = (data & !NAN_BITS) >> NANBOX_TAG_OFFSET;
-            // TODO: we could use `unwrap_unchecked` here if necessary for performance, but `parse`
-            // is called relatively rarely and mostly on slow paths and for opcodes that are
-            // expensive anyways, so the performance impact is not really measurable.
-            extern "C" fn parse_nanbox_tag_failed(invalid_tag: u64, location: &Location) -> ! {
-                eprintln!(
-                    "thread '{}' panicked at {location}:\ninvalid nanbox tag: {invalid_tag}",
-                    std::thread::current().name().unwrap_or("<unknown>"),
-                );
-                std::process::abort()
-            }
-            let tag = NanBoxTag::try_from(tag).unwrap_or_else(
-                #[track_caller]
-                |tag| parse_nanbox_tag_failed(tag, Location::caller()),
-            );
+            let tag = unsafe { NanBoxTag::try_from(tag).unwrap_unchecked() };
             let pointer = extend_leftmost_pointer_bit(data);
             let pointer = self.data.with_addr(usize::try_from(pointer).unwrap());
             // SAFETY: `pointer` is not null here because `data != NAN_BITS`
