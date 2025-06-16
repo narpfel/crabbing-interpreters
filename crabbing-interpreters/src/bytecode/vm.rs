@@ -406,7 +406,6 @@ pub(crate) fn execute_bytecode<'a>(
                 *sp,
                 name,
                 |vm, sp, Attribute(attribute)| vm.stack_mut(sp).push(attribute),
-                #[cfg_attr(panic = "abort", inline(never))]
                 |vm, sp, Attribute(method), instance| {
                     let Value::Instance(instance) = instance.parse()
                     else {
@@ -435,7 +434,6 @@ pub(crate) fn execute_bytecode<'a>(
                     vm.stack_mut(sp).push(attribute);
                     vm.stack_mut(sp).push(Value::Nil.into_nanboxed());
                 },
-                #[cfg_attr(all(panic = "abort", not(feature = "mmap")), inline(never))]
                 |vm, sp, Attribute(method), instance| {
                     vm.stack_mut(sp).push(method);
                     vm.stack_mut(sp).push(instance);
