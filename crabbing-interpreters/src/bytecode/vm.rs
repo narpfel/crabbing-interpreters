@@ -185,7 +185,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         &self.execution_counts
     }
 
-    fn stack(&self, sp: NonNull<nanboxed::Value<'a>>) -> StackRef<nanboxed::Value<'a>> {
+    fn stack(&self, sp: NonNull<nanboxed::Value<'a>>) -> StackRef<'_, nanboxed::Value<'a>> {
         StackRef::new(self, sp)
     }
 
@@ -406,7 +406,6 @@ pub(crate) fn execute_bytecode<'a>(
                 *sp,
                 name,
                 |vm, sp, Attribute(attribute)| vm.stack_mut(sp).push(attribute),
-                #[cfg_attr(panic = "abort", inline(never))]
                 |vm, sp, Attribute(method), instance| {
                     let Value::Instance(instance) = instance.parse()
                     else {
@@ -435,7 +434,6 @@ pub(crate) fn execute_bytecode<'a>(
                     vm.stack_mut(sp).push(attribute);
                     vm.stack_mut(sp).push(Value::Nil.into_nanboxed());
                 },
-                #[cfg_attr(all(panic = "abort", not(feature = "mmap")), inline(never))]
                 |vm, sp, Attribute(method), instance| {
                     vm.stack_mut(sp).push(method);
                     vm.stack_mut(sp).push(instance);
@@ -687,34 +685,46 @@ pub(crate) fn execute_bytecode<'a>(
             }
         }
         Super(name) => {
-            let value = vm.stack_mut(sp).pop();
-            let super_class = match value.parse() {
-                Value::Class(class) => class,
-                _ => unreachable!("invalid base class value: {}", value.parse()),
-            };
-            let value = vm.stack_mut(sp).pop();
-            let this = match value.parse() {
-                Value::Instance(this) => this,
-                _ => unreachable!("`this` is not an instance: {}", value.parse()),
-            };
-            let value = super_class
-                .lookup_method(name)
-                .map(|method| match method.parse() {
-                    Value::Function(method) => Value::BoundMethod(GcRef::new_in(
-                        vm.env.gc,
-                        BoundMethodInner { method, instance: this },
-                    )),
-                    _ => unreachable!(),
-                })
-                .ok_or_else(|| {
-                    let super_ = vm.error_location_at(*pc);
-                    Box::new(Error::UndefinedSuperProperty {
-                        at: super_,
-                        super_: Value::Instance(this),
-                        attribute: super_.attribute,
+            #[cold]
+            #[inline(never)]
+            extern "rust-cold" fn do_super<'a>(
+                vm: &mut Vm<'a, '_>,
+                pc: usize,
+                mut sp: NonNull<nanboxed::Value<'a>>,
+                name: InternedString,
+            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
+                let sp = &mut sp;
+                let value = vm.stack_mut(sp).pop();
+                let super_class = match value.parse() {
+                    Value::Class(class) => class,
+                    _ => unreachable!("invalid base class value: {}", value.parse()),
+                };
+                let value = vm.stack_mut(sp).pop();
+                let this = match value.parse() {
+                    Value::Instance(this) => this,
+                    _ => unreachable!("`this` is not an instance: {}", value.parse()),
+                };
+                let value = super_class
+                    .lookup_method(name)
+                    .map(|method| match method.parse() {
+                        Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                            vm.env.gc,
+                            BoundMethodInner { method, instance: this },
+                        )),
+                        _ => unreachable!(),
                     })
-                })?;
-            vm.stack_mut(sp).push(value.into_nanboxed());
+                    .ok_or_else(|| {
+                        let super_ = vm.error_location_at(pc);
+                        Box::new(Error::UndefinedSuperProperty {
+                            at: super_,
+                            super_: Value::Instance(this),
+                            attribute: super_.attribute,
+                        })
+                    })?;
+                vm.stack_mut(sp).push(value.into_nanboxed());
+                Ok(*sp)
+            }
+            *sp = do_super(vm, *pc, *sp, name)?;
         }
         SuperForCall(name) => {
             // FIXME: could use `peek_at_mut` here to avoid popping and pushing `this`
@@ -1133,8 +1143,7 @@ fn execute_function_call<'a>(
 
 struct Attribute<'a>(nanboxed::Value<'a>);
 
-#[cfg_attr(panic = "abort", inline(always))]
-#[cfg_attr(not(panic = "abort"), inline(never))]
+#[inline(never)]
 fn execute_attribute_lookup<'a>(
     vm: &mut Vm<'a, '_>,
     pc: usize,

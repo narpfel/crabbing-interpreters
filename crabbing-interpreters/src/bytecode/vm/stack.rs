@@ -23,7 +23,7 @@ impl<T> Stack<T> {
     }
 
     pub(super) unsafe fn from_raw_parts(base: NonNull<T>, sp: NonNull<T>) -> Self {
-        let pointer = unsafe { sp.sub_ptr(base) };
+        let pointer = unsafe { sp.offset_from_unsigned(base) };
         Self {
             stack: AbortOnOutOfBounds(base.cast()),
             pointer,
@@ -111,7 +111,7 @@ impl<T, const N: usize> AbortOnOutOfBounds<T, N> {
     #[track_caller]
     fn swap(&mut self, i: usize, j: usize) -> Result<(), ()> {
         if i != j {
-            match self.deref_mut().get_many_mut([i, j]) {
+            match self.deref_mut().get_disjoint_mut([i, j]) {
                 Ok([x, y]) => {
                     std::mem::swap(x, y);
                     Ok(())

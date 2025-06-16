@@ -30,7 +30,7 @@ jobs:
       - name: Install Rust nightly toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2025-01-15
+          toolchain: nightly-2025-06-16
           components: miri
       - name: Install `cargo-insta`
         run: |
@@ -56,7 +56,7 @@ jobs:
           ulimit -s $((8192 * 10))
           ulimit -a
 
-          cargo miri test \
+          MIRIFLAGS=-Zmiri-deterministic-floats cargo miri test \
             --lib \
             --features=${{ matrix.features }}
 

@@ -1,3 +1,6 @@
+// TODO: reduce size of `Error`
+#![expect(clippy::result_large_err)]
+
 use std::iter::Peekable;
 
 use ariadne::Color::Blue;
@@ -110,8 +113,8 @@ impl<'a> From<crate::lex::Error<'a>> for Error<'a> {
 #[derive(Debug)]
 pub struct Eof<'a>(Loc<'a>);
 
-impl Eof<'_> {
-    fn loc(&self) -> Loc {
+impl<'a> Eof<'a> {
+    fn loc(&self) -> Loc<'a> {
         self.0
     }
 }

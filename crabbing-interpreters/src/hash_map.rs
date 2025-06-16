@@ -58,7 +58,7 @@ where
         }
     }
 
-    fn index(&self, key: &K) -> IndexResult<K, V> {
+    fn index(&self, key: &K) -> IndexResult<'_, K, V> {
         #[expect(clippy::as_conversions)]
         let hash = self.build_hasher.hash_one(key) as usize;
         let mut index = hash & self.mask();

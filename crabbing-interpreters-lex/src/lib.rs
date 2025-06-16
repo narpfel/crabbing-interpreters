@@ -28,7 +28,7 @@ impl<'a> Token<'a> {
         format!("{} {} {}", self.kind.kind_str(), self.slice(), self.value())
     }
 
-    fn value(&self) -> TokenValue {
+    fn value(&self) -> TokenValue<'_> {
         match self.kind {
             TokenKind::String => TokenValue::String(&self.slice()[1..self.slice().len() - 1]),
             TokenKind::Number => TokenValue::Number(self.slice().parse().unwrap()),
@@ -310,34 +310,28 @@ impl<'a> Error<'a> {
     }
 }
 
-mod wrap_defining_use_for_token_iter {
-    use super::*;
+pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, Error<'a>>>;
 
-    pub type TokenIter<'a> = impl Iterator<Item = Result<Token<'a>, Error<'a>>>;
-
-    pub fn lex<'a>(bump: &'a Bump, filename: &'a Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
-        let src = bump.alloc_str(src);
-        let source_file = &*bump.alloc(SourceFile { file: filename, src });
-        let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
-            let loc = Loc {
-                span: Span { start: span.start, end: span.end },
-                source_file,
-            };
-            Ok(Token {
-                kind: kind.map_err(|()| Error { at: loc })?,
-                loc,
-            })
-        });
-        let eof_loc = Loc {
-            span: Span { start: src.len(), end: src.len() },
+#[define_opaque(TokenIter)]
+pub fn lex<'a>(bump: &'a Bump, filename: &'a Path, src: &str) -> (TokenIter<'a>, Loc<'a>) {
+    let src = bump.alloc_str(src);
+    let source_file = &*bump.alloc(SourceFile { file: filename, src });
+    let tokens = TokenKind::lexer(src).spanned().map(|(kind, span)| {
+        let loc = Loc {
+            span: Span { start: span.start, end: span.end },
             source_file,
         };
-        (tokens, eof_loc)
-    }
+        Ok(Token {
+            kind: kind.map_err(|()| Error { at: loc })?,
+            loc,
+        })
+    });
+    let eof_loc = Loc {
+        span: Span { start: src.len(), end: src.len() },
+        source_file,
+    };
+    (tokens, eof_loc)
 }
-
-pub use wrap_defining_use_for_token_iter::lex;
-pub use wrap_defining_use_for_token_iter::TokenIter;
 
 #[cfg(test)]
 mod test {

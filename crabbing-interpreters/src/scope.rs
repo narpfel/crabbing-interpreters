@@ -781,10 +781,10 @@ impl<'a> Variable<'a> {
     fn as_sexpr(&self) -> String {
         let name = self.name.slice();
         match self.target() {
-            Target::Local(slot) => format!("(local {} @{slot})", name),
-            Target::GlobalByName => format!("(global-by-name {})", name),
-            Target::GlobalBySlot(slot) => format!("(global {} @{slot})", name),
-            Target::Cell(slot) => format!("(cell {} @{slot})", name),
+            Target::Local(slot) => format!("(local {name} @{slot})"),
+            Target::GlobalByName => format!("(global-by-name {name})"),
+            Target::GlobalBySlot(slot) => format!("(global {name} @{slot})"),
+            Target::Cell(slot) => format!("(cell {name} @{slot})"),
         }
     }
 
