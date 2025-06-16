@@ -689,8 +689,8 @@ pub(crate) fn execute_bytecode<'a>(
             #[inline(never)]
             extern "rust-cold" fn do_super<'a>(
                 vm: &mut Vm<'a, '_>,
-                mut sp: NonNull<nanboxed::Value<'a>>,
                 pc: usize,
+                mut sp: NonNull<nanboxed::Value<'a>>,
                 name: InternedString,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
                 let sp = &mut sp;
@@ -724,7 +724,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm.stack_mut(sp).push(value.into_nanboxed());
                 Ok(*sp)
             }
-            *sp = do_super(vm, *sp, *pc, name)?;
+            *sp = do_super(vm, *pc, *sp, name)?;
         }
         SuperForCall(name) => {
             // FIXME: could use `peek_at_mut` here to avoid popping and pushing `this`
