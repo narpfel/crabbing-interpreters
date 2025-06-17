@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem::transmute;
@@ -22,27 +23,80 @@ fn extend_leftmost_pointer_bit(n: u64) -> u64 {
     ((n.cast_signed() << (64 - NANBOX_TAG_OFFSET)) >> (64 - NANBOX_TAG_OFFSET)).cast_unsigned()
 }
 
+#[derive(Clone, Copy)]
+union F64WithProvenance {
+    float: f64,
+    pointer: *const (),
+}
+
+impl F64WithProvenance {
+    fn pointer(self) -> *const () {
+        const {
+            assert!(
+                size_of::<f64>() == size_of::<usize>(),
+                "nan-boxing only works on 64-bit systems",
+            )
+        }
+        unsafe { self.pointer }
+    }
+
+    fn data(self) -> f64 {
+        unsafe { self.float }
+    }
+
+    fn addr(self) -> usize {
+        self.pointer().addr()
+    }
+
+    fn with_addr(self, addr: usize) -> *const () {
+        self.pointer().with_addr(addr)
+    }
+}
+
+impl PartialEq for F64WithProvenance {
+    fn eq(&self, other: &Self) -> bool {
+        self.addr() == other.addr()
+    }
+}
+
+impl Eq for F64WithProvenance {}
+
+impl From<*const ()> for F64WithProvenance {
+    fn from(pointer: *const ()) -> Self {
+        Self { pointer }
+    }
+}
+
+impl fmt::Debug for F64WithProvenance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.pointer())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Value<'a> {
-    data: *const (),
+    data: F64WithProvenance,
     _value: PhantomData<Unboxed<'a>>,
 }
 
 impl<'a> Value<'a> {
     pub(super) fn new(data: *const ()) -> Self {
-        Self { data, _value: PhantomData }
+        Self {
+            data: F64WithProvenance { pointer: data },
+            _value: PhantomData,
+        }
     }
 
     pub(crate) unsafe fn from_f64_unchecked(number: f64) -> Self {
         debug_assert!(!number.is_nan());
         Self {
-            data: std::ptr::null::<()>().with_addr(usize::try_from(number.to_bits()).unwrap()),
+            data: F64WithProvenance { float: number },
             _value: PhantomData,
         }
     }
 
     pub(crate) fn data(self) -> f64 {
-        f64::from_bits(u64::try_from(self.data.addr()).unwrap())
+        self.data.data()
     }
 
     #[inline(always)]
