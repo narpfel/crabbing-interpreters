@@ -105,7 +105,7 @@ macro_rules! bytecode {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
                                         let next = unsafe { pc.read() };
-                                        (next.function)(vm, pc, sp, offset)
+                                        become (next.function)(vm, pc, sp, offset)
                                     }
                                 }
                             }
