@@ -1,17 +1,16 @@
 default_job = "check"
 
 [jobs.check]
-command = ["cargo", "check", "--profile=clif", "--color", "always"]
+command = ["cargo", "check", "--color", "always"]
 need_stdout = false
 
 [jobs.check-all]
-command = ["cargo", "check", "--profile=clif", "--all-targets", "--color", "always"]
+command = ["cargo", "check", "--all-targets", "--color", "always"]
 need_stdout = false
 
 [jobs.clippy]
 command = [
     "cargo", "clippy",
-    "--profile=clif",
     "--all-targets",
     "--color", "always",
 ]
@@ -20,7 +19,6 @@ need_stdout = false
 [jobs.test]
 command = [
     "cargo", "test", "--color", "always",
-    "--profile=clif",
     "--package", "crabbing-interpreters",
     "--package", "crabbing-interpreters-lex",
     "--tests",
@@ -41,14 +39,14 @@ env.RUSTFLAGS = ""
 
 [jobs.doc]
 command = [
-    "cargo", "doc", "--profile=clif", "--color", "always",
+    "cargo", "doc", "--color", "always",
     "--no-deps", "--document-private-items",
 ]
 need_stdout = false
 
 [jobs.doc-open]
 command = [
-    "cargo", "doc", "--profile=clif", "--color", "always",
+    "cargo", "doc", "--color", "always",
     "--no-deps", "--open", "--document-private-items",
 ]
 need_stdout = false
@@ -57,7 +55,6 @@ on_success = "back"
 [jobs.run]
 command = [
     "cargo", "run",
-    "--profile=clif",
     "--color", "always",
 ]
 need_stdout = true
