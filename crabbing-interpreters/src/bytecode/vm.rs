@@ -118,6 +118,7 @@ struct CachedMethod<'a> {
 
 pub(crate) struct Vm<'a, 'b> {
     compiled_bytecodes: CompiledBytecodes<'b>,
+    inline_cache: Box<[Option<CachedMethod<'a>>]>,
     constants: &'b [nanboxed::Value<'a>],
     metadata: &'b [Metadata<'a>],
     error_locations: &'b [ContainingExpression<'a>],
@@ -128,7 +129,6 @@ pub(crate) struct Vm<'a, 'b> {
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
-    inline_cache: Box<[Option<CachedMethod<'a>>]>,
 }
 
 impl Drop for Vm<'_, '_> {
