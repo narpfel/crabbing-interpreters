@@ -66,15 +66,14 @@ macro_rules! bytecode {
                             #[allow(non_snake_case)]
                             fn $variant_name<'a>(
                                 vm: &mut Vm<'a, '_>,
-                                mut pc: usize,
+                                mut pc: NonNull<CompiledBytecode>,
                                 mut sp: NonNull<nanboxed::Value<'a>>,
                                 mut offset: u32,
-                                compiled_program: CompiledBytecodes,
                             ) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                     // SAFETY: `compiled_program` has the same length as
                                     // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                    = unsafe { compiled_program.get_unchecked(pc) }.bytecode
+                                    = unsafe { pc.read() }.bytecode
                                 else {
                                     unsafe {
                                         std::hint::unreachable_unchecked();
@@ -85,7 +84,7 @@ macro_rules! bytecode {
                                     &mut pc,
                                     &mut sp,
                                     &mut offset,
-                                    $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
+                                    $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?,
                                 );
                                 match result {
                                     Err(value) => {
@@ -97,8 +96,8 @@ macro_rules! bytecode {
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
                                         // `vm.bytecode` and `vm.pc()` is always in bounds for that
-                                        let next = unsafe { compiled_program.get_unchecked(pc) };
-                                        (next.function)(vm, pc, sp, offset, compiled_program)
+                                        let next = unsafe { pc.read() };
+                                        (next.function)(vm, pc, sp, offset)
                                     }
                                 }
                             }
@@ -136,13 +135,21 @@ impl<'a> CompiledBytecodes<'a> {
         debug_assert!(index <= self.2);
         unsafe { self.0.add(index).read() }
     }
+
+    unsafe fn index(self, pc: NonNull<CompiledBytecode>) -> usize {
+        unsafe { pc.offset_from_unsigned(self.0) }
+    }
+
+    unsafe fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
+        unsafe { self.0.add(index) }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompiledBytecode {
     pub(crate) bytecode: Bytecode,
     pub(crate) function:
-        for<'a> fn(&mut Vm<'a, '_>, usize, NonNull<nanboxed::Value<'a>>, u32, CompiledBytecodes),
+        for<'a> fn(&mut Vm<'a, '_>, NonNull<CompiledBytecode>, NonNull<nanboxed::Value<'a>>, u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -304,7 +311,18 @@ impl fmt::Display for Bytecode {
 fn validate_bytecode(
     bytecodes: &[Bytecode],
     metadata: &[Metadata],
+    compiled_bytecodes: CompiledBytecodes,
 ) -> Result<(), vm::InvalidBytecode> {
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(bytecodes.len(), compiled_bytecodes.2);
+
+    itertools::assert_equal(
+        bytecodes.iter().copied(),
+        unsafe { std::slice::from_raw_parts(compiled_bytecodes.0.as_ptr(), bytecodes.len()) }
+            .iter()
+            .map(|compiled_bytecode| compiled_bytecode.bytecode),
+    );
+
     let valid_jump_targets = 1..u32::try_from(bytecodes.len()).unwrap();
 
     if !matches!(bytecodes.last(), Some(Bytecode::End)) {

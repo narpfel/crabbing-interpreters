@@ -439,6 +439,7 @@ pub fn run<'a>(
                         &error_locations,
                         stack,
                         global_cells,
+                        compiled_bytecodes,
                     )?)?,
                     Loop::Threaded => {
                         let mut vm = Vm::new(
@@ -448,8 +449,9 @@ pub fn run<'a>(
                             &error_locations,
                             stack,
                             global_cells,
+                            compiled_bytecodes,
                         )?;
-                        vm.run_threaded(compiled_bytecodes);
+                        vm.run_threaded();
 
                         if args.show_bytecode_execution_counts {
                             let max_len = Bytecode::all_discriminants()

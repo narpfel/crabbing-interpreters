@@ -6,6 +6,7 @@ use variant_types::IntoEnum;
 use variant_types::IntoVariant;
 use Bytecode::*;
 
+use super::CompiledBytecode;
 use super::CompiledBytecodes;
 use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
@@ -98,7 +99,7 @@ impl Report for InvalidBytecode {
 
 #[derive(Debug, Clone, Copy)]
 struct CallFrame<'a> {
-    pc: usize,
+    pc: NonNull<CompiledBytecode>,
     offset: u32,
     cells: Cells<'a>,
 }
@@ -116,7 +117,8 @@ struct CachedMethod<'a> {
 }
 
 pub(crate) struct Vm<'a, 'b> {
-    bytecode: &'b [Bytecode],
+    compiled_bytecodes: CompiledBytecodes<'b>,
+    inline_cache: Box<[Option<CachedMethod<'a>>]>,
     constants: &'b [nanboxed::Value<'a>],
     metadata: &'b [Metadata<'a>],
     error_locations: &'b [ContainingExpression<'a>],
@@ -127,7 +129,6 @@ pub(crate) struct Vm<'a, 'b> {
     cell_vars: Cells<'a>,
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
-    inline_cache: Box<[Option<CachedMethod<'a>>]>,
 }
 
 impl Drop for Vm<'_, '_> {
@@ -144,13 +145,13 @@ impl<'a, 'b> Vm<'a, 'b> {
         error_locations: &'b [ContainingExpression<'a>],
         env: Environment<'a>,
         global_cells: Cells<'a>,
+        compiled_bytecodes: CompiledBytecodes<'b>,
     ) -> Result<Self, InvalidBytecode> {
         let gc = env.gc;
-        validate_bytecode(bytecode, metadata)?;
+        validate_bytecode(bytecode, metadata, compiled_bytecodes)?;
         let stack = Stack::new(Value::Nil.into_nanboxed());
         let (stack_base, stack_pointer) = stack.into_raw_parts();
         Ok(Self {
-            bytecode,
             constants,
             metadata,
             error_locations,
@@ -158,7 +159,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             stack_base,
             stack_pointer,
             call_stack: Stack::new(CallFrame {
-                pc: 0,
+                pc: compiled_bytecodes.0,
                 offset: 0,
                 cells: Cells::from_iter_in(gc, [].into_iter()),
             }),
@@ -166,6 +167,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             execution_counts: Box::new([0; Bytecode::all_discriminants().len()]),
             error: None,
             inline_cache: vec![None; bytecode.len()].into_boxed_slice(),
+            compiled_bytecodes,
         })
     }
 
@@ -220,12 +222,21 @@ impl<'a, 'b> Vm<'a, 'b> {
         self.constants[index.cast()]
     }
 
+    fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
+        unsafe { self.compiled_bytecodes.get_pc(index) }
+    }
+
+    fn get_inline_cache(&mut self, pc: NonNull<CompiledBytecode>) -> &mut Option<CachedMethod<'a>> {
+        &mut self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }]
+    }
+
     #[cold]
-    fn error_location_at<ExpressionType>(&self, pc: usize) -> ExpressionType
+    fn error_location_at<ExpressionType>(&self, pc: NonNull<CompiledBytecode>) -> ExpressionType
     where
         ExpressionType: IntoEnum<Enum = Expression<'a>>,
         Expression<'a>: IntoVariant<ExpressionType>,
     {
+        let pc = unsafe { self.compiled_bytecodes.index(pc) };
         let index = self
             .error_locations
             .partition_point(|containing_expr| containing_expr.at() <= pc);
@@ -246,20 +257,20 @@ impl<'a, 'b> Vm<'a, 'b> {
         unreachable!()
     }
 
-    pub(crate) fn run_threaded(&mut self, compiled_bytecodes: CompiledBytecodes) {
-        let compiled_bytecode = unsafe { compiled_bytecodes.get_unchecked(0) };
-        (compiled_bytecode.function)(self, 0, self.stack_pointer, 0, compiled_bytecodes);
+    pub(crate) fn run_threaded(&mut self) {
+        let compiled_bytecode = unsafe { self.compiled_bytecodes.get_unchecked(0) };
+        (compiled_bytecode.function)(self, self.compiled_bytecodes.0, self.stack_pointer, 0);
     }
 }
 
 pub fn run_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
-    let mut pc = 0;
+    let mut pc = vm.compiled_bytecodes.0;
     let mut sp = vm.stack_pointer;
     let mut offset = 0;
     loop {
-        let bytecode = vm.bytecode[pc];
+        let bytecode = unsafe { pc.read() }.bytecode;
         match execute_bytecode(vm, &mut pc, &mut sp, &mut offset, bytecode) {
             Ok(()) => (),
             Err(None) => {
@@ -277,7 +288,7 @@ pub fn run_bytecode<'a>(
 #[inline(always)]
 pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: &mut usize,
+    pc: &mut NonNull<CompiledBytecode>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
     offset: &mut u32,
     bytecode: Bytecode,
@@ -332,7 +343,7 @@ pub(crate) fn execute_bytecode<'a>(
                 #[inline(never)]
                 extern "rust-cold" fn add_slow_path<'a>(
                     vm: &mut Vm<'a, '_>,
-                    pc: usize,
+                    pc: NonNull<CompiledBytecode>,
                     mut sp: NonNull<nanboxed::Value<'a>>,
                 ) -> Result<NonNull<nanboxed::Value<'a>>, Option<Box<Error<'a>>>> {
                     let sp = &mut sp;
@@ -544,34 +555,34 @@ pub(crate) fn execute_bytecode<'a>(
         JumpIfTrue(target) => {
             let value = vm.stack_mut(sp).pop();
             if value.is_truthy() {
-                *pc = target.cast() - 1;
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         JumpIfFalse(target) => {
             let value = vm.stack_mut(sp).pop();
             if !value.is_truthy() {
-                *pc = target.cast() - 1;
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         PopJumpIfTrue(target) => {
             let value = vm.stack(*sp).peek();
             if value.is_truthy() {
                 vm.stack_mut(sp).pop();
-                *pc = target.cast() - 1;
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         PopJumpIfFalse(target) => {
             let value = vm.stack(*sp).peek();
             if !value.is_truthy() {
                 vm.stack_mut(sp).pop();
-                *pc = target.cast() - 1;
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         Jump(target) => {
-            *pc = target.cast() - 1;
+            *pc = vm.get_pc(target.cast() - 1);
         }
         BeginFunction(target) => {
-            *pc += target.cast();
+            *pc = unsafe { pc.add(target.cast()) };
         }
         Return => {
             CallFrame {
@@ -585,7 +596,7 @@ pub(crate) fn execute_bytecode<'a>(
             else {
                 unreachable!()
             };
-            let code_ptr = *pc - code_size.cast();
+            let code_ptr = unsafe { vm.compiled_bytecodes.index(pc.sub(code_size.cast())) };
             let cells = GcRef::from_iter_in(
                 vm.env.gc,
                 function.cells.iter().map(|cell| match cell {
@@ -649,7 +660,9 @@ pub(crate) fn execute_bytecode<'a>(
                         Class(class) => Some(class),
                         base => Err(Box::new(Error::InvalidBase {
                             base,
-                            at: vm.error_location_at(error_location),
+                            at: vm.error_location_at(unsafe {
+                                vm.compiled_bytecodes.get_pc(error_location)
+                            }),
                         }))?,
                     }
                 }
@@ -689,7 +702,7 @@ pub(crate) fn execute_bytecode<'a>(
             #[inline(never)]
             extern "rust-cold" fn do_super<'a>(
                 vm: &mut Vm<'a, '_>,
-                pc: usize,
+                pc: NonNull<CompiledBytecode>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 name: InternedString,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
@@ -734,7 +747,7 @@ pub(crate) fn execute_bytecode<'a>(
                 _ => unreachable!("invalid base class value: {}", value.parse()),
             };
             let this = vm.stack_mut(sp).pop();
-            let method = match vm.inline_cache[*pc] {
+            let method = match *vm.get_inline_cache(*pc) {
                 Some(CachedMethod { class, method }) if class == super_class => method,
                 _ => {
                     let method = super_class.lookup_method(name).ok_or_else(
@@ -748,7 +761,7 @@ pub(crate) fn execute_bytecode<'a>(
                             })
                         },
                     )?;
-                    vm.inline_cache[*pc] = Some(CachedMethod { class: super_class, method });
+                    *vm.get_inline_cache(*pc) = Some(CachedMethod { class: super_class, method });
                     method
                 }
             };
@@ -767,7 +780,7 @@ pub(crate) fn execute_bytecode<'a>(
     // there are no out-of-bounds jumps and (2) the code ends with an `End` opcode. Therefore, this
     // addition will never overflow.
     unsafe {
-        *pc = pc.unchecked_add(1);
+        *pc = pc.add(1);
     }
     if cfg!(miri) || previous_pc > *pc {
         vm.collect_if_necessary(*sp);
@@ -792,7 +805,7 @@ fn any_binop<'a>(
 #[track_caller]
 fn number_binop<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: usize,
+    pc: NonNull<CompiledBytecode>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
     op: impl FnOnce(f64, f64) -> Value<'a>,
 ) -> Result<(), Box<Error<'a>>> {
@@ -803,7 +816,7 @@ fn number_binop<'a>(
         #[inline(never)]
         extern "rust-cold" fn number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
-            pc: usize,
+            pc: NonNull<CompiledBytecode>,
             mut sp: NonNull<nanboxed::Value<'a>>,
             op: impl FnOnce(f64, f64) -> Value<'a>,
         ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
@@ -836,7 +849,7 @@ fn number_binop<'a>(
 #[track_caller]
 fn nan_preserving_number_binop<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: usize,
+    pc: NonNull<CompiledBytecode>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
     op: impl Fn(f64, f64) -> f64,
 ) -> Result<(), Box<Error<'a>>> {
@@ -848,7 +861,7 @@ fn nan_preserving_number_binop<'a>(
         #[inline(never)]
         extern "rust-cold" fn nan_preserving_number_binop_slow_path<'a>(
             vm: &mut Vm<'a, '_>,
-            pc: usize,
+            pc: NonNull<CompiledBytecode>,
             mut sp: NonNull<nanboxed::Value<'a>>,
             op: impl Fn(f64, f64) -> f64,
         ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
@@ -908,7 +921,7 @@ impl Peeker for BoundsCheckedPeek {
 #[inline(always)]
 fn execute_call<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: &mut usize,
+    pc: &mut NonNull<CompiledBytecode>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
     offset: &mut u32,
     argument_count: u32,
@@ -948,7 +961,7 @@ fn execute_call<'a>(
             #[inline(never)]
             fn call_native_function<'a>(
                 vm: &mut Vm<'a, '_>,
-                pc: usize,
+                pc: NonNull<CompiledBytecode>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 argument_count: u32,
                 native_fn: fn(Vec<Value>) -> Result<Value, NativeError>,
@@ -976,20 +989,20 @@ fn execute_call<'a>(
             *sp = call_native_function(vm, *pc, *sp, argument_count, native_fn, callee)?;
         }
         Class(class) => {
+            type PcSpOffset<'a> = (NonNull<CompiledBytecode>, NonNull<nanboxed::Value<'a>>, u32);
             #[expect(clippy::too_many_arguments)]
             #[cold]
             #[inline(never)]
             fn call_class<'a>(
                 vm: &mut Vm<'a, '_>,
-                mut pc: usize,
+                mut pc: NonNull<CompiledBytecode>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 mut offset: u32,
                 class: GcRef<'a, ClassInner<'a>>,
                 argument_count: u32,
                 callee: Value<'a>,
                 stack_size_at_callsite: u32,
-            ) -> Result<(usize, NonNull<nanboxed::Value<'a>>, u32), Option<Box<Error<'a>>>>
-            {
+            ) -> Result<PcSpOffset<'a>, Option<Box<Error<'a>>>> {
                 let pc = &mut pc;
                 let sp = &mut sp;
                 let offset = &mut offset;
@@ -1058,7 +1071,7 @@ fn execute_call<'a>(
 #[inline(always)]
 fn execute_call_method<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: &mut usize,
+    pc: &mut NonNull<CompiledBytecode>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
     offset: &mut u32,
     argument_count: u32,
@@ -1115,7 +1128,7 @@ fn execute_call_method<'a>(
 #[inline(always)]
 fn execute_function_call<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: &mut usize,
+    pc: &mut NonNull<CompiledBytecode>,
     offset: &mut u32,
     function: GcRef<'a, FunctionInner<'a>>,
     parameter_count: usize,
@@ -1135,7 +1148,7 @@ fn execute_function_call<'a>(
         offset: *offset,
         cells: vm.cell_vars,
     });
-    *pc = function.code_ptr - 1;
+    *pc = unsafe { vm.compiled_bytecodes.get_pc(function.code_ptr - 1) };
     *offset += stack_size_at_callsite;
     vm.cell_vars = function.cells;
     Ok(())
@@ -1146,7 +1159,7 @@ struct Attribute<'a>(nanboxed::Value<'a>);
 #[inline(never)]
 fn execute_attribute_lookup<'a>(
     vm: &mut Vm<'a, '_>,
-    pc: usize,
+    pc: NonNull<CompiledBytecode>,
     mut sp: NonNull<nanboxed::Value<'a>>,
     name: InternedString,
     push_attribute: impl FnOnce(&mut Vm<'a, '_>, &mut NonNull<nanboxed::Value<'a>>, Attribute<'a>),
@@ -1166,11 +1179,12 @@ fn execute_attribute_lookup<'a>(
             .copied()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
             .or_else(|| {
-                let method = match vm.inline_cache[pc] {
+                let method = match vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] {
                     Some(CachedMethod { class, method }) if class == instance.class => method,
                     _ => {
                         let method = instance.class.lookup_method(name)?;
-                        vm.inline_cache[pc] = Some(CachedMethod { class: instance.class, method });
+                        vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] =
+                            Some(CachedMethod { class: instance.class, method });
                         method
                     }
                 };
@@ -1286,13 +1300,17 @@ mod tests {
     fn multiple_stack_refs() {
         let gc = Gc::default();
         let global_cells = Cells::from_iter_in(&gc, [].into_iter());
+        let bytecode = [Bytecode::End];
+        let compiled_bytecodes = bytecode.map(Bytecode::compile);
+        let compiled_bytecodes = CompiledBytecodes::new(&compiled_bytecodes);
         let mut vm = Vm::new(
-            &[Bytecode::End],
+            &bytecode,
             &[],
             &[],
             &[],
             Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells),
             global_cells,
+            compiled_bytecodes,
         )
         .unwrap();
         let mut sp = vm.stack_pointer;
