@@ -117,6 +117,7 @@ struct CachedMethod<'a> {
 }
 
 pub(crate) struct Vm<'a, 'b> {
+    compiled_bytecodes: CompiledBytecodes<'b>,
     constants: &'b [nanboxed::Value<'a>],
     metadata: &'b [Metadata<'a>],
     error_locations: &'b [ContainingExpression<'a>],
@@ -128,7 +129,6 @@ pub(crate) struct Vm<'a, 'b> {
     execution_counts: Box<[u64; Bytecode::all_discriminants().len()]>,
     error: Option<Box<Error<'a>>>,
     inline_cache: Box<[Option<CachedMethod<'a>>]>,
-    compiled_bytecodes: CompiledBytecodes<'b>,
 }
 
 impl Drop for Vm<'_, '_> {
@@ -222,6 +222,14 @@ impl<'a, 'b> Vm<'a, 'b> {
         self.constants[index.cast()]
     }
 
+    fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
+        unsafe { self.compiled_bytecodes.get_pc(index) }
+    }
+
+    fn get_inline_cache(&mut self, pc: NonNull<CompiledBytecode>) -> &mut Option<CachedMethod<'a>> {
+        &mut self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }]
+    }
+
     #[cold]
     fn error_location_at<ExpressionType>(&self, pc: NonNull<CompiledBytecode>) -> ExpressionType
     where
@@ -251,13 +259,7 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn run_threaded(&mut self) {
         let compiled_bytecode = unsafe { self.compiled_bytecodes.get_unchecked(0) };
-        (compiled_bytecode.function)(
-            self,
-            self.compiled_bytecodes.0,
-            self.stack_pointer,
-            0,
-            self.compiled_bytecodes,
-        );
+        (compiled_bytecode.function)(self, self.compiled_bytecodes.0, self.stack_pointer, 0);
     }
 }
 
@@ -269,14 +271,7 @@ pub fn run_bytecode<'a>(
     let mut offset = 0;
     loop {
         let bytecode = unsafe { pc.read() }.bytecode;
-        match execute_bytecode(
-            vm,
-            &mut pc,
-            &mut sp,
-            &mut offset,
-            vm.compiled_bytecodes,
-            bytecode,
-        ) {
+        match execute_bytecode(vm, &mut pc, &mut sp, &mut offset, bytecode) {
             Ok(()) => (),
             Err(None) => {
                 assert_eq!(vm.stack_base, sp);
@@ -296,7 +291,6 @@ pub(crate) fn execute_bytecode<'a>(
     pc: &mut NonNull<CompiledBytecode>,
     sp: &mut NonNull<nanboxed::Value<'a>>,
     offset: &mut u32,
-    compiled_bytecodes: CompiledBytecodes,
     bytecode: Bytecode,
 ) -> Result<(), Option<Box<Error<'a>>>> {
     #[cfg(feature = "count_bytecode_execution")]
@@ -561,31 +555,31 @@ pub(crate) fn execute_bytecode<'a>(
         JumpIfTrue(target) => {
             let value = vm.stack_mut(sp).pop();
             if value.is_truthy() {
-                *pc = unsafe { compiled_bytecodes.get_pc(target.cast() - 1) };
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         JumpIfFalse(target) => {
             let value = vm.stack_mut(sp).pop();
             if !value.is_truthy() {
-                *pc = unsafe { compiled_bytecodes.get_pc(target.cast() - 1) };
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         PopJumpIfTrue(target) => {
             let value = vm.stack(*sp).peek();
             if value.is_truthy() {
                 vm.stack_mut(sp).pop();
-                *pc = unsafe { compiled_bytecodes.get_pc(target.cast() - 1) };
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         PopJumpIfFalse(target) => {
             let value = vm.stack(*sp).peek();
             if !value.is_truthy() {
                 vm.stack_mut(sp).pop();
-                *pc = unsafe { compiled_bytecodes.get_pc(target.cast() - 1) };
+                *pc = vm.get_pc(target.cast() - 1);
             }
         }
         Jump(target) => {
-            *pc = unsafe { compiled_bytecodes.get_pc(target.cast() - 1) };
+            *pc = vm.get_pc(target.cast() - 1);
         }
         BeginFunction(target) => {
             *pc = unsafe { pc.add(target.cast()) };
@@ -602,7 +596,7 @@ pub(crate) fn execute_bytecode<'a>(
             else {
                 unreachable!()
             };
-            let code_ptr = unsafe { compiled_bytecodes.index(pc.sub(code_size.cast())) };
+            let code_ptr = unsafe { vm.compiled_bytecodes.index(pc.sub(code_size.cast())) };
             let cells = GcRef::from_iter_in(
                 vm.env.gc,
                 function.cells.iter().map(|cell| match cell {
@@ -648,7 +642,6 @@ pub(crate) fn execute_bytecode<'a>(
                 vm: &mut Vm<'a, '_>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 metadata_index: u32,
-                compiled_bytecodes: CompiledBytecodes,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
                 let sp = &mut sp;
                 let Metadata::Class { name, methods, base_error_location } =
@@ -668,7 +661,7 @@ pub(crate) fn execute_bytecode<'a>(
                         base => Err(Box::new(Error::InvalidBase {
                             base,
                             at: vm.error_location_at(unsafe {
-                                compiled_bytecodes.get_pc(error_location)
+                                vm.compiled_bytecodes.get_pc(error_location)
                             }),
                         }))?,
                     }
@@ -690,7 +683,7 @@ pub(crate) fn execute_bytecode<'a>(
                 vm.stack_mut(sp).push(Class(class).into_nanboxed());
                 Ok(*sp)
             }
-            *sp = build_class(vm, *sp, metadata_index, compiled_bytecodes)?;
+            *sp = build_class(vm, *sp, metadata_index)?;
         }
         b @ BoundMethodGetInstance => {
             let value = vm.stack(*sp).peek();
@@ -754,7 +747,7 @@ pub(crate) fn execute_bytecode<'a>(
                 _ => unreachable!("invalid base class value: {}", value.parse()),
             };
             let this = vm.stack_mut(sp).pop();
-            let method = match vm.inline_cache[unsafe { compiled_bytecodes.index(*pc) }] {
+            let method = match *vm.get_inline_cache(*pc) {
                 Some(CachedMethod { class, method }) if class == super_class => method,
                 _ => {
                     let method = super_class.lookup_method(name).ok_or_else(
@@ -768,8 +761,7 @@ pub(crate) fn execute_bytecode<'a>(
                             })
                         },
                     )?;
-                    vm.inline_cache[unsafe { compiled_bytecodes.index(*pc) }] =
-                        Some(CachedMethod { class: super_class, method });
+                    *vm.get_inline_cache(*pc) = Some(CachedMethod { class: super_class, method });
                     method
                 }
             };
