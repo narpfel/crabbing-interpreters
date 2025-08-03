@@ -131,16 +131,18 @@ impl<'a> CompiledBytecodes<'a> {
     }
 
     pub(crate) unsafe fn get_unchecked(self, index: usize) -> CompiledBytecode {
-        #[cfg(debug_assertions)]
-        debug_assert!(index <= self.2);
-        unsafe { self.0.add(index).read() }
+        unsafe { self.get_pc(index).read() }
     }
 
     unsafe fn index(self, pc: NonNull<CompiledBytecode>) -> usize {
+        #[cfg(debug_assertions)]
+        debug_assert!(self.0 <= pc && pc < self.0.add(self.2));
         unsafe { pc.offset_from_unsigned(self.0) }
     }
 
     unsafe fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
+        #[cfg(debug_assertions)]
+        debug_assert!(index < self.2);
         unsafe { self.0.add(index) }
     }
 }
