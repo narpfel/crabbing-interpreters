@@ -159,7 +159,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             stack_base,
             stack_pointer,
             call_stack: Stack::new(CallFrame {
-                pc: compiled_bytecodes.0,
+                pc: NonNull::new(compiled_bytecodes.0.as_ptr().cast_mut()).unwrap(),
                 offset: 0,
                 cells: Cells::from_iter_in(gc, [].into_iter()),
             }),
@@ -222,11 +222,16 @@ impl<'a, 'b> Vm<'a, 'b> {
         self.constants[index.cast()]
     }
 
-    fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
+    /// SAFETY: `index` must be in range for `self.compiled_bytecodes`.
+    unsafe fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
         unsafe { self.compiled_bytecodes.get_pc(index) }
     }
 
-    fn get_inline_cache(&mut self, pc: NonNull<CompiledBytecode>) -> &mut Option<CachedMethod<'a>> {
+    /// SAFETY: `pc` must point into the memory of `self.compiled_bytecodes`.
+    unsafe fn get_inline_cache(
+        &mut self,
+        pc: NonNull<CompiledBytecode>,
+    ) -> &mut Option<CachedMethod<'a>> {
         &mut self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }]
     }
 
@@ -259,14 +264,15 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn run_threaded(&mut self) {
         let compiled_bytecode = unsafe { self.compiled_bytecodes.get_unchecked(0) };
-        (compiled_bytecode.function)(self, self.compiled_bytecodes.0, self.stack_pointer, 0);
+        (compiled_bytecode.function)(self, unsafe { self.get_pc(0) }, self.stack_pointer, 0);
     }
 }
 
 pub fn run_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
-    let mut pc = vm.compiled_bytecodes.0;
+    assert!(vm.compiled_bytecodes.len() > 0);
+    let mut pc = unsafe { vm.get_pc(0) };
     let mut sp = vm.stack_pointer;
     let mut offset = 0;
     loop {
@@ -555,31 +561,31 @@ pub(crate) fn execute_bytecode<'a>(
         JumpIfTrue(target) => {
             let value = vm.stack_mut(sp).pop();
             if value.is_truthy() {
-                *pc = vm.get_pc(target.cast() - 1);
+                *pc = unsafe { vm.get_pc(target.cast() - 1) };
             }
         }
         JumpIfFalse(target) => {
             let value = vm.stack_mut(sp).pop();
             if !value.is_truthy() {
-                *pc = vm.get_pc(target.cast() - 1);
+                *pc = unsafe { vm.get_pc(target.cast() - 1) };
             }
         }
         PopJumpIfTrue(target) => {
             let value = vm.stack(*sp).peek();
             if value.is_truthy() {
                 vm.stack_mut(sp).pop();
-                *pc = vm.get_pc(target.cast() - 1);
+                *pc = unsafe { vm.get_pc(target.cast() - 1) };
             }
         }
         PopJumpIfFalse(target) => {
             let value = vm.stack(*sp).peek();
             if !value.is_truthy() {
                 vm.stack_mut(sp).pop();
-                *pc = vm.get_pc(target.cast() - 1);
+                *pc = unsafe { vm.get_pc(target.cast() - 1) };
             }
         }
         Jump(target) => {
-            *pc = vm.get_pc(target.cast() - 1);
+            *pc = unsafe { vm.get_pc(target.cast() - 1) };
         }
         BeginFunction(target) => {
             *pc = unsafe { pc.add(target.cast()) };
@@ -747,7 +753,7 @@ pub(crate) fn execute_bytecode<'a>(
                 _ => unreachable!("invalid base class value: {}", value.parse()),
             };
             let this = vm.stack_mut(sp).pop();
-            let method = match *vm.get_inline_cache(*pc) {
+            let method = match unsafe { *vm.get_inline_cache(*pc) } {
                 Some(CachedMethod { class, method }) if class == super_class => method,
                 _ => {
                     let method = super_class.lookup_method(name).ok_or_else(
@@ -761,7 +767,8 @@ pub(crate) fn execute_bytecode<'a>(
                             })
                         },
                     )?;
-                    *vm.get_inline_cache(*pc) = Some(CachedMethod { class: super_class, method });
+                    *unsafe { vm.get_inline_cache(*pc) } =
+                        Some(CachedMethod { class: super_class, method });
                     method
                 }
             };

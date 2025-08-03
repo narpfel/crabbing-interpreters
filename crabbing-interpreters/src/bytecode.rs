@@ -1,5 +1,4 @@
 use std::fmt;
-use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 pub(crate) use crate::bytecode::compiler::compile_program;
@@ -114,34 +113,30 @@ macro_rules! bytecode {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct CompiledBytecodes<'a>(
-    NonNull<CompiledBytecode>,
-    PhantomData<&'a [CompiledBytecode]>,
-    #[cfg(debug_assertions)] usize,
-);
+pub(crate) struct CompiledBytecodes<'a>(&'a [CompiledBytecode]);
 
 impl<'a> CompiledBytecodes<'a> {
     pub(crate) fn new(bytecodes: &'a [CompiledBytecode]) -> Self {
-        Self(
-            NonNull::new(bytecodes.as_ptr().cast_mut()).unwrap(),
-            PhantomData,
-            #[cfg(debug_assertions)]
-            bytecodes.len(),
-        )
+        Self(bytecodes)
+    }
+
+    fn len(self) -> usize {
+        self.0.len()
     }
 
     pub(crate) unsafe fn get_unchecked(self, index: usize) -> CompiledBytecode {
-        #[cfg(debug_assertions)]
-        debug_assert!(index <= self.2);
-        unsafe { self.0.add(index).read() }
+        unsafe { self.get_pc(index).read() }
     }
 
     unsafe fn index(self, pc: NonNull<CompiledBytecode>) -> usize {
-        unsafe { pc.offset_from_unsigned(self.0) }
+        let offset = self.0.element_offset(unsafe { pc.as_ref() });
+        unsafe { offset.unwrap_unchecked() }
     }
 
     unsafe fn get_pc(&self, index: usize) -> NonNull<CompiledBytecode> {
-        unsafe { self.0.add(index) }
+        debug_assert!(index < self.0.len());
+        let ptr = NonNull::new(self.0.as_ptr().cast_mut()).unwrap();
+        unsafe { ptr.add(index) }
     }
 }
 
@@ -313,12 +308,10 @@ fn validate_bytecode(
     metadata: &[Metadata],
     compiled_bytecodes: CompiledBytecodes,
 ) -> Result<(), vm::InvalidBytecode> {
-    #[cfg(debug_assertions)]
-    debug_assert_eq!(bytecodes.len(), compiled_bytecodes.2);
-
     itertools::assert_equal(
         bytecodes.iter().copied(),
-        unsafe { std::slice::from_raw_parts(compiled_bytecodes.0.as_ptr(), bytecodes.len()) }
+        compiled_bytecodes
+            .0
             .iter()
             .map(|compiled_bytecode| compiled_bytecode.bytecode),
     );
