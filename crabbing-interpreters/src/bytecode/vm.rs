@@ -159,7 +159,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             stack_base,
             stack_pointer,
             call_stack: Stack::new(CallFrame {
-                pc: compiled_bytecodes.0,
+                pc: NonNull::new(compiled_bytecodes.0.as_ptr().cast_mut()).unwrap(),
                 offset: 0,
                 cells: Cells::from_iter_in(gc, [].into_iter()),
             }),
@@ -264,14 +264,15 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn run_threaded(&mut self) {
         let compiled_bytecode = unsafe { self.compiled_bytecodes.get_unchecked(0) };
-        (compiled_bytecode.function)(self, self.compiled_bytecodes.0, self.stack_pointer, 0);
+        (compiled_bytecode.function)(self, unsafe { self.get_pc(0) }, self.stack_pointer, 0);
     }
 }
 
 pub fn run_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
 ) -> Result<Value<'a>, ControlFlow<Value<'a>, Box<Error<'a>>>> {
-    let mut pc = vm.compiled_bytecodes.0;
+    assert!(vm.compiled_bytecodes.len() > 0);
+    let mut pc = unsafe { vm.get_pc(0) };
     let mut sp = vm.stack_pointer;
     let mut offset = 0;
     loop {
