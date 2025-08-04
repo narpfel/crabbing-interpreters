@@ -86,11 +86,20 @@ macro_rules! bytecode {
                                     $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?,
                                 );
                                 match result {
-                                    Err(value) => {
-                                        unsafe {
-                                            vm.set_stack_pointer(sp);
+                                    Err(error) => {
+                                        #[cold]
+                                        #[inline(never)]
+                                        fn set_error<'a>(
+                                            vm: &mut Vm<'a, '_>,
+                                            sp: NonNull<nanboxed::Value<'a>>,
+                                            error: Option<Box<crate::eval::Error<'a>>>,
+                                        ) {
+                                            unsafe {
+                                                vm.set_stack_pointer(sp);
+                                            }
+                                            vm.set_error(error)
                                         }
-                                        vm.set_error(value)
+                                        set_error(vm, sp, error);
                                     }
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
