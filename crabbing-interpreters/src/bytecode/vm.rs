@@ -818,7 +818,9 @@ fn number_binop<'a>(
 ) -> Result<(), Box<Error<'a>>> {
     let rhs = vm.stack(*sp).short_peek_at(0);
     let lhs = vm.stack(*sp).short_peek_at(1);
-    if lhs.data().is_nan() || rhs.data().is_nan() {
+    // This checks `rhs` first because this way `Less` and `LessEqual` comparisons are optimised
+    // better than `Greater`/`GreaterEqual` by LLVM. Non-short-circuiting also improves codegen.
+    if rhs.data().is_nan() | lhs.data().is_nan() {
         #[cold]
         #[inline(never)]
         extern "rust-cold" fn number_binop_slow_path<'a>(
