@@ -1,6 +1,7 @@
 #![feature(closure_lifetime_binder)]
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
+#![feature(explicit_tail_calls)]
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
@@ -10,6 +11,7 @@
 #![feature(stmt_expr_attributes)]
 #![feature(substr_range)]
 #![warn(clippy::as_conversions)]
+#![expect(incomplete_features)]
 
 use std::cell::Cell;
 use std::ffi::OsStr;

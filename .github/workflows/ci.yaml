@@ -38,9 +38,6 @@ jobs:
       - name: test
         run: |
           set -x
-          ulimit -a
-          ulimit -s $((8192 * 10))
-          ulimit -a
 
           # ignore unreferenced snapshots here because miri snapshots would be
           # rejected here
@@ -52,9 +49,6 @@ jobs:
       - name: miri tests
         run: |
           set -x
-          ulimit -a
-          ulimit -s $((8192 * 10))
-          ulimit -a
 
           MIRIFLAGS=-Zmiri-deterministic-floats cargo miri test \
             --lib \
