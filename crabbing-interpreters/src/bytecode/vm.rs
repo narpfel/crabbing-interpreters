@@ -523,17 +523,8 @@ pub(crate) fn execute_bytecode<'a>(
             )?;
         }
         Print => {
-            #[cold]
-            #[inline(never)]
-            extern "rust-cold" fn print<'a>(
-                vm: &mut Vm<'a, '_>,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-            ) -> NonNull<nanboxed::Value<'a>> {
-                let value = vm.stack_mut(&mut sp).pop().parse();
-                println!("{value}");
-                sp
-            }
-            *sp = print(vm, *sp);
+            let value = vm.stack_mut(sp).pop().parse();
+            println!("{value}");
         }
         GlobalByName(name) => {
             let variable = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
