@@ -1133,7 +1133,7 @@ fn execute_function_call<'a>(
 
 struct Attribute<'a>(nanboxed::Value<'a>);
 
-#[inline(never)]
+#[inline(always)]
 fn execute_attribute_lookup<'a>(
     vm: &mut Vm<'a, '_>,
     pc: NonNull<CompiledBytecode>,
