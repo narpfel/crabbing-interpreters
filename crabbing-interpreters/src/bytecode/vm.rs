@@ -633,54 +633,43 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).push(value);
         }
         BuildClass(metadata_index) => {
-            #[cold]
-            #[inline(never)]
-            extern "rust-cold" fn build_class<'a>(
-                vm: &mut Vm<'a, '_>,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-                metadata_index: u32,
-            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
-                let sp = &mut sp;
-                let Metadata::Class { name, methods, base_error_location } =
-                    vm.metadata[metadata_index.cast()]
-                else {
-                    unreachable!()
-                };
-                let methods = methods
-                    .iter()
-                    .rev()
-                    .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
-                    .collect();
-                let base = if let Some(error_location) = base_error_location {
-                    let base = vm.stack_mut(sp).pop();
-                    match base.parse() {
-                        Class(class) => Some(class),
-                        base => Err(Box::new(Error::InvalidBase {
-                            base,
-                            at: vm.error_location_at(unsafe {
-                                vm.compiled_bytecodes.get_pc(error_location)
-                            }),
-                        }))?,
-                    }
+            let Metadata::Class { name, methods, base_error_location } =
+                vm.metadata[metadata_index.cast()]
+            else {
+                unreachable!()
+            };
+            let methods = methods
+                .iter()
+                .rev()
+                .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
+                .collect();
+            let base = if let Some(error_location) = base_error_location {
+                let base = vm.stack_mut(sp).pop();
+                match base.parse() {
+                    Class(class) => Some(class),
+                    base => Err(Box::new(Error::InvalidBase {
+                        base,
+                        at: vm.error_location_at(unsafe {
+                            vm.compiled_bytecodes.get_pc(error_location)
+                        }),
+                    }))?,
                 }
-                else {
-                    None
-                };
-                let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
-                if let Some(base) = base {
-                    let base = Class(base).into_nanboxed();
-                    class.methods.values().for_each(|method| {
-                        let Function(method) = method.parse()
-                        else {
-                            unreachable!()
-                        };
-                        method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
-                    });
-                }
-                vm.stack_mut(sp).push(Class(class).into_nanboxed());
-                Ok(*sp)
             }
-            *sp = build_class(vm, *sp, metadata_index)?;
+            else {
+                None
+            };
+            let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
+            if let Some(base) = base {
+                let base = Class(base).into_nanboxed();
+                class.methods.values().for_each(|method| {
+                    let Function(method) = method.parse()
+                    else {
+                        unreachable!()
+                    };
+                    method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
+                });
+            }
+            vm.stack_mut(sp).push(Class(class).into_nanboxed());
         }
         b @ BoundMethodGetInstance => {
             let value = vm.stack(*sp).peek();
