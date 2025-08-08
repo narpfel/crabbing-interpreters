@@ -523,17 +523,8 @@ pub(crate) fn execute_bytecode<'a>(
             )?;
         }
         Print => {
-            #[cold]
-            #[inline(never)]
-            extern "rust-cold" fn print<'a>(
-                vm: &mut Vm<'a, '_>,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-            ) -> NonNull<nanboxed::Value<'a>> {
-                let value = vm.stack_mut(&mut sp).pop().parse();
-                println!("{value}");
-                sp
-            }
-            *sp = print(vm, *sp);
+            let value = vm.stack_mut(sp).pop().parse();
+            println!("{value}");
         }
         GlobalByName(name) => {
             let variable = vm.env.get_global_slot_by_id(name).ok_or_else(|| {
@@ -642,54 +633,43 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).push(value);
         }
         BuildClass(metadata_index) => {
-            #[cold]
-            #[inline(never)]
-            extern "rust-cold" fn build_class<'a>(
-                vm: &mut Vm<'a, '_>,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-                metadata_index: u32,
-            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
-                let sp = &mut sp;
-                let Metadata::Class { name, methods, base_error_location } =
-                    vm.metadata[metadata_index.cast()]
-                else {
-                    unreachable!()
-                };
-                let methods = methods
-                    .iter()
-                    .rev()
-                    .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
-                    .collect();
-                let base = if let Some(error_location) = base_error_location {
-                    let base = vm.stack_mut(sp).pop();
-                    match base.parse() {
-                        Class(class) => Some(class),
-                        base => Err(Box::new(Error::InvalidBase {
-                            base,
-                            at: vm.error_location_at(unsafe {
-                                vm.compiled_bytecodes.get_pc(error_location)
-                            }),
-                        }))?,
-                    }
+            let Metadata::Class { name, methods, base_error_location } =
+                vm.metadata[metadata_index.cast()]
+            else {
+                unreachable!()
+            };
+            let methods = methods
+                .iter()
+                .rev()
+                .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
+                .collect();
+            let base = if let Some(error_location) = base_error_location {
+                let base = vm.stack_mut(sp).pop();
+                match base.parse() {
+                    Class(class) => Some(class),
+                    base => Err(Box::new(Error::InvalidBase {
+                        base,
+                        at: vm.error_location_at(unsafe {
+                            vm.compiled_bytecodes.get_pc(error_location)
+                        }),
+                    }))?,
                 }
-                else {
-                    None
-                };
-                let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
-                if let Some(base) = base {
-                    let base = Class(base).into_nanboxed();
-                    class.methods.values().for_each(|method| {
-                        let Function(method) = method.parse()
-                        else {
-                            unreachable!()
-                        };
-                        method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
-                    });
-                }
-                vm.stack_mut(sp).push(Class(class).into_nanboxed());
-                Ok(*sp)
             }
-            *sp = build_class(vm, *sp, metadata_index)?;
+            else {
+                None
+            };
+            let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
+            if let Some(base) = base {
+                let base = Class(base).into_nanboxed();
+                class.methods.values().for_each(|method| {
+                    let Function(method) = method.parse()
+                    else {
+                        unreachable!()
+                    };
+                    method.cells[0].set(GcRef::new_in(vm.env.gc, Cell::new(base)));
+                });
+            }
+            vm.stack_mut(sp).push(Class(class).into_nanboxed());
         }
         b @ BoundMethodGetInstance => {
             let value = vm.stack(*sp).peek();
@@ -704,46 +684,34 @@ pub(crate) fn execute_bytecode<'a>(
             }
         }
         Super(name) => {
-            #[cold]
-            #[inline(never)]
-            extern "rust-cold" fn do_super<'a>(
-                vm: &mut Vm<'a, '_>,
-                pc: NonNull<CompiledBytecode>,
-                mut sp: NonNull<nanboxed::Value<'a>>,
-                name: InternedString,
-            ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
-                let sp = &mut sp;
-                let value = vm.stack_mut(sp).pop();
-                let super_class = match value.parse() {
-                    Value::Class(class) => class,
-                    _ => unreachable!("invalid base class value: {}", value.parse()),
-                };
-                let value = vm.stack_mut(sp).pop();
-                let this = match value.parse() {
-                    Value::Instance(this) => this,
-                    _ => unreachable!("`this` is not an instance: {}", value.parse()),
-                };
-                let value = super_class
-                    .lookup_method(name)
-                    .map(|method| match method.parse() {
-                        Value::Function(method) => Value::BoundMethod(GcRef::new_in(
-                            vm.env.gc,
-                            BoundMethodInner { method, instance: this },
-                        )),
-                        _ => unreachable!(),
+            let value = vm.stack_mut(sp).pop();
+            let super_class = match value.parse() {
+                Value::Class(class) => class,
+                _ => unreachable!("invalid base class value: {}", value.parse()),
+            };
+            let value = vm.stack_mut(sp).pop();
+            let this = match value.parse() {
+                Value::Instance(this) => this,
+                _ => unreachable!("`this` is not an instance: {}", value.parse()),
+            };
+            let value = super_class
+                .lookup_method(name)
+                .map(|method| match method.parse() {
+                    Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                        vm.env.gc,
+                        BoundMethodInner { method, instance: this },
+                    )),
+                    _ => unreachable!(),
+                })
+                .ok_or_else(|| {
+                    let super_ = vm.error_location_at(*pc);
+                    Box::new(Error::UndefinedSuperProperty {
+                        at: super_,
+                        super_: Value::Instance(this),
+                        attribute: super_.attribute,
                     })
-                    .ok_or_else(|| {
-                        let super_ = vm.error_location_at(pc);
-                        Box::new(Error::UndefinedSuperProperty {
-                            at: super_,
-                            super_: Value::Instance(this),
-                            attribute: super_.attribute,
-                        })
-                    })?;
-                vm.stack_mut(sp).push(value.into_nanboxed());
-                Ok(*sp)
-            }
-            *sp = do_super(vm, *pc, *sp, name)?;
+                })?;
+            vm.stack_mut(sp).push(value.into_nanboxed());
         }
         SuperForCall(name) => {
             // FIXME: could use `peek_at_mut` here to avoid popping and pushing `this`
@@ -1095,7 +1063,7 @@ fn execute_call_method<'a>(
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
         }
-        execute_call(
+        become execute_call(
             vm,
             pc,
             sp,
@@ -1165,7 +1133,7 @@ fn execute_function_call<'a>(
 
 struct Attribute<'a>(nanboxed::Value<'a>);
 
-#[inline(never)]
+#[inline(always)]
 fn execute_attribute_lookup<'a>(
     vm: &mut Vm<'a, '_>,
     pc: NonNull<CompiledBytecode>,
