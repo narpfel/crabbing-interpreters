@@ -1063,7 +1063,7 @@ fn execute_call_method<'a>(
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
         }
-        execute_call(
+        become execute_call(
             vm,
             pc,
             sp,
