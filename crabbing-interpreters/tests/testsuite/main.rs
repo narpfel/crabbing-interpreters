@@ -253,10 +253,9 @@ fn scope(#[exclude("loop_too_large\\.lox$")] path: PathBuf) {
 #[case::panic_abort(
     for <'a> |cmd: &'a mut Command| -> &'a mut Command {
         cmd
-            .env("RUSTFLAGS", "-C panic=abort")
+            .env("RUSTFLAGS", "-Z unstable-options -C panic=immediate-abort")
             .args([
                 "-Zbuild-std=panic_abort,std",
-                "-Zbuild-std-features=panic_immediate_abort",
                 "--target=x86_64-unknown-linux-gnu",
             ])
     }
