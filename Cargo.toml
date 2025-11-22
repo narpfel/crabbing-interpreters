@@ -31,7 +31,7 @@ rstest_reuse = "0.7.0"
 
 [workspace.dependencies.ariadne]
 git = "https://github.com/narpfel/ariadne"
-branch = "underlines-for-unlabeled"
+branch = "panko"
 features = ["auto-color"]
 
 [profile.dev.package."*"]

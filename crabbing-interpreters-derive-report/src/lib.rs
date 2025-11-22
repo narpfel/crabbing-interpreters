@@ -206,9 +206,8 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                 .iter()
                 .map(|Assign(_, name, value)| quote::quote!(let #name = (|| #value)();));
 
-            let length = diagnostics.0.len();
-            let (loc, msg, colour, order): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-                itertools::multiunzip(diagnostics.0.iter().enumerate().map(|(i, (name, args))| {
+            let (loc, msg, colour): (Vec<_>, Vec<_>, Vec<_>) =
+                itertools::multiunzip(diagnostics.0.iter().map(|(name, args)| {
                     let msg = args
                         .get("label")
                         .map(|msg| gen_format(&colours, parse_quote!(#msg)))
@@ -216,12 +215,7 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                     let msg = quote!(#(.with_message((#msg)()))*);
                     let colour = args.get("colour").into_iter();
                     let colour = quote!(#(.with_color(#colour))*);
-                    (
-                        quote!(at.#name.loc()),
-                        msg,
-                        colour,
-                        i32::try_from(length.checked_sub(i).unwrap()).unwrap(),
-                    )
+                    (quote!(at.#name.loc()), msg, colour)
                 }));
 
             let name = &variant.ident;
@@ -236,8 +230,7 @@ fn derive_report_impl(input: DeriveInput) -> Result<TokenStream> {
                         #(
                             ::ariadne::Label::new(#loc)
                                 #msg
-                                #colour
-                                .with_order(#order),
+                                #colour,
                         )*
                     ];
 

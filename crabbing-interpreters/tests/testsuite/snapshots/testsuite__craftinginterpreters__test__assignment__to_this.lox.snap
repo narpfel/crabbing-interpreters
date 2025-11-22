@@ -15,5 +15,6 @@ Error: invalid assignment target: `this`
    │
  3 │     this = "value"; // Error at '=': Invalid assignment target.
    │     ──┬─ ─  
+   │       │     
    │       ╰───── only names can be assigned to, not this expressions
 ───╯
