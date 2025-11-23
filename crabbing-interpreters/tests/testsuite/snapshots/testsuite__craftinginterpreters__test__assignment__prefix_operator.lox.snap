@@ -15,5 +15,6 @@ Error: invalid assignment target: `!a`
    │
  2 │ !a = "value"; // Error at '=': Invalid assignment target.
    │ ─┬ ─  
+   │  │    
    │  ╰──── only names can be assigned to, not unary operations
 ───╯

@@ -107,10 +107,6 @@ impl<'a> Loc<'a> {
         self.source_file.src
     }
 
-    pub(crate) fn start(&self) -> usize {
-        self.span.start
-    }
-
     pub(crate) fn span(&self) -> Range<usize> {
         self.span.start..self.span.end
     }
@@ -133,8 +129,11 @@ impl<'a> Loc<'a> {
     }
 
     pub fn report(&self, kind: ariadne::ReportKind<'a>) -> ariadne::ReportBuilder<'a, Self> {
-        ariadne::Report::build(kind, self.file(), self.start())
-            .with_config(Config::default().with_index_type(IndexType::Byte))
+        ariadne::Report::build(kind, *self).with_config(
+            Config::default()
+                .with_index_type(IndexType::Byte)
+                .with_minimise_crossings(true),
+        )
     }
 
     pub fn cache(&self) -> impl ariadne::Cache<Path> + 'a {
@@ -146,7 +145,7 @@ impl<'a> Loc<'a> {
             fn fetch(
                 &mut self,
                 id: &Path,
-            ) -> Result<&ariadne::Source<&'b str>, Box<dyn std::fmt::Debug + '_>> {
+            ) -> Result<&ariadne::Source<&'b str>, impl std::fmt::Debug> {
                 if self.0 == id {
                     Ok(&self.1)
                 }
@@ -158,7 +157,7 @@ impl<'a> Loc<'a> {
                 }
             }
 
-            fn display<'a>(&self, id: &'a Path) -> Option<Box<dyn std::fmt::Display + 'a>> {
+            fn display<'a>(&self, id: &'a Path) -> Option<impl std::fmt::Display + 'a> {
                 Some(Box::new(id.display()))
             }
         }
