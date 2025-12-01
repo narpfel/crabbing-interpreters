@@ -7,6 +7,8 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::from_fn;
 
+use variant_types::IntoVariant as _;
+
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
 use crate::gc::GcRef;
@@ -14,6 +16,7 @@ use crate::gc::GcStr;
 use crate::gc::Trace;
 use crate::hash_map::HashMap;
 use crate::interner::InternedString;
+use crate::scope::Expression;
 use crate::scope::Statement;
 use crate::scope::Variable;
 use crate::value::nanboxed::AsNanBoxed as _;
@@ -250,4 +253,23 @@ pub enum NativeError<'a> {
         expected: String,
         tys: String,
     },
+}
+
+impl<'a> NativeError<'a> {
+    pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
+        match self {
+            NativeError::Error(err) => err,
+            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                callee,
+                expected,
+                at: expr.into_variant(),
+            },
+            NativeError::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
+                name,
+                at: expr.into_variant(),
+                expected,
+                tys,
+            },
+        }
+    }
 }

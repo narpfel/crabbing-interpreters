@@ -40,7 +40,6 @@ use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
-use crate::value::NativeError;
 use crate::value::Value;
 use crate::Report;
 use crate::Sliced;
@@ -388,21 +387,7 @@ pub fn eval<'a>(
                         .iter()
                         .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
-                    func(env.gc, arguments).map_err(|err| match err {
-                        NativeError::Error(err) => err,
-                        NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                            callee,
-                            expected,
-                            at: expr.into_variant(),
-                        },
-                        NativeError::TypeError { name, expected, tys } =>
-                            Error::NativeFnCallArgTypeMismatch {
-                                name,
-                                at: expr.into_variant(),
-                                expected,
-                                tys,
-                            },
-                    })?
+                    func(env.gc, arguments).map_err(|err| err.at_expr(callee, expr))?
                 }
                 Value::Class(class) => {
                     let instance = Value::Instance(GcRef::new_in(

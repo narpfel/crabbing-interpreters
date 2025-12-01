@@ -37,7 +37,6 @@ use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
-use crate::value::NativeError;
 use crate::value::NativeFnPtr;
 use crate::value::Value;
 use crate::value::Value::*;
@@ -242,6 +241,11 @@ impl<'a, 'b> Vm<'a, 'b> {
         ExpressionType: IntoEnum<Enum = Expression<'a>>,
         Expression<'a>: IntoVariant<ExpressionType>,
     {
+        self.expr_at(pc).into_variant()
+    }
+
+    #[cold]
+    fn expr_at(&self, pc: NonNull<CompiledBytecode>) -> &Expression<'a> {
         let pc = unsafe { self.compiled_bytecodes.index(pc) };
         let index = self
             .error_locations
@@ -252,7 +256,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             match containing_expr {
                 ContainingExpression::Enter { at: _, expr } =>
                     if depth == 0 {
-                        return expr.into_variant();
+                        return expr;
                     }
                     else {
                         depth -= 1;
@@ -951,23 +955,8 @@ fn execute_call<'a>(
                     .map(|_| vm.stack_mut(sp).pop().parse())
                     .collect();
                 args.reverse();
-                let value = native_fn(vm.env.gc, args).map_err(|err| {
-                    Box::new(match err {
-                        NativeError::Error(err) => err,
-                        NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                            callee,
-                            expected,
-                            at: vm.error_location_at(pc),
-                        },
-                        NativeError::TypeError { name, expected, tys } =>
-                            Error::NativeFnCallArgTypeMismatch {
-                                name,
-                                at: vm.error_location_at(pc),
-                                expected,
-                                tys,
-                            },
-                    })
-                })?;
+                let value = native_fn(vm.env.gc, args)
+                    .map_err(|err| Box::new(err.at_expr(callee, vm.expr_at(pc))))?;
                 vm.stack_mut(sp).push(value.into_nanboxed());
                 Ok(*sp)
             }
