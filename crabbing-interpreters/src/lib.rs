@@ -51,6 +51,8 @@ use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
 use crate::scope::resolve_names;
+use crate::scope::Slot;
+use crate::scope::Target;
 use crate::value::Value;
 
 mod bytecode;
@@ -218,13 +220,24 @@ fn repl() -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
     let mut interner = Interner::default();
     let clock = interner.intern("clock");
-    let mut globals_names =
-        bump.alloc_slice_copy(&[Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock")))]);
+    let native_function_test = interner.intern("native_function_test");
+    let mut globals_names = bump.alloc_slice_copy(&[
+        Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock"))),
+        Name::new(
+            native_function_test,
+            bump.alloc(Loc::debug_loc(bump, "native_function_test")),
+        ),
+    ]);
     let gc = &Gc::default();
     let mut globals = Environment::new(
         gc,
-        [(clock, 0)].into_iter().collect(),
+        [clock, native_function_test]
+            .into_iter()
+            .enumerate()
+            .map(|(i, x)| (x, 0_usize.wrapping_sub(i)))
+            .collect(),
         GcRef::from_iter_in(gc, [].into_iter()),
+        globals_names.len(),
     );
     let mut line = String::new();
     'repl: loop {
@@ -280,6 +293,16 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 },
             Err(ControlFlow::Error(err)) => err.print(),
         }
+        for (&id, var) in &program.global_name_offsets {
+            if !globals_names.iter().any(|n| n.id() == id) {
+                let slot = match var.target() {
+                    Target::GlobalBySlot(slot) => Slot::Global(slot),
+                    _ => unreachable!(),
+                };
+                let value = globals.get(global_cells, 0, slot);
+                globals.add_builtin_global(id, value);
+            }
+        }
         globals_names = bump.alloc_slice_copy(
             &globals_names
                 .iter()
@@ -331,10 +354,16 @@ pub fn run<'a>(
             return Ok(());
         }
 
-        let globals = bump.alloc_slice_copy(&[Name::new(
-            interner.intern("clock"),
-            bump.alloc(Loc::debug_loc(bump, "clock")),
-        )]);
+        let globals = &*bump.alloc_slice_copy(&[
+            Name::new(
+                interner.intern("clock"),
+                bump.alloc(Loc::debug_loc(bump, "clock")),
+            ),
+            Name::new(
+                interner.intern("native_function_test"),
+                bump.alloc(Loc::debug_loc(bump, "native_function_test")),
+            ),
+        ]);
         let program = time("scp", args.times, move || {
             scope::resolve_names(bump, globals, ast)
         })?;
@@ -365,7 +394,7 @@ pub fn run<'a>(
             .global_name_offsets
             .iter()
             .map(|(&name, v)| match v.target() {
-                scope::Target::GlobalBySlot(slot) => (name, slot),
+                Target::GlobalBySlot(slot) => (name, slot),
                 _ => unreachable!(),
             })
             .collect();
@@ -375,7 +404,7 @@ pub fn run<'a>(
                 .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
         let mut stack = time("stk", args.times, || {
-            Environment::new(gc, global_name_offsets, global_cells)
+            Environment::new(gc, global_name_offsets, global_cells, globals.len())
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         let (bytecode, constants, metadata, error_locations) =

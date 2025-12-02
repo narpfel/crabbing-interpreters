@@ -466,7 +466,7 @@ pub(crate) fn execute_bytecode<'a>(
             vm.env.set(
                 vm.cell_vars,
                 offset.cast(),
-                Target::GlobalBySlot(slot.cast()),
+                Target::GlobalBySlot(isize::try_from(slot.cast_signed()).unwrap().cast_unsigned()),
                 value,
             );
         }
@@ -1285,7 +1285,7 @@ mod tests {
             &[],
             &[],
             &[],
-            Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells),
+            Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells, 0),
             global_cells,
             compiled_bytecodes,
         )

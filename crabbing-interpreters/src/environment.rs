@@ -26,10 +26,63 @@ pub(crate) const ENV_SIZE: usize = 100_000;
 #[cfg(miri)]
 pub(crate) const ENV_SIZE: usize = 1_000;
 
+struct WithOffset<T> {
+    offset: usize,
+    items: T,
+}
+
+impl<T, const N: usize> WithOffset<Box<[T; N]>> {
+    fn push_front(&mut self, value: T) {
+        self.offset += 1;
+        self.items.rotate_right(1);
+        self.items[0] = value;
+    }
+}
+
+impl<T, const N: usize> Index<usize> for WithOffset<Box<[T; N]>> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.items[index.wrapping_add(self.offset)]
+    }
+}
+
+impl<T, const N: usize> IndexMut<usize> for WithOffset<Box<[T; N]>> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.items[index.wrapping_add(self.offset)]
+    }
+}
+
+impl<T> WithOffset<Vec<T>> {
+    fn push_front(&mut self, value: T) {
+        self.offset += 1;
+        self.items.push(value);
+        self.items.rotate_right(1);
+    }
+
+    fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        self.items.get_mut(index.wrapping_add(self.offset))
+    }
+}
+
+impl<T> Index<usize> for WithOffset<Vec<T>> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.items[index.wrapping_add(self.offset)]
+    }
+}
+
+impl<T> IndexMut<usize> for WithOffset<Vec<T>> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.items[index.wrapping_add(self.offset)]
+    }
+}
+
 pub struct Environment<'a> {
-    stack: Box<[Value<'a>; ENV_SIZE]>,
+    stack: WithOffset<Box<[Value<'a>; ENV_SIZE]>>,
     globals: HashMap<InternedString, usize>,
-    is_global_defined: Box<[bool]>,
+    is_global_defined: WithOffset<Vec<bool>>,
     pub(crate) gc: &'a Gc,
     global_cells: Cells<'a>,
 }
@@ -39,14 +92,27 @@ impl<'a> Environment<'a> {
         gc: &'a Gc,
         globals: HashMap<InternedString, usize>,
         global_cells: Cells<'a>,
+        builtin_global_count: usize,
     ) -> Self {
-        let mut stack: Box<[Value<'a>; ENV_SIZE]> = vec![Unboxed::Nil.into_nanboxed(); ENV_SIZE]
-            .into_boxed_slice()
-            .try_into()
-            .unwrap();
-        let mut is_global_defined = vec![false; globals.len()].into_boxed_slice();
-        if let Some(&slot) = globals.get(&interned::CLOCK) {
-            stack[slot] = Unboxed::NativeFunction(|arguments| {
+        let offset = builtin_global_count.saturating_sub(1);
+        let mut env = Self {
+            stack: WithOffset {
+                offset,
+                items: vec![Unboxed::Nil.into_nanboxed(); ENV_SIZE]
+                    .into_boxed_slice()
+                    .try_into()
+                    .unwrap(),
+            },
+            is_global_defined: WithOffset {
+                offset,
+                items: vec![false; globals.len()],
+            },
+            globals,
+            gc,
+            global_cells,
+        };
+        if let Some(&slot) = env.globals.get(&interned::CLOCK) {
+            env.stack[slot] = Unboxed::NativeFunction(|arguments| {
                 if !arguments.is_empty() {
                     return Err(NativeError::ArityMismatch { expected: 0 });
                 }
@@ -56,15 +122,24 @@ impl<'a> Environment<'a> {
                 ))
             })
             .into_nanboxed();
-            is_global_defined[slot] = true;
+            env.is_global_defined[slot] = true;
         }
-        Self {
-            stack,
-            globals,
-            is_global_defined,
-            gc,
-            global_cells,
+        if let Some(&slot) = env.globals.get(&interned::NATIVE_FUNCTION_TEST) {
+            env.stack[slot] = Unboxed::NativeFunction(|arguments| {
+                println!("native test function called with {arguments:#?}");
+                Ok(Unboxed::Nil)
+            })
+            .into_nanboxed();
+            env.is_global_defined[slot] = true;
         }
+        env
+    }
+
+    pub(crate) fn add_builtin_global(&mut self, id: InternedString, value: Value<'a>) {
+        let slot = 0_usize.wrapping_sub(self.stack.offset + 1);
+        self.globals.insert(id, slot);
+        self.stack.push_front(value);
+        self.is_global_defined.push_front(true);
     }
 
     pub(crate) fn get(&self, cell_vars: Cells<'a>, offset: usize, slot: Slot) -> Value<'a> {
@@ -150,7 +225,7 @@ impl<'a> Environment<'a> {
     }
 
     pub(crate) fn trace(&self) {
-        self.stack.trace();
+        self.stack.items.trace();
         self.global_cells.trace();
     }
 
@@ -176,12 +251,16 @@ impl<'a> Index<u32> for Environment<'a> {
     type Output = Value<'a>;
 
     fn index(&self, index: u32) -> &Self::Output {
-        &self.stack[usize::try_from(index).unwrap()]
+        &self.stack[isize::try_from(index.cast_signed())
+            .unwrap()
+            .cast_unsigned()]
     }
 }
 
 impl IndexMut<u32> for Environment<'_> {
     fn index_mut(&mut self, index: u32) -> &mut Self::Output {
-        &mut self.stack[usize::try_from(index).unwrap()]
+        &mut self.stack[isize::try_from(index.cast_signed())
+            .unwrap()
+            .cast_unsigned()]
     }
 }

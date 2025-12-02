@@ -391,7 +391,8 @@ impl<'a> Compiler<'a> {
         let op = match variable.target() {
             Target::Local(slot) => Local(slot.try_into().unwrap()),
             Target::GlobalByName => GlobalByName(variable.name.id()),
-            Target::GlobalBySlot(slot) => Global(slot.try_into().unwrap()),
+            Target::GlobalBySlot(slot) =>
+                Global(i32::try_from(slot.cast_signed()).unwrap().cast_unsigned()),
             Target::Cell(slot) => Cell(slot.try_into().unwrap()),
         };
         self.code.push(op);
@@ -401,7 +402,8 @@ impl<'a> Compiler<'a> {
         let op = match variable.target() {
             Target::Local(slot) => StoreLocal(slot.try_into().unwrap()),
             Target::GlobalByName => StoreGlobalByName(variable.name.id()),
-            Target::GlobalBySlot(slot) => StoreGlobal(slot.try_into().unwrap()),
+            Target::GlobalBySlot(slot) =>
+                StoreGlobal(i32::try_from(slot.cast_signed()).unwrap().cast_unsigned()),
             Target::Cell(slot) => StoreCell(slot.try_into().unwrap()),
         };
         self.code.push(op);

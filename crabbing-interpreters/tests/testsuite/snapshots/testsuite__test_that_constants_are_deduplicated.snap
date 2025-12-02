@@ -3,6 +3,7 @@ source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
   args:
+    - "--loop=threaded"
     - "--scopes"
     - "--bytecode"
     - "--stop-at=bytecode"
@@ -21,6 +22,7 @@ Interned strings
      s.1:  "init"
      s.2:  "this"
      s.3:  "super"
+     s.4:  "native_function_test"
 
 Metadata
 
