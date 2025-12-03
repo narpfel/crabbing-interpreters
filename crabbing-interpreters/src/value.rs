@@ -253,6 +253,11 @@ pub enum NativeError<'a> {
         expected: String,
         tys: String,
     },
+    IoError {
+        name: String,
+        error: std::io::Error,
+        filename: String,
+    },
 }
 
 impl<'a> NativeError<'a> {
@@ -269,6 +274,12 @@ impl<'a> NativeError<'a> {
                 at: expr.into_variant(),
                 expected,
                 tys,
+            },
+            NativeError::IoError { name, error, filename } => Error::NativeFnCallIoError {
+                name,
+                at: expr.into_variant(),
+                error,
+                filename,
             },
         }
     }

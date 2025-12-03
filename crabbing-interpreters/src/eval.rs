@@ -201,6 +201,20 @@ pub enum Error<'a> {
         expected: String,
         tys: String,
     },
+
+    #[error("Could not read file `{filename}`: {error} (in native function call to `{name}`)")]
+    #[with(error = format!("{error}"))]
+    #[expect(
+        clippy::enum_variant_names,
+        reason = "renaming this variant would not make the code clearer"
+    )]
+    NativeFnCallIoError {
+        name: String,
+        filename: String,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        error: std::io::Error,
+    },
 }
 
 pub fn eval<'a>(

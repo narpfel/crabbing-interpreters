@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/read_file_not_found.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: Could not read file `this_file_does_not_exist`: No such file or directory (os error 2) (in native function call to `read_file`)
+   ╭─[crabbing-interpreters/tests/cases/read_file_not_found.lox:2:11]
+   │
+ 2 │     print read_file(filename);
+   │           ─────────  
+───╯

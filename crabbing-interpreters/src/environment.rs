@@ -136,9 +136,15 @@ impl<'a> Environment<'a> {
         }
         if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
             env.stack[slot] = Unboxed::NativeFunction(|gc, arguments| match &arguments[..] {
-                [Unboxed::String(s)] => Ok(Unboxed::String(GcStr::new_in(
+                [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
                     gc,
-                    &std::fs::read_to_string(&**s).unwrap(),
+                    &std::fs::read_to_string(&**filename).map_err(|error| {
+                        NativeError::IoError {
+                            name: "read_file".to_owned(),
+                            error,
+                            filename: (**filename).to_owned(),
+                        }
+                    })?,
                 ))),
                 arguments => Err(NativeError::TypeError {
                     name: "read_file".to_owned(),
