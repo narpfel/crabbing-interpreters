@@ -216,7 +216,7 @@ pub enum Loop {
     Threaded,
 }
 
-fn repl() -> Result<(), Box<dyn Report>> {
+fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
     let bump = &mut Bump::new();
     let mut interner = Interner::default();
     let clock = interner.intern("clock");
@@ -282,6 +282,9 @@ fn repl() -> Result<(), Box<dyn Report>> {
                 continue 'repl;
             }
         };
+        if args.scopes {
+            println!("{}", program.stmts_as_sexpr(3));
+        }
         let global_cells = GcRef::from_iter_in(
             globals.gc,
             (0..program.global_cell_count)
@@ -379,15 +382,7 @@ pub fn run<'a>(
         }
 
         if args.scopes {
-            print!("(program");
-            if !program.stmts.is_empty() {
-                println!();
-            }
-            let mut sexpr = String::new();
-            for stmt in program.stmts {
-                write!(sexpr, "{}", stmt.as_sexpr(3)).unwrap();
-            }
-            println!("{})", sexpr.trim_end());
+            println!("{}", program.stmts_as_sexpr(3));
         }
         if args.stop_at == Some(StopAt::Scopes) {
             return Ok(());
@@ -527,7 +522,7 @@ pub fn run<'a>(
         };
     }
     else {
-        repl()?;
+        repl(&args)?;
     }
     Ok(())
 }

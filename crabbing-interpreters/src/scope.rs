@@ -941,6 +941,21 @@ pub(crate) struct Program<'a> {
     pub(crate) scopes: StackFrame<'a>,
 }
 
+impl Program<'_> {
+    pub(crate) fn stmts_as_sexpr(&self, indent: usize) -> String {
+        let mut sexpr = String::from("(program");
+        if !self.stmts.is_empty() {
+            sexpr.push('\n');
+        }
+        for stmt in self.stmts {
+            sexpr.push_str(&stmt.as_sexpr(indent));
+        }
+        sexpr.truncate(sexpr.trim_end().len());
+        sexpr.push(')');
+        sexpr
+    }
+}
+
 pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
     global_names: &'a [Name<'a>],
