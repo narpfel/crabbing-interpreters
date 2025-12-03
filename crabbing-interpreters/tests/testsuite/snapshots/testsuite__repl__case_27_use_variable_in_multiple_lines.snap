@@ -2,12 +2,17 @@
 source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
-  args: []
+  args:
+    - "--scopes"
   stdin: "var x = 42;\nprint x;"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[0mλ» [1m[0m42
+[0mλ» [1m[0m(program
+   (var x (global @1) 42.0))
+[0mλ» [1m[0m(program
+   (print (global x @-3)))
+42
 [0mλ» [1m[0m
 ----- stderr -----

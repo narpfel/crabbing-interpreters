@@ -1,14 +1,17 @@
 ---
-source: tests/testsuite/main.rs
+source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
-  args: []
+  args:
+    - "--scopes"
   stdin: nil + 42;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[0mλ» [1m[0m
+[0mλ» [1m[0m(program
+   (expr (+ nil 42.0)))
+[0mλ» [1m[0m
 ----- stderr -----
 Error: type error in binary operator `+`: lhs has type `Nil`, but rhs has type `Number`
    ╭─[<input>:1:1]

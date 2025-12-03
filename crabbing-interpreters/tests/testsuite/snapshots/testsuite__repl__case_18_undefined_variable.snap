@@ -2,13 +2,16 @@
 source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
-  args: []
+  args:
+    - "--scopes"
   stdin: x;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[0mλ» [1m[0m
+[0mλ» [1m[0m(program
+   (expr (global-by-name x)))
+[0mλ» [1m[0m
 ----- stderr -----
 Error: Undefined variable `x`.
    ╭─[<input>:1:1]

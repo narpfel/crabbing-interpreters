@@ -1,14 +1,21 @@
 ---
-source: tests/testsuite/main.rs
+source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
-  args: []
+  args:
+    - "--scopes"
   stdin: var x = 42; var y = 27; print x; print y; print x + y;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m42
+[0mλ» [1m[0m(program
+   (var x (global @1) 42.0)
+   (var y (global @2) 27.0)
+   (print (global x @1))
+   (print (global y @2))
+   (print (+ (global x @1) (global y @2))))
+42
 27
 69
 [0mλ» [1m[0m

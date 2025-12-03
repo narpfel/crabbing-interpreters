@@ -200,7 +200,7 @@ fn repl(_filter_output: OutputFilter, #[by_ref] testname: &str, #[case] src: &st
         ] {
             assert_cmd_snapshot!(
                 testname,
-                Command::from(interpreter).pass_stdin(src),
+                Command::from(interpreter).arg("--scopes").pass_stdin(src),
             )
         }
     }
