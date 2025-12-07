@@ -540,7 +540,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 .iter()
                                 .map(|arg| arg(state))
                                 .collect::<Result<_, _>>()?;
-                            func(arguments).map_err(|err| {
+                            func(state.env.gc, arguments).map_err(|err| {
                                 Box::new(match err {
                                     NativeError::Error(err) => err,
                                     NativeError::ArityMismatch { expected } =>
@@ -548,6 +548,13 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                             callee,
                                             expected,
                                             at: expr.into_variant(),
+                                        },
+                                    NativeError::TypeError { name, expected, tys } =>
+                                        Error::NativeFnCallArgTypeMismatch {
+                                            name,
+                                            at: expr.into_variant(),
+                                            expected,
+                                            tys,
                                         },
                                 })
                             })

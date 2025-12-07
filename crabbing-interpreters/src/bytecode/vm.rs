@@ -951,7 +951,7 @@ fn execute_call<'a>(
                     .map(|_| vm.stack_mut(sp).pop().parse())
                     .collect();
                 args.reverse();
-                let value = native_fn(args).map_err(|err| {
+                let value = native_fn(vm.env.gc, args).map_err(|err| {
                     Box::new(match err {
                         NativeError::Error(err) => err,
                         NativeError::ArityMismatch { expected } => Error::ArityMismatch {
@@ -959,6 +959,13 @@ fn execute_call<'a>(
                             expected,
                             at: vm.error_location_at(pc),
                         },
+                        NativeError::TypeError { name, expected, tys } =>
+                            Error::NativeFnCallArgTypeMismatch {
+                                name,
+                                at: vm.error_location_at(pc),
+                                expected,
+                                tys,
+                            },
                     })
                 })?;
                 vm.stack_mut(sp).push(value.into_nanboxed());

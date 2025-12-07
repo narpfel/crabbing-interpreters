@@ -193,6 +193,15 @@ pub enum Error<'a> {
         #[diagnostics(0(colour = Red))]
         at: ExpressionTypes::Name<'a>,
     },
+
+    #[error("native function `{name}` expects `{expected}` but got arguments of types `{tys}`")]
+    NativeFnCallArgTypeMismatch {
+        name: String,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        expected: String,
+        tys: String,
+    },
 }
 
 pub fn eval<'a>(
@@ -379,13 +388,20 @@ pub fn eval<'a>(
                         .iter()
                         .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
-                    func(arguments).map_err(|err| match err {
+                    func(env.gc, arguments).map_err(|err| match err {
                         NativeError::Error(err) => err,
                         NativeError::ArityMismatch { expected } => Error::ArityMismatch {
                             callee,
                             expected,
                             at: expr.into_variant(),
                         },
+                        NativeError::TypeError { name, expected, tys } =>
+                            Error::NativeFnCallArgTypeMismatch {
+                                name,
+                                at: expr.into_variant(),
+                                expected,
+                                tys,
+                            },
                     })?
                 }
                 Value::Class(class) => {

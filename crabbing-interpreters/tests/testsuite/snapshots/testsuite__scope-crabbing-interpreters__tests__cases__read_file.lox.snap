@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/read_file.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (global read_file @-2))
+   (print (call +1 (global read_file @-2) "crabbing-interpreters/tests/cases/read_file.lox"))
+   (expr (= (global read_file @-2) 42.0))
+   (print (global read_file @-2)))
+
+----- stderr -----

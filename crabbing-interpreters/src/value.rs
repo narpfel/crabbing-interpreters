@@ -17,11 +17,13 @@ use crate::interner::InternedString;
 use crate::scope::Statement;
 use crate::scope::Variable;
 use crate::value::nanboxed::AsNanBoxed as _;
+use crate::Gc;
 
 pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
-pub(crate) type NativeFnPtr = for<'a> fn(Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
+pub(crate) type NativeFnPtr =
+    for<'a> fn(&'a Gc, Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -240,5 +242,12 @@ impl Debug for BoundMethod<'_> {
 
 pub enum NativeError<'a> {
     Error(Error<'a>),
-    ArityMismatch { expected: usize },
+    ArityMismatch {
+        expected: usize,
+    },
+    TypeError {
+        name: String,
+        expected: String,
+        tys: String,
+    },
 }

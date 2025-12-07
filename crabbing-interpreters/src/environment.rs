@@ -4,11 +4,13 @@ use std::ops::IndexMut;
 use std::sync::OnceLock;
 use std::time::Instant;
 
+use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::eval::Error;
 use crate::gc::Gc;
 use crate::gc::GcRef;
+use crate::gc::GcStr;
 use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
@@ -112,7 +114,7 @@ impl<'a> Environment<'a> {
             global_cells,
         };
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
-            env.stack[slot] = Unboxed::NativeFunction(|arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(|_gc, arguments| {
                 if !arguments.is_empty() {
                     return Err(NativeError::ArityMismatch { expected: 0 });
                 }
@@ -125,9 +127,24 @@ impl<'a> Environment<'a> {
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::NATIVE_FUNCTION_TEST) {
-            env.stack[slot] = Unboxed::NativeFunction(|arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(|_gc, arguments| {
                 println!("native test function called with {arguments:#?}");
                 Ok(Unboxed::Nil)
+            })
+            .into_nanboxed();
+            env.is_global_defined[slot] = true;
+        }
+        if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
+            env.stack[slot] = Unboxed::NativeFunction(|gc, arguments| match &arguments[..] {
+                [Unboxed::String(s)] => Ok(Unboxed::String(GcStr::new_in(
+                    gc,
+                    &std::fs::read_to_string(&**s).unwrap(),
+                ))),
+                arguments => Err(NativeError::TypeError {
+                    name: "read_file".to_owned(),
+                    expected: "[String]".to_owned(),
+                    tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
+                }),
             })
             .into_nanboxed();
             env.is_global_defined[slot] = true;
