@@ -11,7 +11,7 @@ use crate::value::BoundMethod;
 use crate::value::Class;
 use crate::value::Function;
 use crate::value::Instance;
-use crate::value::NativeError;
+use crate::value::NativeFnPtr;
 use crate::value::Value as Unboxed;
 
 const NAN_PREFIX_LENGTH: u8 = 1 + 11;
@@ -120,12 +120,7 @@ impl<'a> Value<'a> {
                 NanBoxTag::String => Unboxed::String(unsafe { GcStr::from_ptr(pointer) }),
                 NanBoxTag::Function => Unboxed::Function(unsafe { GcRef::from_ptr(pointer) }),
                 NanBoxTag::NativeFunction => Unboxed::NativeFunction(unsafe {
-                    transmute::<
-                        NonNull<()>,
-                        for<'b> fn(
-                            std::vec::Vec<Unboxed<'b>>,
-                        ) -> Result<Unboxed<'b>, NativeError<'b>>,
-                    >(pointer)
+                    transmute::<NonNull<()>, NativeFnPtr>(pointer)
                 }),
                 NanBoxTag::Class => Unboxed::Class(unsafe { GcRef::from_ptr(pointer) }),
                 NanBoxTag::Instance => Unboxed::Instance(unsafe { GcRef::from_ptr(pointer) }),
@@ -230,8 +225,8 @@ impl From<Function<'_>> for NanBoxTag {
     }
 }
 
-impl From<for<'b> fn(Vec<Unboxed<'b>>) -> Result<Unboxed<'b>, NativeError<'b>>> for NanBoxTag {
-    fn from(_value: for<'b> fn(Vec<Unboxed<'b>>) -> Result<Unboxed<'b>, NativeError<'b>>) -> Self {
+impl From<NativeFnPtr> for NanBoxTag {
+    fn from(_value: NativeFnPtr) -> Self {
         NanBoxTag::NativeFunction
     }
 }
@@ -306,7 +301,7 @@ impl<T> NanBoxPayload for GcRef<'_, T> {
     }
 }
 
-impl NanBoxPayload for for<'b> fn(Vec<Unboxed<'b>>) -> Result<Unboxed<'b>, NativeError<'b>> {
+impl NanBoxPayload for NativeFnPtr {
     fn payload(self) -> NonNull<()> {
         #[expect(
             clippy::as_conversions,

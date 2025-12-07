@@ -21,6 +21,7 @@ use crate::value::nanboxed::AsNanBoxed as _;
 pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
+pub(crate) type NativeFnPtr = for<'a> fn(Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -29,7 +30,7 @@ pub enum Value<'a> {
     Bool(bool),
     Nil,
     Function(Function<'a>),
-    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
+    NativeFunction(NativeFnPtr),
     Class(Class<'a>),
     Instance(Instance<'a>),
     BoundMethod(BoundMethod<'a>),

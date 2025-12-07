@@ -38,6 +38,7 @@ use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
 use crate::value::NativeError;
+use crate::value::NativeFnPtr;
 use crate::value::Value;
 use crate::value::Value::*;
 use crate::Report;
@@ -941,7 +942,7 @@ fn execute_call<'a>(
                 pc: NonNull<CompiledBytecode>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 argument_count: u32,
-                native_fn: fn(Vec<Value>) -> Result<Value, NativeError>,
+                native_fn: NativeFnPtr,
                 callee: Value<'a>,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
                 let sp = &mut sp;
