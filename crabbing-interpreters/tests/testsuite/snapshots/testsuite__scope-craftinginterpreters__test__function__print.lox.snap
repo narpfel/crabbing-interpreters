@@ -11,9 +11,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun foo (global @3) [] []
+   (fun foo (global @1) [] []
       (block))
-   (print (global foo @3))
-   (print (global clock @0)))
+   (print (global foo @1))
+   (print (global clock @-2)))
 
 ----- stderr -----

@@ -753,6 +753,7 @@ mod tests {
             global_name_offsets,
             global_cell_count: 0,
             scopes: _,
+            globals_offset: _,
         }) = scope::resolve_names(bump, &[], program)
         else {
             unreachable!()

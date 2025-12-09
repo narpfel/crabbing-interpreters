@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @3) ∅)
-   (var foo (global @4) (call +4 (global Foo @3)))
-   (print (= (setattr (global foo @4) bar) "bar value"))
-   (print (= (setattr (global foo @4) baz) "baz value"))
-   (print (attr (global foo @4) bar))
-   (print (attr (global foo @4) baz)))
+   (class Foo (global @1) ∅)
+   (var foo (global @2) (call +2 (global Foo @1)))
+   (print (= (setattr (global foo @2) bar) "bar value"))
+   (print (= (setattr (global foo @2) baz) "baz value"))
+   (print (attr (global foo @2) bar))
+   (print (attr (global foo @2) baz)))
 
 ----- stderr -----

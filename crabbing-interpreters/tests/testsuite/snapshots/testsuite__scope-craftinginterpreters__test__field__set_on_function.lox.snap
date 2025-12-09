@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun foo (global @3) [] []
+   (fun foo (global @1) [] []
       (block))
-   (expr (= (setattr (global foo @3) bar) "value")))
+   (expr (= (setattr (global foo @1) bar) "value")))
 
 ----- stderr -----

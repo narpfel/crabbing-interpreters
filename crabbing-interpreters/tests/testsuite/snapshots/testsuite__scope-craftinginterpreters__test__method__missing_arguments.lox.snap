@@ -11,9 +11,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @3) ∅
+   (class Foo (global @1) ∅
       (method method [(local this @0) (local a @1) (local b @2)] []
          (block)))
-   (expr (call +4 (attr (call +4 (global Foo @3)) method) 1.0)))
+   (expr (call +2 (attr (call +2 (global Foo @1)) method) 1.0)))
 
 ----- stderr -----

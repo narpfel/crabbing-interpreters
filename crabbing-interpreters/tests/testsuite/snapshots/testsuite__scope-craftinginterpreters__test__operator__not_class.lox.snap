@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Bar (global @3) ∅)
-   (print (! (global Bar @3)))
-   (print (! (call +4 (global Bar @3)))))
+   (class Bar (global @1) ∅)
+   (print (! (global Bar @1)))
+   (print (! (call +2 (global Bar @1)))))
 
 ----- stderr -----

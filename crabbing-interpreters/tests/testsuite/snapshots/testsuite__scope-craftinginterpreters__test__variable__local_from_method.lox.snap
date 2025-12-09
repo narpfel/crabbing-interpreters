@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var foo (global @3) "variable")
-   (class Foo (global @4) ∅
+   (var foo (global @1) "variable")
+   (class Foo (global @2) ∅
       (method method [(local this @0)] []
          (block
-            (print (global foo @3)))))
-   (expr (call +5 (attr (call +5 (global Foo @4)) method))))
+            (print (global foo @1)))))
+   (expr (call +3 (attr (call +3 (global Foo @2)) method))))
 
 ----- stderr -----

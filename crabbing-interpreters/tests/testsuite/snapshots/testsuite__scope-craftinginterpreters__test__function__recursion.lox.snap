@@ -11,13 +11,13 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun fib (global @3) [(local n @0)] []
+   (fun fib (global @1) [(local n @0)] []
       (block
          (if
             (< (local n @0) 2.0)
             (return (local n @0))
             ∅)
-         (return (+ (call +1 (global fib @3) (- (local n @0) 1.0)) (call +1 (global fib @3) (- (local n @0) 2.0))))))
-   (print (call +4 (global fib @3) 8.0)))
+         (return (+ (call +1 (global fib @1) (- (local n @0) 1.0)) (call +1 (global fib @1) (- (local n @0) 2.0))))))
+   (print (call +2 (global fib @1) 8.0)))
 
 ----- stderr -----

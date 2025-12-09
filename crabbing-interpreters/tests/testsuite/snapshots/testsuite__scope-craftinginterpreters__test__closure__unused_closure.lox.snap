@@ -16,7 +16,7 @@ exit_code: 0
       (if
          false
          (block
-            (fun foo (local @4) [] [Some(0)]
+            (fun foo (local @2) [] [Some(0)]
                (block
                   (expr (cell a @0)))))
          ∅))

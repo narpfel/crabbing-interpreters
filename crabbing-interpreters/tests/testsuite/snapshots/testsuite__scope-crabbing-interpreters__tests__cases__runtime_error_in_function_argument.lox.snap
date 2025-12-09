@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f (global @3) [(local x @0)] []
+   (fun f (global @1) [(local x @0)] []
       (block))
-   (expr (call +4 (global f @3) (** nil 2.0))))
+   (expr (call +2 (global f @1) (** nil 2.0))))
 
 ----- stderr -----

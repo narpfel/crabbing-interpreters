@@ -11,6 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var x (global @3) (+ (global-by-name ündėfınēð) 42.0)))
+   (var x (global @1) (+ (global-by-name ündėfınēð) 42.0)))
 
 ----- stderr -----

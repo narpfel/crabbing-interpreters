@@ -11,21 +11,21 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Base (global @3) ∅
+   (class Base (global @1) ∅
       (method method [(local this @0)] []
          (block
             (print "Base.method()"))))
-   (class Derived (global @4) (global Base @3)
+   (class Derived (global @2) (global Base @1)
       (method method [(local this @0)] [None]
          (block
             (expr (call +1 (super (cell super @0) (local super @0) method))))))
-   (class OtherBase (global @5) ∅
+   (class OtherBase (global @3) ∅
       (method method [(local this @0)] []
          (block
             (print "OtherBase.method()"))))
-   (var derived (global @6) (call +6 (global Derived @4)))
-   (expr (call +7 (attr (global derived @6) method)))
-   (expr (= (global Base @3) (global OtherBase @5)))
-   (expr (call +7 (attr (global derived @6) method))))
+   (var derived (global @4) (call +4 (global Derived @2)))
+   (expr (call +5 (attr (global derived @4) method)))
+   (expr (= (global Base @1) (global OtherBase @3)))
+   (expr (call +5 (attr (global derived @4) method))))
 
 ----- stderr -----

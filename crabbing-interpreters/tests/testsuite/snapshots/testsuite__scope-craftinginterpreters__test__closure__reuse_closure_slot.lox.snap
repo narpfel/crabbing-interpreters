@@ -12,15 +12,15 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var f (local @3) ∅)
+      (var f (local @1) ∅)
       (block
          (var a (cell @0) "a")
-         (fun f_ (local @5) [] [Some(0)]
+         (fun f_ (local @3) [] [Some(0)]
             (block
                (print (cell a @0))))
-         (expr (= (local f @3) (local f_ @5))))
+         (expr (= (local f @1) (local f_ @3))))
       (block
-         (var b (local @4) "b")
-         (expr (call +5 (local f @3))))))
+         (var b (local @2) "b")
+         (expr (call +3 (local f @1))))))
 
 ----- stderr -----

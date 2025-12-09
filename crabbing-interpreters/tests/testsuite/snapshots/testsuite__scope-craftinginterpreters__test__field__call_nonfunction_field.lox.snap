@@ -11,9 +11,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @3) ∅)
-   (var foo (global @4) (call +4 (global Foo @3)))
-   (expr (= (setattr (global foo @4) bar) "not fn"))
-   (expr (call +5 (attr (global foo @4) bar))))
+   (class Foo (global @1) ∅)
+   (var foo (global @2) (call +2 (global Foo @1)))
+   (expr (= (setattr (global foo @2) bar) "not fn"))
+   (expr (call +3 (attr (global foo @2) bar))))
 
 ----- stderr -----

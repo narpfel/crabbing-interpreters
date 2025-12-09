@@ -16,10 +16,10 @@ exit_code: 0
    (print (and (and 1.0 2.0) false))
    (print (and 1.0 true))
    (print (and (and 1.0 2.0) 3.0))
-   (var a (global @3) "before")
-   (var b (global @4) "before")
-   (expr (and (and (group (= (global a @3) true)) (group (= (global b @4) false))) (group (= (global a @3) "bad"))))
-   (print (global a @3))
-   (print (global b @4)))
+   (var a (global @1) "before")
+   (var b (global @2) "before")
+   (expr (and (and (group (= (global a @1) true)) (group (= (global b @2) false))) (group (= (global a @1) "bad"))))
+   (print (global a @1))
+   (print (global b @2)))
 
 ----- stderr -----

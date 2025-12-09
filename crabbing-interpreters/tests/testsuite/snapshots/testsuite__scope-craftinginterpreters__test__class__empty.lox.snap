@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @3) ∅)
-   (print (global Foo @3)))
+   (class Foo (global @1) ∅)
+   (print (global Foo @1)))
 
 ----- stderr -----

@@ -11,6 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (expr (call +3 (global clock @0) (- nil))))
+   (expr (call +1 (global clock @-2) (- nil))))
 
 ----- stderr -----

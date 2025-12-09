@@ -12,13 +12,13 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var i (local @3) 42.0)
+      (var i (local @1) 42.0)
       (for
-         (var i (local @4) 0.0)
-         (< (local i @4) 2.0)
-         (= (local i @4) (+ (local i @4) 1.0))
+         (var i (local @2) 0.0)
+         (< (local i @2) 2.0)
+         (= (local i @2) (+ (local i @2) 1.0))
          (block
-            (print (local i @4))))
-      (print (local i @3))))
+            (print (local i @2))))
+      (print (local i @1))))
 
 ----- stderr -----

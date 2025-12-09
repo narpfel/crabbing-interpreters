@@ -16,6 +16,6 @@ exit_code: 0
          (method returnSelf [(local this @0)] [Some(0)]
             (block
                (return (cell Foo @0)))))
-      (print (call +3 (attr (call +3 (cell Foo @0)) returnSelf)))))
+      (print (call +1 (attr (call +1 (cell Foo @0)) returnSelf)))))
 
 ----- stderr -----

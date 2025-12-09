@@ -24,10 +24,10 @@ exit_code: 0
       (block
          (print "block"))
       ∅)
-   (var a (global @3) false)
+   (var a (global @1) false)
    (if
-      (= (global a @3) true)
-      (print (global a @3))
+      (= (global a @1) true)
+      (print (global a @1))
       ∅))
 
 ----- stderr -----

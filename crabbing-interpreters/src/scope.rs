@@ -114,13 +114,15 @@ enum FrameEntry<'a> {
 }
 
 impl FrameEntry<'_> {
-    fn as_sexpr(&self, indent: usize) -> String {
+    fn as_sexpr(&self, indent: usize, globals_offset: GlobalsOffset) -> String {
         match self {
-            FrameEntry::Local(variable) => variable.as_sexpr(),
-            FrameEntry::Call(stack_size_at_callsite) =>
-                format!("(call +{})", stack_size_at_callsite.get()),
-            FrameEntry::ChildScope(scope) => scope.as_sexpr("block", indent),
-            FrameEntry::FunctionScope(scope) => scope.as_sexpr("function", indent),
+            FrameEntry::Local(variable) => variable.as_sexpr(globals_offset),
+            FrameEntry::Call(stack_size_at_callsite) => format!(
+                "(call +{})",
+                globals_offset.local_slot(stack_size_at_callsite.get()),
+            ),
+            FrameEntry::ChildScope(scope) => scope.as_sexpr("block", indent, globals_offset),
+            FrameEntry::FunctionScope(scope) => scope.as_sexpr("function", indent, globals_offset),
         }
     }
 }
@@ -137,12 +139,17 @@ impl<'a> StackFrame<'a> {
         self.0.push(entry)
     }
 
-    pub(crate) fn as_sexpr(&self, frame_type: &str, indent: usize) -> String {
+    pub(crate) fn as_sexpr(
+        &self,
+        frame_type: &str,
+        indent: usize,
+        globals_offset: GlobalsOffset,
+    ) -> String {
         format!(
             "({frame_type}{}{})",
             if self.0.is_empty() { "" } else { "\n" },
             self.iter()
-                .map(|entry| entry.as_sexpr(indent))
+                .map(|entry| entry.as_sexpr(indent, globals_offset))
                 .join("\n")
                 .indent_lines(indent)
                 .trim_end(),
@@ -539,7 +546,13 @@ impl<'a> Function<'a> {
         }
     }
 
-    fn as_sexpr(&self, indent: usize, kind: FunctionKind, target: Option<Variable>) -> String {
+    fn as_sexpr(
+        &self,
+        indent: usize,
+        kind: FunctionKind,
+        target: Option<Variable>,
+        globals_offset: GlobalsOffset,
+    ) -> String {
         let Self {
             name,
             parameters,
@@ -553,13 +566,17 @@ impl<'a> Function<'a> {
         };
         format!(
             "({kind} {name} {}{}[{params}] {cells:?}\n{})",
-            target.map_or(String::new(), |target| target.target().to_string()),
+            target.map_or(String::new(), |target| target
+                .target()
+                .as_sexpr(globals_offset)),
             if target.is_some() { " " } else { "" },
-            Statement::Block(body).as_sexpr(indent).trim_end(),
+            Statement::Block(body)
+                .as_sexpr(indent, globals_offset.local())
+                .trim_end(),
             name = name.loc().slice(),
             params = parameters
                 .iter()
-                .map(|variable| variable.as_sexpr())
+                .map(|variable| variable.as_sexpr(globals_offset.local()))
                 .join(" "),
         )
     }
@@ -601,15 +618,15 @@ pub enum Statement<'a> {
 }
 
 impl Statement<'_> {
-    pub fn as_sexpr(&self, indent: usize) -> String {
+    fn as_sexpr(&self, indent: usize, globals_offset: GlobalsOffset) -> String {
         let result = match self {
-            Statement::Expression(expr) => format!("(expr {})", expr.as_sexpr()),
-            Statement::Print(expr) => format!("(print {})", expr.as_sexpr()),
+            Statement::Expression(expr) => format!("(expr {})", expr.as_sexpr(globals_offset)),
+            Statement::Print(expr) => format!("(print {})", expr.as_sexpr(globals_offset)),
             Statement::Var(target, init) => format!(
                 "(var {} {} {})",
                 target.name.slice(),
-                target.target(),
-                init.map(|init| init.as_sexpr())
+                target.target().as_sexpr(globals_offset),
+                init.map(|init| init.as_sexpr(globals_offset))
                     .unwrap_or_else(|| "∅".to_string()),
             ),
             Statement::Block(stmts) => format!(
@@ -617,53 +634,62 @@ impl Statement<'_> {
                 if stmts.is_empty() { "" } else { "\n" },
                 stmts
                     .iter()
-                    .map(|stmt| stmt.as_sexpr(indent))
+                    .map(|stmt| stmt.as_sexpr(indent, globals_offset))
                     .collect::<String>()
                     .trim_end(),
             ),
             Statement::If { condition, then, or_else } => format!(
                 "(if\n{EMPTY:indent$}{}\n{}{})",
-                condition.as_sexpr(),
-                then.as_sexpr(indent),
+                condition.as_sexpr(globals_offset),
+                then.as_sexpr(indent, globals_offset),
                 or_else
-                    .map(|or_else| or_else.as_sexpr(indent))
+                    .map(|or_else| or_else.as_sexpr(indent, globals_offset))
                     .unwrap_or_else(|| format!("{EMPTY:indent$}∅\n"))
                     .trim_end(),
             ),
             Statement::While { condition, body } => format!(
                 "(while\n{EMPTY:indent$}{}\n{})",
-                condition.as_sexpr(),
-                body.as_sexpr(indent).trim_end(),
+                condition.as_sexpr(globals_offset),
+                body.as_sexpr(indent, globals_offset).trim_end(),
             ),
             Statement::For { init, condition, update, body } => format!(
                 "(for\n{}{EMPTY:indent$}{}\n{EMPTY:indent$}{}\n{})",
-                init.map(|init| init.as_sexpr(indent))
+                init.map(|init| init.as_sexpr(indent, globals_offset))
                     .unwrap_or_else(|| format!("{EMPTY:indent$}∅\n")),
                 condition
-                    .map(|condition| condition.as_sexpr())
+                    .map(|condition| condition.as_sexpr(globals_offset))
                     .unwrap_or_else(|| "∅".to_string()),
                 update
-                    .map(|update| update.as_sexpr())
+                    .map(|update| update.as_sexpr(globals_offset))
                     .unwrap_or_else(|| "∅".to_string()),
-                body.as_sexpr(indent).trim_end(),
+                body.as_sexpr(indent, globals_offset).trim_end(),
             ),
-            Statement::Function { target, function } =>
-                function.as_sexpr(indent, FunctionKind::Function, Some(*target)),
+            Statement::Function { target, function } => function.as_sexpr(
+                indent,
+                FunctionKind::Function,
+                Some(*target),
+                globals_offset,
+            ),
             Statement::Return(expr) => format!(
                 "(return {})",
-                expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr()),
+                expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr(globals_offset)),
             ),
             Statement::InitReturn(_) => "(init-return)".to_owned(),
             Statement::Class { target, base, methods } => format!(
                 "(class {} {} {}{}{})",
                 target.name.slice(),
-                target.target(),
-                base.map(|base| base.as_sexpr())
+                target.target().as_sexpr(globals_offset),
+                base.map(|base| base.as_sexpr(globals_offset))
                     .unwrap_or_else(|| "∅".to_string()),
                 if methods.is_empty() { "" } else { "\n" },
                 methods
                     .iter()
-                    .map(|function| function.as_sexpr(indent, FunctionKind::Method, None))
+                    .map(|function| function.as_sexpr(
+                        indent,
+                        FunctionKind::Method,
+                        None,
+                        globals_offset,
+                    ))
                     .join("\n")
                     .indent_lines(indent)
                     .trim_end(),
@@ -764,25 +790,32 @@ pub enum Target {
     Cell(usize),
 }
 
-impl std::fmt::Display for Target {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (ty, slot) = match self {
-            Target::Local(slot) => ("local", slot),
-            Target::GlobalBySlot(slot) => ("global", slot),
-            Target::GlobalByName => unreachable!(),
-            Target::Cell(slot) => ("cell", slot),
+impl Target {
+    fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
+        let (ty, slot) = match (globals_offset.scope, *self) {
+            (ScopeKind::Global, Target::Local(slot)) => ("local", globals_offset.apply(slot)),
+            (ScopeKind::Local, Target::Local(slot)) => ("local", slot.cast_signed()),
+            (_, Target::GlobalBySlot(slot)) => ("global", globals_offset.apply(slot)),
+            (_, Target::GlobalByName) => unreachable!(),
+            (_, Target::Cell(slot)) => ("cell", slot.cast_signed()),
         };
-        write!(f, "({ty} @{slot})")
+        format!("({ty} @{slot})")
     }
 }
 
 impl<'a> Variable<'a> {
-    fn as_sexpr(&self) -> String {
+    fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
         let name = self.name.slice();
         match self.target() {
-            Target::Local(slot) => format!("(local {name} @{slot})"),
+            Target::Local(slot) => format!(
+                "(local {name} @{slot})",
+                slot = globals_offset.local_slot(slot),
+            ),
             Target::GlobalByName => format!("(global-by-name {name})"),
-            Target::GlobalBySlot(slot) => format!("(global {name} @{slot})"),
+            Target::GlobalBySlot(slot) => format!(
+                "(global {name} @{slot})",
+                slot = globals_offset.global_slot(slot),
+            ),
             Target::Cell(slot) => format!("(cell {name} @{slot})"),
         }
     }
@@ -850,20 +883,27 @@ impl<'a> Expression<'a> {
         self.loc().slice()
     }
 
-    pub fn as_sexpr(&self) -> String {
+    fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
         match self {
             Expression::Literal(lit) => lit.kind.value_string(),
-            Expression::Unary(operator, operand) =>
-                format!("({} {})", operator.token.slice(), operand.as_sexpr()),
+            Expression::Unary(operator, operand) => format!(
+                "({} {})",
+                operator.token.slice(),
+                operand.as_sexpr(globals_offset),
+            ),
             Expression::Binary { lhs, op, rhs } => format!(
                 "({} {} {})",
                 op.token.slice(),
-                lhs.as_sexpr(),
-                rhs.as_sexpr(),
+                lhs.as_sexpr(globals_offset),
+                rhs.as_sexpr(globals_offset),
             ),
-            Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
-            Expression::Assign { target, value, .. } =>
-                format!("(= {} {})", target.as_sexpr(), value.as_sexpr()),
+            Expression::Grouping { expr, .. } =>
+                format!("(group {})", expr.as_sexpr(globals_offset)),
+            Expression::Assign { target, value, .. } => format!(
+                "(= {} {})",
+                target.as_sexpr(globals_offset),
+                value.as_sexpr(globals_offset),
+            ),
             Expression::Call {
                 callee,
                 arguments,
@@ -871,22 +911,25 @@ impl<'a> Expression<'a> {
                 ..
             } => format!(
                 "(call +{stack_size_at_callsite} {}{}{})",
-                callee.as_sexpr(),
+                callee.as_sexpr(globals_offset),
                 if arguments.is_empty() { "" } else { " " },
                 arguments
                     .iter()
-                    .map(Expression::as_sexpr)
+                    .map(|arg| arg.as_sexpr(globals_offset))
                     .collect_vec()
                     .join(" "),
-                stack_size_at_callsite = stack_size_at_callsite.get(),
+                stack_size_at_callsite = globals_offset.local_slot(stack_size_at_callsite.get()),
             ),
-            Expression::Name(variable) => variable.as_sexpr(),
-            Expression::Attribute { lhs, attribute } =>
-                format!("(attr {} {})", lhs.as_sexpr(), attribute.slice()),
+            Expression::Name(variable) => variable.as_sexpr(globals_offset),
+            Expression::Attribute { lhs, attribute } => format!(
+                "(attr {} {})",
+                lhs.as_sexpr(globals_offset),
+                attribute.slice(),
+            ),
             Expression::Super { super_, this, attribute } => format!(
                 "(super {} {} {})",
-                super_.as_sexpr(),
-                this.as_sexpr(),
+                super_.as_sexpr(globals_offset),
+                this.as_sexpr(globals_offset),
                 attribute.slice(),
             ),
         }
@@ -904,11 +947,14 @@ pub enum AssignmentTarget<'a> {
 }
 
 impl<'a> AssignmentTarget<'a> {
-    fn as_sexpr(&self) -> String {
+    fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
         match self {
-            AssignmentTarget::Variable(variable) => variable.as_sexpr(),
-            AssignmentTarget::Attribute { lhs, attribute } =>
-                format!("(setattr {} {})", lhs.as_sexpr(), attribute.slice()),
+            AssignmentTarget::Variable(variable) => variable.as_sexpr(globals_offset),
+            AssignmentTarget::Attribute { lhs, attribute } => format!(
+                "(setattr {} {})",
+                lhs.as_sexpr(globals_offset),
+                attribute.slice(),
+            ),
         }
     }
 
@@ -924,11 +970,49 @@ impl<'a> AssignmentTarget<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ScopeKind {
+    Local,
+    Global,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GlobalsOffset {
+    scope: ScopeKind,
+    offset: usize,
+}
+
+impl GlobalsOffset {
+    pub(crate) fn global(offset: usize) -> Self {
+        Self { scope: ScopeKind::Global, offset }
+    }
+
+    fn local(self) -> Self {
+        Self { scope: ScopeKind::Local, ..self }
+    }
+
+    fn apply(self, slot: usize) -> isize {
+        slot.checked_signed_diff(self.offset).unwrap()
+    }
+
+    fn local_slot(self, slot: usize) -> isize {
+        match self.scope {
+            ScopeKind::Global => self.apply(slot),
+            ScopeKind::Local => slot.cast_signed(),
+        }
+    }
+
+    fn global_slot(self, slot: usize) -> isize {
+        self.apply(slot)
+    }
+}
+
 pub(crate) struct Program<'a> {
     pub(crate) stmts: &'a [Statement<'a>],
     pub(crate) global_name_offsets: HashMap<InternedString, Variable<'a>>,
     pub(crate) global_cell_count: usize,
     pub(crate) scopes: StackFrame<'a>,
+    pub(crate) globals_offset: usize,
 }
 
 impl Program<'_> {
@@ -938,7 +1022,7 @@ impl Program<'_> {
             sexpr.push('\n');
         }
         for stmt in self.stmts {
-            sexpr.push_str(&stmt.as_sexpr(indent));
+            sexpr.push_str(&stmt.as_sexpr(indent, GlobalsOffset::global(self.globals_offset)));
         }
         sexpr.truncate(sexpr.trim_end().len());
         sexpr.push(')');
@@ -972,6 +1056,7 @@ pub(crate) fn resolve_names<'a>(
         global_name_offsets: names,
         global_cell_count: scopes.scopes.first().cells.len(),
         scopes: layout,
+        globals_offset: global_names.len().saturating_sub(1),
     })
 }
 

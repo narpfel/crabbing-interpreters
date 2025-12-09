@@ -11,21 +11,21 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @3) ∅
+   (class Foo (global @1) ∅
       (method inFoo [(local this @0)] []
          (block
             (print "in foo"))))
-   (class Bar (global @4) (global Foo @3)
+   (class Bar (global @2) (global Foo @1)
       (method inBar [(local this @0)] [None]
          (block
             (print "in bar"))))
-   (class Baz (global @5) (global Bar @4)
+   (class Baz (global @3) (global Bar @2)
       (method inBaz [(local this @0)] [None]
          (block
             (print "in baz"))))
-   (var baz (global @6) (call +6 (global Baz @5)))
-   (expr (call +7 (attr (global baz @6) inFoo)))
-   (expr (call +7 (attr (global baz @6) inBar)))
-   (expr (call +7 (attr (global baz @6) inBaz))))
+   (var baz (global @4) (call +4 (global Baz @3)))
+   (expr (call +5 (attr (global baz @4) inFoo)))
+   (expr (call +5 (attr (global baz @4) inBar)))
+   (expr (call +5 (attr (global baz @4) inBaz))))
 
 ----- stderr -----

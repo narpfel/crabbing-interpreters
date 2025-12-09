@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class A (global @3) ∅
+   (class A (global @1) ∅
       (method init [(local this @0) (local param @1)] []
          (block
             (expr (= (setattr (local this @0) field) (local param @1)))
@@ -19,8 +19,8 @@ exit_code: 0
       (method test [(local this @0)] []
          (block
             (print (attr (local this @0) field)))))
-   (class B (global @4) (global A @3))
-   (var b (global @5) (call +5 (global B @4) "value"))
-   (expr (call +6 (attr (global b @5) test))))
+   (class B (global @2) (global A @1))
+   (var b (global @3) (call +3 (global B @2) "value"))
+   (expr (call +4 (attr (global b @3) test))))
 
 ----- stderr -----

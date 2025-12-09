@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (print (global clock @0))
-   (print (>= (call +3 (global clock @0)) 0.0))
-   (print (< (global clock @0) 0.0)))
+   (print (global clock @-2))
+   (print (>= (call +1 (global clock @-2)) 0.0))
+   (print (< (global clock @-2) 0.0)))
 
 ----- stderr -----

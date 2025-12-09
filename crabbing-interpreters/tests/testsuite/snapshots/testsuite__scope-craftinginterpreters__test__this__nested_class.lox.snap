@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Outer (global @3) ∅
+   (class Outer (global @1) ∅
       (method method [(cell this @0)] [None]
          (block
             (print (cell this @0))
@@ -24,6 +24,6 @@ exit_code: 0
                            (print (local this @0)))))
                   (expr (call +1 (attr (call +1 (local Inner @0)) method)))))
             (expr (call +1 (local f @0))))))
-   (expr (call +4 (attr (call +4 (global Outer @3)) method))))
+   (expr (call +2 (attr (call +2 (global Outer @1)) method))))
 
 ----- stderr -----

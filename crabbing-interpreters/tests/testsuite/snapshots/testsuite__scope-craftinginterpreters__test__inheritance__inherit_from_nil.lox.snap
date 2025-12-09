@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var Nil (global @3) nil)
-   (class Foo (global @4) (global Nil @3)))
+   (var Nil (global @1) nil)
+   (class Foo (global @2) (global Nil @1)))
 
 ----- stderr -----

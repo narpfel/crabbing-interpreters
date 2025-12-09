@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f (global @3) [] [None]
+   (fun f (global @1) [] [None]
       (block
          (while
             true
@@ -21,7 +21,7 @@ exit_code: 0
                   (block
                      (print (cell i @0))))
                (return (local g @0))))))
-   (var h (global @4) (call +4 (global f @3)))
-   (expr (call +5 (global h @4))))
+   (var h (global @2) (call +2 (global f @1)))
+   (expr (call +3 (global h @2))))
 
 ----- stderr -----

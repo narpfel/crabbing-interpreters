@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @3) ∅)
-   (var foo (global @4) (call +4 (global Foo @3)))
-   (print (global foo @4)))
+   (class Foo (global @1) ∅)
+   (var foo (global @2) (call +2 (global Foo @1)))
+   (print (global foo @2)))
 
 ----- stderr -----

@@ -10,11 +10,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 [0mλ» [1m[0m(program
-   (var x (global @3) 42.0)
-   (var y (global @4) 27.0)
-   (print (global x @3))
-   (print (global y @4))
-   (print (+ (global x @3) (global y @4))))
+   (var x (global @1) 42.0)
+   (var y (global @2) 27.0)
+   (print (global x @1))
+   (print (global y @2))
+   (print (+ (global x @1) (global y @2))))
 42
 27
 69

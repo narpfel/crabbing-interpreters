@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var a (global @3) "1\n2\n3")
-   (print (global a @3)))
+   (var a (global @1) "1\n2\n3")
+   (print (global a @1)))
 
 ----- stderr -----

@@ -13,9 +13,9 @@ exit_code: 0
 (program
    (block
       (var local (cell @0) "local")
-      (fun f (local @4) [] [Some(0)]
+      (fun f (local @2) [] [Some(0)]
          (block
             (print (cell local @0))))
-      (expr (call +5 (local f @4)))))
+      (expr (call +3 (local f @2)))))
 
 ----- stderr -----

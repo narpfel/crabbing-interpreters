@@ -11,6 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var ünıcödė (global @3) (+ 42.0 "27")))
+   (var ünıcödė (global @1) (+ 42.0 "27")))
 
 ----- stderr -----

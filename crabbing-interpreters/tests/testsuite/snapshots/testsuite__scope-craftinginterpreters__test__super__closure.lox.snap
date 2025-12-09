@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Base (global @3) ∅
+   (class Base (global @1) ∅
       (method toString [(local this @0)] []
          (block
             (return "Base"))))
-   (class Derived (global @4) (global Base @3)
+   (class Derived (global @2) (global Base @1)
       (method getClosure [(cell this @1)] [None, None]
          (block
             (fun closure (local @0) [] [Some(1), Some(0)]
@@ -25,7 +25,7 @@ exit_code: 0
       (method toString [(local this @0)] [None]
          (block
             (return "Derived"))))
-   (var closure (global @5) (call +5 (attr (call +5 (global Derived @4)) getClosure)))
-   (print (call +6 (global closure @5))))
+   (var closure (global @3) (call +3 (attr (call +3 (global Derived @2)) getClosure)))
+   (print (call +4 (global closure @3))))
 
 ----- stderr -----

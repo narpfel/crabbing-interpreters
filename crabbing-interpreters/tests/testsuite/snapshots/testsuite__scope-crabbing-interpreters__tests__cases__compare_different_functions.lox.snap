@@ -11,16 +11,16 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun function (global @3) [] []
+   (fun function (global @1) [] []
       (block))
-   (var f (global @4) (global function @3))
-   (fun function (global @3) [] []
+   (var f (global @2) (global function @1))
+   (fun function (global @1) [] []
       (block))
-   (var g (global @5) (global function @3))
-   (print (global f @4))
-   (print (global g @5))
-   (print (== (global f @4) (global f @4)))
-   (print (== (global g @5) (global g @5)))
-   (print (== (global f @4) (global g @5))))
+   (var g (global @3) (global function @1))
+   (print (global f @2))
+   (print (global g @3))
+   (print (== (global f @2) (global f @2)))
+   (print (== (global g @3) (global g @3)))
+   (print (== (global f @2) (global g @3))))
 
 ----- stderr -----

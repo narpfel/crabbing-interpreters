@@ -11,6 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (expr (call +3 nil)))
+   (expr (call +1 nil)))
 
 ----- stderr -----

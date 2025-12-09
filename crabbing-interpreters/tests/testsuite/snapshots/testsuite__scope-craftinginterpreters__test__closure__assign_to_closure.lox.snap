@@ -11,23 +11,23 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var f (global @3) ∅)
-   (var g (global @4) ∅)
+   (var f (global @1) ∅)
+   (var g (global @2) ∅)
    (block
       (var local (cell @0) "local")
-      (fun f_ (local @6) [] [Some(0)]
+      (fun f_ (local @4) [] [Some(0)]
          (block
             (print (cell local @0))
             (expr (= (cell local @0) "after f"))
             (print (cell local @0))))
-      (expr (= (global f @3) (local f_ @6)))
-      (fun g_ (local @7) [] [Some(0)]
+      (expr (= (global f @1) (local f_ @4)))
+      (fun g_ (local @5) [] [Some(0)]
          (block
             (print (cell local @0))
             (expr (= (cell local @0) "after g"))
             (print (cell local @0))))
-      (expr (= (global g @4) (local g_ @7))))
-   (expr (call +5 (global f @3)))
-   (expr (call +5 (global g @4))))
+      (expr (= (global g @2) (local g_ @5))))
+   (expr (call +3 (global f @1)))
+   (expr (call +3 (global g @2))))
 
 ----- stderr -----

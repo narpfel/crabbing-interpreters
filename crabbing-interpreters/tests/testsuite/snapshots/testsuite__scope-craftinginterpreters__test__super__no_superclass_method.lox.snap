@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Base (global @3) ∅)
-   (class Derived (global @4) (global Base @3)
+   (class Base (global @1) ∅)
+   (class Derived (global @2) (global Base @1)
       (method foo [(local this @0)] [None]
          (block
             (expr (call +1 (super (cell super @0) (local super @0) doesNotExist) 1.0)))))
-   (expr (call +5 (attr (call +5 (global Derived @4)) foo))))
+   (expr (call +3 (attr (call +3 (global Derived @2)) foo))))
 
 ----- stderr -----

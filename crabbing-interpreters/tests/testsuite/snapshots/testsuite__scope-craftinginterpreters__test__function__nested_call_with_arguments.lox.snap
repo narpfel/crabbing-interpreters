@@ -11,15 +11,15 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun returnArg (global @3) [(local arg @0)] []
+   (fun returnArg (global @1) [(local arg @0)] []
       (block
          (return (local arg @0))))
-   (fun returnFunCallWithArg (global @4) [(local func @0) (local arg @1)] []
+   (fun returnFunCallWithArg (global @2) [(local func @0) (local arg @1)] []
       (block
-         (return (call +2 (call +2 (global returnArg @3) (local func @0)) (local arg @1)))))
-   (fun printArg (global @5) [(local arg @0)] []
+         (return (call +2 (call +2 (global returnArg @1) (local func @0)) (local arg @1)))))
+   (fun printArg (global @3) [(local arg @0)] []
       (block
          (print (local arg @0))))
-   (expr (call +6 (global returnFunCallWithArg @4) (global printArg @5) "hello world")))
+   (expr (call +4 (global returnFunCallWithArg @2) (global printArg @3) "hello world")))
 
 ----- stderr -----

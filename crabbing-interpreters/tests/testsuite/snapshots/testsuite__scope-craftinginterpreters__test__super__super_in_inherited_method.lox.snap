@@ -11,21 +11,21 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class A (global @3) ∅
+   (class A (global @1) ∅
       (method say [(local this @0)] []
          (block
             (print "A"))))
-   (class B (global @4) (global A @3)
+   (class B (global @2) (global A @1)
       (method test [(local this @0)] [None]
          (block
             (expr (call +1 (super (cell super @0) (local super @0) say)))))
       (method say [(local this @0)] [None]
          (block
             (print "B"))))
-   (class C (global @5) (global B @4)
+   (class C (global @3) (global B @2)
       (method say [(local this @0)] [None]
          (block
             (print "C"))))
-   (expr (call +6 (attr (call +6 (global C @5)) test))))
+   (expr (call +4 (attr (call +4 (global C @3)) test))))
 
 ----- stderr -----

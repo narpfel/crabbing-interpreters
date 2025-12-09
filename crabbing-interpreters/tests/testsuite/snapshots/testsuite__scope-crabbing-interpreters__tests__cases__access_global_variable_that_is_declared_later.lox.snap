@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var x (global @3) (global-by-name y))
-   (print (global x @3))
-   (var y (global @4) 42.0))
+   (var x (global @1) (global-by-name y))
+   (print (global x @1))
+   (var y (global @2) 42.0))
 
 ----- stderr -----

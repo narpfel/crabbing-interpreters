@@ -51,6 +51,7 @@ use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
 use crate::scope::resolve_names;
+use crate::scope::GlobalsOffset;
 use crate::value::Value;
 
 mod bytecode;
@@ -365,7 +366,8 @@ pub fn run<'a>(
         })?;
 
         if args.layout {
-            println!("{}\n", program.scopes.as_sexpr("layout", 3));
+            let globals_offset = GlobalsOffset::global(globals.len().saturating_sub(1));
+            println!("{}\n", program.scopes.as_sexpr("layout", 3, globals_offset));
         }
 
         if args.scopes {
