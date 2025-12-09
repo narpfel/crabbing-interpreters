@@ -195,17 +195,6 @@ pub enum Slot {
     Cell(usize),
 }
 
-impl std::fmt::Display for Slot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (ty, slot) = match self {
-            Slot::Local(slot) => ("local", slot),
-            Slot::Global(slot) => ("global", slot),
-            Slot::Cell(slot) => ("cell", slot),
-        };
-        write!(f, "({ty} @{slot})")
-    }
-}
-
 #[derive(Debug, Report)]
 #[exit_code(65)]
 pub enum Error<'a> {
