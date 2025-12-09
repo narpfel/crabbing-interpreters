@@ -37,7 +37,7 @@ use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
-use crate::value::NativeError;
+use crate::value::NativeFnPtr;
 use crate::value::Value;
 use crate::value::Value::*;
 use crate::Report;
@@ -241,6 +241,11 @@ impl<'a, 'b> Vm<'a, 'b> {
         ExpressionType: IntoEnum<Enum = Expression<'a>>,
         Expression<'a>: IntoVariant<ExpressionType>,
     {
+        self.expr_at(pc).into_variant()
+    }
+
+    #[cold]
+    fn expr_at(&self, pc: NonNull<CompiledBytecode>) -> &Expression<'a> {
         let pc = unsafe { self.compiled_bytecodes.index(pc) };
         let index = self
             .error_locations
@@ -251,7 +256,7 @@ impl<'a, 'b> Vm<'a, 'b> {
             match containing_expr {
                 ContainingExpression::Enter { at: _, expr } =>
                     if depth == 0 {
-                        return expr.into_variant();
+                        return expr;
                     }
                     else {
                         depth -= 1;
@@ -466,7 +471,7 @@ pub(crate) fn execute_bytecode<'a>(
             vm.env.set(
                 vm.cell_vars,
                 offset.cast(),
-                Target::GlobalBySlot(slot.cast()),
+                Target::GlobalBySlot(isize::try_from(slot.cast_signed()).unwrap().cast_unsigned()),
                 value,
             );
         }
@@ -941,7 +946,7 @@ fn execute_call<'a>(
                 pc: NonNull<CompiledBytecode>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 argument_count: u32,
-                native_fn: fn(Vec<Value>) -> Result<Value, NativeError>,
+                native_fn: NativeFnPtr,
                 callee: Value<'a>,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
                 let sp = &mut sp;
@@ -950,16 +955,8 @@ fn execute_call<'a>(
                     .map(|_| vm.stack_mut(sp).pop().parse())
                     .collect();
                 args.reverse();
-                let value = native_fn(args).map_err(|err| {
-                    Box::new(match err {
-                        NativeError::Error(err) => err,
-                        NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                            callee,
-                            expected,
-                            at: vm.error_location_at(pc),
-                        },
-                    })
-                })?;
+                let value = native_fn(vm.env.gc, args)
+                    .map_err(|err| Box::new(err.at_expr(callee, vm.expr_at(pc))))?;
                 vm.stack_mut(sp).push(value.into_nanboxed());
                 Ok(*sp)
             }
@@ -1285,7 +1282,7 @@ mod tests {
             &[],
             &[],
             &[],
-            Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells),
+            Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells, 0),
             global_cells,
             compiled_bytecodes,
         )

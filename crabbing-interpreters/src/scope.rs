@@ -4,7 +4,6 @@ use std::hash::Hash;
 use std::iter;
 use std::iter::empty;
 use std::iter::once;
-use std::primitive::usize;
 use std::ptr;
 
 use ariadne::Color::Blue;
@@ -180,6 +179,7 @@ struct Scopes<'a> {
     bump: &'a Bump,
     scopes: nonempty::Vec<Scope<'a>>,
     offset: usize,
+    builtin_global_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -332,6 +332,7 @@ impl<'a> Scopes<'a> {
             bump,
             scopes: Default::default(),
             offset: Default::default(),
+            builtin_global_count: global_names.len(),
         };
         let duplicate_names = global_names
             .iter()
@@ -342,10 +343,16 @@ impl<'a> Scopes<'a> {
             duplicate_names.is_empty(),
             "duplicates in builtin global names are not permitted: {duplicate_names:?}",
         );
-        for name in global_names {
-            scopes.add_unconditionally(name);
-        }
+        scopes.add_global_names(global_names);
         scopes
+    }
+
+    fn add_global_names(&mut self, names: &'a [Name<'a>]) {
+        for (i, name) in names.iter().enumerate() {
+            let variable = Variable::global(self.bump, name, 0_usize.wrapping_sub(i));
+            self.scopes.last_mut().define(variable);
+        }
+        self.offset = 1;
     }
 
     fn add(&mut self, name: &'a Name<'a>) -> Result<Variable<'a>, Error<'a>> {
@@ -470,8 +477,9 @@ impl<'a> Scopes<'a> {
                     .names
                     .values()
                     .filter_map(|var| var.as_local())
+                    .filter(|&n| n < usize::MAX - self.builtin_global_count)
+                    .map(|n| n.strict_add(1))
                     .max()
-                    .map(|n| n + 1)
             })
             .unwrap_or(0)
     }
@@ -783,7 +791,8 @@ impl<'a> Variable<'a> {
         match self.target() {
             Target::Local(slot) => format!("(local {name} @{slot})"),
             Target::GlobalByName => format!("(global-by-name {name})"),
-            Target::GlobalBySlot(slot) => format!("(global {name} @{slot})"),
+            Target::GlobalBySlot(slot) =>
+                format!("(global {name} @{slot})", slot = slot.cast_signed()),
             Target::Cell(slot) => format!("(cell {name} @{slot})"),
         }
     }
@@ -930,6 +939,21 @@ pub(crate) struct Program<'a> {
     pub(crate) global_name_offsets: HashMap<InternedString, Variable<'a>>,
     pub(crate) global_cell_count: usize,
     pub(crate) scopes: StackFrame<'a>,
+}
+
+impl Program<'_> {
+    pub(crate) fn stmts_as_sexpr(&self, indent: usize) -> String {
+        let mut sexpr = String::from("(program");
+        if !self.stmts.is_empty() {
+            sexpr.push('\n');
+        }
+        for stmt in self.stmts {
+            sexpr.push_str(&stmt.as_sexpr(indent));
+        }
+        sexpr.truncate(sexpr.trim_end().len());
+        sexpr.push(')');
+        sexpr
+    }
 }
 
 pub(crate) fn resolve_names<'a>(

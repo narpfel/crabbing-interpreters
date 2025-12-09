@@ -1,0 +1,20 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/read_file.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+<native fn>
+print read_file;
+print read_file("crabbing-interpreters/tests/cases/read_file.lox");
+read_file = 42;
+print read_file;
+
+42
+
+----- stderr -----

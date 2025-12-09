@@ -1,0 +1,4 @@
+print read_file;
+print read_file("crabbing-interpreters/tests/cases/read_file.lox");
+read_file = 42;
+print read_file;

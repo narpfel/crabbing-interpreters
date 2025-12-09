@@ -40,7 +40,6 @@ use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::InstanceInner;
-use crate::value::NativeError;
 use crate::value::Value;
 use crate::Report;
 use crate::Sliced;
@@ -192,6 +191,29 @@ pub enum Error<'a> {
         base: Value<'a>,
         #[diagnostics(0(colour = Red))]
         at: ExpressionTypes::Name<'a>,
+    },
+
+    #[error("native function `{name}` expects `{expected}` but got arguments of types `{tys}`")]
+    NativeFnCallArgTypeMismatch {
+        name: String,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        expected: String,
+        tys: String,
+    },
+
+    #[error("Could not read file `{filename}`: {error} (in native function call to `{name}`)")]
+    #[with(error = format!("{error}"))]
+    #[expect(
+        clippy::enum_variant_names,
+        reason = "renaming this variant would not make the code clearer"
+    )]
+    NativeFnCallIoError {
+        name: String,
+        filename: String,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        error: std::io::Error,
     },
 }
 
@@ -379,14 +401,7 @@ pub fn eval<'a>(
                         .iter()
                         .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
-                    func(arguments).map_err(|err| match err {
-                        NativeError::Error(err) => err,
-                        NativeError::ArityMismatch { expected } => Error::ArityMismatch {
-                            callee,
-                            expected,
-                            at: expr.into_variant(),
-                        },
-                    })?
+                    func(env.gc, arguments).map_err(|err| err.at_expr(callee, expr))?
                 }
                 Value::Class(class) => {
                     let instance = Value::Instance(GcRef::new_in(
@@ -751,7 +766,7 @@ mod tests {
             .collect();
         let global_cells = GcRef::from_iter_in(gc, [].into_iter());
         eval(
-            &mut Environment::new(gc, global_name_offsets, global_cells),
+            &mut Environment::new(gc, global_name_offsets, global_cells, 0),
             global_cells,
             0,
             scoped_ast,

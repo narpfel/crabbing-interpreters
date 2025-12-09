@@ -1,13 +1,17 @@
 ---
-source: tests/testsuite/main.rs
+source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
-  args: []
+  args:
+    - "--scopes"
   stdin: "// comment\n4 + 4;"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[0mλ» [1m[0m[38;2;170;034;255m[1m=> 8[0m
+[0mλ» [1m[0m(program)
+[0mλ» [1m[0m(program
+   (expr (+ 4.0 4.0)))
+[38;2;170;034;255m[1m=> 8[0m
 [0mλ» [1m[0m
 ----- stderr -----

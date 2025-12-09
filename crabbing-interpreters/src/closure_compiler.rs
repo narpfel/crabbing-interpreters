@@ -32,7 +32,6 @@ use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
 use crate::value::InstanceInner;
-use crate::value::NativeError;
 use crate::value::Value;
 
 pub(crate) struct State<'a, 'b> {
@@ -540,17 +539,8 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 .iter()
                                 .map(|arg| arg(state))
                                 .collect::<Result<_, _>>()?;
-                            func(arguments).map_err(|err| {
-                                Box::new(match err {
-                                    NativeError::Error(err) => err,
-                                    NativeError::ArityMismatch { expected } =>
-                                        Error::ArityMismatch {
-                                            callee,
-                                            expected,
-                                            at: expr.into_variant(),
-                                        },
-                                })
-                            })
+                            func(state.env.gc, arguments)
+                                .map_err(|err| Box::new(err.at_expr(callee, expr)))
                         }
                         Value::Class(class) => {
                             let instance = Value::Instance(GcRef::new_in(

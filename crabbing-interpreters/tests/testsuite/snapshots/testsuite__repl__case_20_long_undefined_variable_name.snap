@@ -2,13 +2,16 @@
 source: crabbing-interpreters/tests/testsuite/main.rs
 info:
   program: crabbing-interpreters
-  args: []
+  args:
+    - "--scopes"
   stdin: 42 + long_variable_name;
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[0mλ» [1m[0m[0mλ» [1m[0m
+[0mλ» [1m[0m(program
+   (expr (+ 42.0 (global-by-name long_variable_name))))
+[0mλ» [1m[0m
 ----- stderr -----
 Error: Undefined variable `long_variable_name`.
    ╭─[<input>:1:6]

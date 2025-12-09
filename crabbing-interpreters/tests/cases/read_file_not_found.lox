@@ -1,0 +1,5 @@
+fun f(filename) {
+    print read_file(filename);
+}
+
+f("this_file_does_not_exist");

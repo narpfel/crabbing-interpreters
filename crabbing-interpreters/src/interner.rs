@@ -10,6 +10,8 @@ pub mod interned {
     pub const INIT: InternedString = InternedString(1);
     pub const THIS: InternedString = InternedString(2);
     pub const SUPER: InternedString = InternedString(3);
+    pub const NATIVE_FUNCTION_TEST: InternedString = InternedString(4);
+    pub const READ_FILE: InternedString = InternedString(5);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,6 +36,8 @@ impl Default for Interner<'_> {
                 ("init", interned::INIT),
                 ("this", interned::THIS),
                 ("super", interned::SUPER),
+                ("native_function_test", interned::NATIVE_FUNCTION_TEST),
+                ("read_file", interned::READ_FILE),
             ]
             .into_iter()
             .collect(),

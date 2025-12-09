@@ -7,6 +7,8 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::from_fn;
 
+use variant_types::IntoVariant as _;
+
 use crate::closure_compiler::Execute;
 use crate::eval::Error;
 use crate::gc::GcRef;
@@ -14,13 +16,17 @@ use crate::gc::GcStr;
 use crate::gc::Trace;
 use crate::hash_map::HashMap;
 use crate::interner::InternedString;
+use crate::scope::Expression;
 use crate::scope::Statement;
 use crate::scope::Variable;
 use crate::value::nanboxed::AsNanBoxed as _;
+use crate::Gc;
 
 pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
+pub(crate) type NativeFnPtr =
+    for<'a> fn(&'a Gc, Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -29,7 +35,7 @@ pub enum Value<'a> {
     Bool(bool),
     Nil,
     Function(Function<'a>),
-    NativeFunction(for<'b> fn(Vec<Value<'b>>) -> Result<Value<'b>, NativeError<'b>>),
+    NativeFunction(NativeFnPtr),
     Class(Class<'a>),
     Instance(Instance<'a>),
     BoundMethod(BoundMethod<'a>),
@@ -239,5 +245,42 @@ impl Debug for BoundMethod<'_> {
 
 pub enum NativeError<'a> {
     Error(Error<'a>),
-    ArityMismatch { expected: usize },
+    ArityMismatch {
+        expected: usize,
+    },
+    TypeError {
+        name: String,
+        expected: String,
+        tys: String,
+    },
+    IoError {
+        name: String,
+        error: std::io::Error,
+        filename: String,
+    },
+}
+
+impl<'a> NativeError<'a> {
+    pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
+        match self {
+            NativeError::Error(err) => err,
+            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+                callee,
+                expected,
+                at: expr.into_variant(),
+            },
+            NativeError::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
+                name,
+                at: expr.into_variant(),
+                expected,
+                tys,
+            },
+            NativeError::IoError { name, error, filename } => Error::NativeFnCallIoError {
+                name,
+                at: expr.into_variant(),
+                error,
+                filename,
+            },
+        }
+    }
 }

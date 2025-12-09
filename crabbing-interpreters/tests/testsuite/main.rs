@@ -131,6 +131,10 @@ type OutputFilter = insta::internals::SettingsBindDropGuard;
 fn filter_output() -> OutputFilter {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter("0x[[:xdigit:]]{4,16}", "[POINTER]");
+    settings.add_filter(
+        r"Could not read file `(?<filename>.*?)`: .*? \(os error 2\) \(in native function call to `read_file`\)",
+        "Could not read file `$filename`: No such file or directory (os error 2) (in native function call to `read_file`)",
+    );
     settings.bind_to_scope()
 }
 
@@ -196,7 +200,7 @@ fn repl(_filter_output: OutputFilter, #[by_ref] testname: &str, #[case] src: &st
         ] {
             assert_cmd_snapshot!(
                 testname,
-                Command::from(interpreter).pass_stdin(src),
+                Command::from(interpreter).arg("--scopes").pass_stdin(src),
             )
         }
     }
