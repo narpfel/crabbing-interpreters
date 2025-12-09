@@ -11,14 +11,14 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method init [(local this @0)] []
          (block
             (print "init")
             (init-return)
             (print "nope")
             (init-return))))
-   (var foo (global @2) (call +2 (global Foo @1)))
-   (print (call +3 (attr (global foo @2) init))))
+   (var foo (global @4) (call +4 (global Foo @3)))
+   (print (call +5 (attr (global foo @4) init))))
 
 ----- stderr -----

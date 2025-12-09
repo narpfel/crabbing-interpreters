@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun foo (global @1) [] []
+   (fun foo (global @3) [] []
       (block))
-   (expr (attr (global foo @1) bar)))
+   (expr (attr (global foo @3) bar)))
 
 ----- stderr -----

@@ -10,8 +10,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 [0mλ» [1m[0m(program
-   (var x (global @1) 27.0)
-   (print (global x @1)))
+   (var x (global @3) 27.0)
+   (print (global x @3)))
 27
 [0mλ» [1m[0m
 ----- stderr -----

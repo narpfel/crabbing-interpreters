@@ -12,6 +12,6 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (class Foo (local @1) (global-by-name Foo))))
+      (class Foo (local @3) (global-by-name Foo))))
 
 ----- stderr -----

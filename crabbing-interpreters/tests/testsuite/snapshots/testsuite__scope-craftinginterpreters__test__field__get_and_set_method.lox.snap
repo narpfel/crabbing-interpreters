@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method method [(local this @0) (local a @1)] []
          (block
             (print "method")
@@ -20,10 +20,10 @@ exit_code: 0
          (block
             (print "other")
             (print (local a @1)))))
-   (var foo (global @2) (call +2 (global Foo @1)))
-   (var method (global @3) (attr (global foo @2) method))
-   (expr (= (setattr (global foo @2) method) (attr (global foo @2) other)))
-   (expr (call +4 (attr (global foo @2) method) 1.0))
-   (expr (call +4 (global method @3) 2.0)))
+   (var foo (global @4) (call +4 (global Foo @3)))
+   (var method (global @5) (attr (global foo @4) method))
+   (expr (= (setattr (global foo @4) method) (attr (global foo @4) other)))
+   (expr (call +6 (attr (global foo @4) method) 1.0))
+   (expr (call +6 (global method @5) 2.0)))
 
 ----- stderr -----

@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var variable_name (global @1) nil)
-   (expr (+ (global variable_name @1) 42.0)))
+   (var variable_name (global @3) nil)
+   (expr (+ (global variable_name @3) 42.0)))
 
 ----- stderr -----

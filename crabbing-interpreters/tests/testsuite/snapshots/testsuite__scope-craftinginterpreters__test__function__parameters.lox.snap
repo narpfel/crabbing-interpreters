@@ -11,41 +11,41 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f0 (global @1) [] []
+   (fun f0 (global @3) [] []
       (block
          (return 0.0)))
-   (print (call +2 (global f0 @1)))
-   (fun f1 (global @2) [(local a @0)] []
+   (print (call +4 (global f0 @3)))
+   (fun f1 (global @4) [(local a @0)] []
       (block
          (return (local a @0))))
-   (print (call +3 (global f1 @2) 1.0))
-   (fun f2 (global @3) [(local a @0) (local b @1)] []
+   (print (call +5 (global f1 @4) 1.0))
+   (fun f2 (global @5) [(local a @0) (local b @1)] []
       (block
          (return (+ (local a @0) (local b @1)))))
-   (print (call +4 (global f2 @3) 1.0 2.0))
-   (fun f3 (global @4) [(local a @0) (local b @1) (local c @2)] []
+   (print (call +6 (global f2 @5) 1.0 2.0))
+   (fun f3 (global @6) [(local a @0) (local b @1) (local c @2)] []
       (block
          (return (+ (+ (local a @0) (local b @1)) (local c @2)))))
-   (print (call +5 (global f3 @4) 1.0 2.0 3.0))
-   (fun f4 (global @5) [(local a @0) (local b @1) (local c @2) (local d @3)] []
+   (print (call +7 (global f3 @6) 1.0 2.0 3.0))
+   (fun f4 (global @7) [(local a @0) (local b @1) (local c @2) (local d @3)] []
       (block
          (return (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)))))
-   (print (call +6 (global f4 @5) 1.0 2.0 3.0 4.0))
-   (fun f5 (global @6) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4)] []
+   (print (call +8 (global f4 @7) 1.0 2.0 3.0 4.0))
+   (fun f5 (global @8) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4)] []
       (block
          (return (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)))))
-   (print (call +7 (global f5 @6) 1.0 2.0 3.0 4.0 5.0))
-   (fun f6 (global @7) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4) (local f @5)] []
+   (print (call +9 (global f5 @8) 1.0 2.0 3.0 4.0 5.0))
+   (fun f6 (global @9) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4) (local f @5)] []
       (block
          (return (+ (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)) (local f @5)))))
-   (print (call +8 (global f6 @7) 1.0 2.0 3.0 4.0 5.0 6.0))
-   (fun f7 (global @8) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4) (local f @5) (local g @6)] []
+   (print (call +10 (global f6 @9) 1.0 2.0 3.0 4.0 5.0 6.0))
+   (fun f7 (global @10) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4) (local f @5) (local g @6)] []
       (block
          (return (+ (+ (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)) (local f @5)) (local g @6)))))
-   (print (call +9 (global f7 @8) 1.0 2.0 3.0 4.0 5.0 6.0 7.0))
-   (fun f8 (global @9) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4) (local f @5) (local g @6) (local h @7)] []
+   (print (call +11 (global f7 @10) 1.0 2.0 3.0 4.0 5.0 6.0 7.0))
+   (fun f8 (global @11) [(local a @0) (local b @1) (local c @2) (local d @3) (local e @4) (local f @5) (local g @6) (local h @7)] []
       (block
          (return (+ (+ (+ (+ (+ (+ (+ (local a @0) (local b @1)) (local c @2)) (local d @3)) (local e @4)) (local f @5)) (local g @6)) (local h @7)))))
-   (print (call +10 (global f8 @9) 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0)))
+   (print (call +12 (global f8 @11) 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0)))
 
 ----- stderr -----

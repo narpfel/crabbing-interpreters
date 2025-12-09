@@ -18,8 +18,8 @@ exit_code: 0
    (print (! 0.0))
    (print (! nil))
    (print (! ""))
-   (fun foo (global @1) [] []
+   (fun foo (global @3) [] []
       (block))
-   (print (! (global foo @1))))
+   (print (! (global foo @3))))
 
 ----- stderr -----

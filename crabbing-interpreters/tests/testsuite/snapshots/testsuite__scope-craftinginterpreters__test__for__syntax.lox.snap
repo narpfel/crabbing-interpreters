@@ -12,31 +12,31 @@ exit_code: 0
 ----- stdout -----
 (program
    (for
-      (var c (local @1) 0.0)
-      (< (local c @1) 3.0)
+      (var c (local @3) 0.0)
+      (< (local c @3) 3.0)
       ∅
-      (print (= (local c @1) (+ (local c @1) 1.0))))
+      (print (= (local c @3) (+ (local c @3) 1.0))))
    (for
-      (var a (local @1) 0.0)
-      (< (local a @1) 3.0)
-      (= (local a @1) (+ (local a @1) 1.0))
+      (var a (local @3) 0.0)
+      (< (local a @3) 3.0)
+      (= (local a @3) (+ (local a @3) 1.0))
       (block
-         (print (local a @1))))
-   (fun foo (global @1) [] []
+         (print (local a @3))))
+   (fun foo (global @3) [] []
       (block
          (for
             ∅
             ∅
             ∅
             (return "done"))))
-   (print (call +2 (global foo @1)))
-   (var i (global @2) 0.0)
+   (print (call +4 (global foo @3)))
+   (var i (global @4) 0.0)
    (for
       ∅
-      (< (global i @2) 2.0)
-      (= (global i @2) (+ (global i @2) 1.0))
-      (print (global i @2)))
-   (fun bar (global @3) [] []
+      (< (global i @4) 2.0)
+      (= (global i @4) (+ (global i @4) 1.0))
+      (print (global i @4)))
+   (fun bar (global @5) [] []
       (block
          (for
             (var i (local @0) 0.0)
@@ -48,14 +48,14 @@ exit_code: 0
                   (>= (local i @0) 2.0)
                   (return ∅)
                   ∅)))))
-   (expr (call +4 (global bar @3)))
+   (expr (call +6 (global bar @5)))
    (for
-      (var i (local @4) 0.0)
-      (< (local i @4) 2.0)
+      (var i (local @6) 0.0)
+      (< (local i @6) 2.0)
       ∅
       (block
-         (print (local i @4))
-         (expr (= (local i @4) (+ (local i @4) 1.0)))))
+         (print (local i @6))
+         (expr (= (local i @6) (+ (local i @6) 1.0)))))
    (for
       ∅
       false

@@ -11,14 +11,14 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var f (global @1) ∅)
-   (fun foo (global @2) [(cell param @0)] [None]
+   (var f (global @3) ∅)
+   (fun foo (global @4) [(cell param @0)] [None]
       (block
          (fun f_ (local @0) [] [Some(0)]
             (block
                (print (cell param @0))))
-         (expr (= (global f @1) (local f_ @0)))))
-   (expr (call +3 (global foo @2) "param"))
-   (expr (call +3 (global f @1))))
+         (expr (= (global f @3) (local f_ @0)))))
+   (expr (call +5 (global foo @4) "param"))
+   (expr (call +5 (global f @3))))
 
 ----- stderr -----

@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class A (global @1) ∅
+   (class A (global @3) ∅
       (method say [(local this @0)] []
          (block
             (print "A"))))
-   (class B (global @2) (global A @1)
+   (class B (global @4) (global A @3)
       (method getClosure [(cell this @1)] [None, None]
          (block
             (fun closure (local @0) [] [Some(1), Some(0)]
@@ -25,10 +25,10 @@ exit_code: 0
       (method say [(local this @0)] [None]
          (block
             (print "B"))))
-   (class C (global @3) (global B @2)
+   (class C (global @5) (global B @4)
       (method say [(local this @0)] [None]
          (block
             (print "C"))))
-   (expr (call +4 (call +4 (attr (call +4 (global C @3)) getClosure)))))
+   (expr (call +6 (call +6 (attr (call +6 (global C @5)) getClosure)))))
 
 ----- stderr -----

@@ -11,19 +11,19 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Base (global @1) ∅
+   (class Base (global @3) ∅
       (method init [(local this @0) (local a @1)] []
          (block
             (expr (= (setattr (local this @0) a) (local a @1)))
             (init-return))))
-   (class Derived (global @2) (global Base @1)
+   (class Derived (global @4) (global Base @3)
       (method init [(local this @0) (local a @1) (local b @2)] [None]
          (block
             (expr (call +3 (super (cell super @0) (local super @0) init) (local a @1)))
             (expr (= (setattr (local this @0) b) (local b @2)))
             (init-return))))
-   (var derived (global @3) (call +3 (global Derived @2) "a" "b"))
-   (print (attr (global derived @3) a))
-   (print (attr (global derived @3) b)))
+   (var derived (global @5) (call +5 (global Derived @4) "a" "b"))
+   (print (attr (global derived @5) a))
+   (print (attr (global derived @5) b)))
 
 ----- stderr -----

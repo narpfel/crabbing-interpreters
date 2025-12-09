@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class A (global @1) ∅)
-   (fun f (global @2) [] []
+   (class A (global @3) ∅)
+   (fun f (global @4) [] []
       (block
-         (class B (local @0) (global A @1))
+         (class B (local @0) (global A @3))
          (return (local B @0))))
-   (print (call +3 (global f @2))))
+   (print (call +5 (global f @4))))
 
 ----- stderr -----

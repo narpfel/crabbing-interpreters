@@ -766,7 +766,7 @@ mod tests {
             .collect();
         let global_cells = GcRef::from_iter_in(gc, [].into_iter());
         eval(
-            &mut Environment::new(gc, global_name_offsets, global_cells, 0),
+            &mut Environment::new(gc, global_name_offsets, global_cells),
             global_cells,
             0,
             scoped_ast,

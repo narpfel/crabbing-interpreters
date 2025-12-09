@@ -19,6 +19,6 @@ exit_code: 0
                (return (local n @0))
                ∅)
             (return (+ (call +1 (cell fib @0) (- (local n @0) 1.0)) (call +1 (cell fib @0) (- (local n @0) 2.0))))))
-      (print (call +1 (cell fib @0) 8.0))))
+      (print (call +3 (cell fib @0) 8.0))))
 
 ----- stderr -----

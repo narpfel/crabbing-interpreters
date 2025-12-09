@@ -12,10 +12,10 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a (local @1) "outer")
+      (var a (local @3) "outer")
       (block
-         (print (local a @1))
-         (var a (local @2) "inner")
-         (print (local a @2)))))
+         (print (local a @3))
+         (var a (local @4) "inner")
+         (print (local a @4)))))
 
 ----- stderr -----

@@ -11,11 +11,11 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method method [(local this @0)] []
          (block
             (return "ok")
             (print "bad"))))
-   (print (call +2 (attr (call +2 (global Foo @1)) method))))
+   (print (call +4 (attr (call +4 (global Foo @3)) method))))
 
 ----- stderr -----

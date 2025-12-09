@@ -10,9 +10,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 [0mλ» [1m[0m(program
-   (var x (global @1) ∅)
-   (print (global x @1))
-   (print (== (global x @1) nil)))
+   (var x (global @3) ∅)
+   (print (global x @3))
+   (print (== (global x @3) nil)))
 nil
 true
 [0mλ» [1m[0m

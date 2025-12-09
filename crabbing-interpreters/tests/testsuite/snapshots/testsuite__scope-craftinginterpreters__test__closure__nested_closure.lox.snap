@@ -11,8 +11,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var f (global @1) ∅)
-   (fun f1 (global @2) [] [None]
+   (var f (global @3) ∅)
+   (fun f1 (global @4) [] [None]
       (block
          (var a (cell @0) "a")
          (fun f2 (local @0) [] [Some(0), None]
@@ -26,10 +26,10 @@ exit_code: 0
                            (print (cell a @0))
                            (print (cell b @1))
                            (print (cell c @2))))
-                     (expr (= (global f @1) (local f4 @0)))))
+                     (expr (= (global f @3) (local f4 @0)))))
                (expr (call +1 (local f3 @0)))))
          (expr (call +1 (local f2 @0)))))
-   (expr (call +3 (global f1 @2)))
-   (expr (call +3 (global f @1))))
+   (expr (call +5 (global f1 @4)))
+   (expr (call +5 (global f @3))))
 
 ----- stderr -----

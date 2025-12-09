@@ -11,9 +11,9 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f (global @1) [(local filename @0)] []
+   (fun f (global @3) [(local filename @0)] []
       (block
-         (print (call +1 (global read_file @-2) (local filename @0)))))
-   (expr (call +2 (global f @1) "this_file_does_not_exist")))
+         (print (call +1 (global read_file @2) (local filename @0)))))
+   (expr (call +4 (global f @3) "this_file_does_not_exist")))
 
 ----- stderr -----

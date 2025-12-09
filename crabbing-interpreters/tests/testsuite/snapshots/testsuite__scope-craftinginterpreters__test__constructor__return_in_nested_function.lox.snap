@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method init [(local this @0)] []
          (block
             (fun init (local @1) [] []
@@ -19,6 +19,6 @@ exit_code: 0
                   (return "bar")))
             (print (call +2 (local init @1)))
             (init-return))))
-   (print (call +2 (global Foo @1))))
+   (print (call +4 (global Foo @3))))
 
 ----- stderr -----

@@ -10,6 +10,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 [0mλ» [1m[0m(program
-   (var x (global @1) 42.0))
+   (var x (global @3) 42.0))
 [0mλ» [1m[0m
 ----- stderr -----

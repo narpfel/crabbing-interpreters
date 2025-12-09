@@ -51,8 +51,6 @@ use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
 use crate::scope::resolve_names;
-use crate::scope::Slot;
-use crate::scope::Target;
 use crate::value::Value;
 
 mod bytecode;
@@ -236,10 +234,9 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
         [clock, native_function_test, read_file]
             .into_iter()
             .enumerate()
-            .map(|(i, x)| (x, 0_usize.wrapping_sub(i)))
+            .map(|(i, name)| (name, i))
             .collect(),
         GcRef::from_iter_in(gc, [].into_iter()),
-        globals_names.len(),
     );
     let mut line = String::new();
     'repl: loop {
@@ -297,16 +294,6 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
                     println!("\x1B[38;2;170;034;255m\x1B[1m=> {value}\x1B[0m");
                 },
             Err(ControlFlow::Error(err)) => err.print(),
-        }
-        for (&id, var) in &program.global_name_offsets {
-            if !globals_names.iter().any(|n| n.id() == id) {
-                let slot = match var.target() {
-                    Target::GlobalBySlot(slot) => Slot::Global(slot),
-                    _ => unreachable!(),
-                };
-                let value = globals.get(global_cells, 0, slot);
-                globals.add_builtin_global(id, value);
-            }
         }
         globals_names = bump.alloc_slice_copy(
             &globals_names
@@ -395,7 +382,7 @@ pub fn run<'a>(
             .global_name_offsets
             .iter()
             .map(|(&name, v)| match v.target() {
-                Target::GlobalBySlot(slot) => (name, slot),
+                scope::Target::GlobalBySlot(slot) => (name, slot),
                 _ => unreachable!(),
             })
             .collect();
@@ -405,7 +392,7 @@ pub fn run<'a>(
                 .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
         let mut stack = time("stk", args.times, || {
-            Environment::new(gc, global_name_offsets, global_cells, globals.len())
+            Environment::new(gc, global_name_offsets, global_cells)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         let (bytecode, constants, metadata, error_locations) =

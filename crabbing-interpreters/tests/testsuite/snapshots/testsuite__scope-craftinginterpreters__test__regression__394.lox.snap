@@ -12,8 +12,8 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (class A (local @1) ∅)
-      (class B (local @2) (local A @1))
-      (print (local B @2))))
+      (class A (local @3) ∅)
+      (class B (local @4) (local A @3))
+      (print (local B @4))))
 
 ----- stderr -----

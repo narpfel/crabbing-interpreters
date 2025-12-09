@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method getClosure [(cell this @0)] [None]
          (block
             (fun closure (local @0) [] [Some(0)]
@@ -21,7 +21,7 @@ exit_code: 0
       (method toString [(local this @0)] []
          (block
             (return "Foo"))))
-   (var closure (global @2) (call +2 (attr (call +2 (global Foo @1)) getClosure)))
-   (print (call +3 (global closure @2))))
+   (var closure (global @4) (call +4 (attr (call +4 (global Foo @3)) getClosure)))
+   (print (call +5 (global closure @4))))
 
 ----- stderr -----

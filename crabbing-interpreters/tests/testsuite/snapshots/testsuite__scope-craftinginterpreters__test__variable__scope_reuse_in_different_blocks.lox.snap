@@ -12,10 +12,10 @@ exit_code: 0
 ----- stdout -----
 (program
    (block
-      (var a (local @1) "first")
-      (print (local a @1)))
+      (var a (local @3) "first")
+      (print (local a @3)))
    (block
-      (var a (local @1) "second")
-      (print (local a @1))))
+      (var a (local @3) "second")
+      (print (local a @3))))
 
 ----- stderr -----

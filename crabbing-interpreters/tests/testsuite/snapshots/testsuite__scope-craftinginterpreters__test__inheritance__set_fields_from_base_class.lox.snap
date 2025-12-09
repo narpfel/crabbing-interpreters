@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method foo [(local this @0) (local a @1) (local b @2)] []
          (block
             (expr (= (setattr (local this @0) field1) (local a @1)))
@@ -20,7 +20,7 @@ exit_code: 0
          (block
             (print (attr (local this @0) field1))
             (print (attr (local this @0) field2)))))
-   (class Bar (global @2) (global Foo @1)
+   (class Bar (global @4) (global Foo @3)
       (method bar [(local this @0) (local a @1) (local b @2)] [None]
          (block
             (expr (= (setattr (local this @0) field1) (local a @1)))
@@ -29,11 +29,11 @@ exit_code: 0
          (block
             (print (attr (local this @0) field1))
             (print (attr (local this @0) field2)))))
-   (var bar (global @3) (call +3 (global Bar @2)))
-   (expr (call +4 (attr (global bar @3) foo) "foo 1" "foo 2"))
-   (expr (call +4 (attr (global bar @3) fooPrint)))
-   (expr (call +4 (attr (global bar @3) bar) "bar 1" "bar 2"))
-   (expr (call +4 (attr (global bar @3) barPrint)))
-   (expr (call +4 (attr (global bar @3) fooPrint))))
+   (var bar (global @5) (call +5 (global Bar @4)))
+   (expr (call +6 (attr (global bar @5) foo) "foo 1" "foo 2"))
+   (expr (call +6 (attr (global bar @5) fooPrint)))
+   (expr (call +6 (attr (global bar @5) bar) "bar 1" "bar 2"))
+   (expr (call +6 (attr (global bar @5) barPrint)))
+   (expr (call +6 (attr (global bar @5) fooPrint))))
 
 ----- stderr -----

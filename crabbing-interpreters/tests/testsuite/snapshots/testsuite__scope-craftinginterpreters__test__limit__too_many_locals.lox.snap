@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f (global @1) [] []
+   (fun f (global @3) [] []
       (block
          (var v01 (local @0) ∅)
          (var v02 (local @1) ∅)

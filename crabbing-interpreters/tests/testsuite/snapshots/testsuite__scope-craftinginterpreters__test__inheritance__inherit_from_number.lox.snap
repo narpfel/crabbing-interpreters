@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (var Number (global @1) 123.0)
-   (class Foo (global @2) (global Number @1)))
+   (var Number (global @3) 123.0)
+   (class Foo (global @4) (global Number @3)))
 
 ----- stderr -----

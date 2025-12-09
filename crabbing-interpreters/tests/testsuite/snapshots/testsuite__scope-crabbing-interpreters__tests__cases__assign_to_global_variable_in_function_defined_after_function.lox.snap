@@ -11,12 +11,12 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (fun f (global @1) [] []
+   (fun f (global @3) [] []
       (block
          (expr (= (global-by-name a) 42.0))))
-   (var a (global @2) 27.0)
-   (print (global a @2))
-   (print (call +3 (global f @1)))
-   (print (global a @2)))
+   (var a (global @4) 27.0)
+   (print (global a @4))
+   (print (call +5 (global f @3)))
+   (print (global a @4)))
 
 ----- stderr -----

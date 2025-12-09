@@ -11,18 +11,18 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class A (global @1) ∅
+   (class A (global @3) ∅
       (method method [(local this @0) (local arg @1)] []
          (block
             (print (+ (+ "A.method(" (local arg @1)) ")")))))
-   (class B (global @2) (global A @1)
+   (class B (global @4) (global A @3)
       (method getClosure [(local this @0)] [None]
          (block
             (return (super (cell super @0) (local super @0) method))))
       (method method [(local this @0) (local arg @1)] [None]
          (block
             (print (+ (+ "B.method(" (local arg @1)) ")")))))
-   (var closure (global @3) (call +3 (attr (call +3 (global B @2)) getClosure)))
-   (expr (call +4 (global closure @3) "arg")))
+   (var closure (global @5) (call +5 (attr (call +5 (global B @4)) getClosure)))
+   (expr (call +6 (global closure @5) "arg")))
 
 ----- stderr -----

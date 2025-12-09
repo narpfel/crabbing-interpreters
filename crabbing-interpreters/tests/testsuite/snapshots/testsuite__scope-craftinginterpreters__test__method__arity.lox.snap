@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 (program
-   (class Foo (global @1) ∅
+   (class Foo (global @3) ∅
       (method method0 [(local this @0)] []
          (block
             (return "no args")))
@@ -39,15 +39,15 @@ exit_code: 0
       (method method8 [(local this @0) (local a @1) (local b @2) (local c @3) (local d @4) (local e @5) (local f @6) (local g @7) (local h @8)] []
          (block
             (return (+ (+ (+ (+ (+ (+ (+ (local a @1) (local b @2)) (local c @3)) (local d @4)) (local e @5)) (local f @6)) (local g @7)) (local h @8))))))
-   (var foo (global @2) (call +2 (global Foo @1)))
-   (print (call +3 (attr (global foo @2) method0)))
-   (print (call +3 (attr (global foo @2) method1) 1.0))
-   (print (call +3 (attr (global foo @2) method2) 1.0 2.0))
-   (print (call +3 (attr (global foo @2) method3) 1.0 2.0 3.0))
-   (print (call +3 (attr (global foo @2) method4) 1.0 2.0 3.0 4.0))
-   (print (call +3 (attr (global foo @2) method5) 1.0 2.0 3.0 4.0 5.0))
-   (print (call +3 (attr (global foo @2) method6) 1.0 2.0 3.0 4.0 5.0 6.0))
-   (print (call +3 (attr (global foo @2) method7) 1.0 2.0 3.0 4.0 5.0 6.0 7.0))
-   (print (call +3 (attr (global foo @2) method8) 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0)))
+   (var foo (global @4) (call +4 (global Foo @3)))
+   (print (call +5 (attr (global foo @4) method0)))
+   (print (call +5 (attr (global foo @4) method1) 1.0))
+   (print (call +5 (attr (global foo @4) method2) 1.0 2.0))
+   (print (call +5 (attr (global foo @4) method3) 1.0 2.0 3.0))
+   (print (call +5 (attr (global foo @4) method4) 1.0 2.0 3.0 4.0))
+   (print (call +5 (attr (global foo @4) method5) 1.0 2.0 3.0 4.0 5.0))
+   (print (call +5 (attr (global foo @4) method6) 1.0 2.0 3.0 4.0 5.0 6.0))
+   (print (call +5 (attr (global foo @4) method7) 1.0 2.0 3.0 4.0 5.0 6.0 7.0))
+   (print (call +5 (attr (global foo @4) method8) 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0)))
 
 ----- stderr -----
