@@ -51,8 +51,7 @@ use crate::parse::parse;
 use crate::parse::program;
 use crate::parse::Name;
 use crate::scope::resolve_names;
-use crate::scope::Slot;
-use crate::scope::Target;
+use crate::scope::GlobalsOffset;
 use crate::value::Value;
 
 mod bytecode;
@@ -223,23 +222,22 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
     let native_function_test = interner.intern("native_function_test");
     let read_file = interner.intern("read_file");
     let mut globals_names = bump.alloc_slice_copy(&[
-        Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock"))),
+        Name::new(read_file, bump.alloc(Loc::debug_loc(bump, "read_file"))),
         Name::new(
             native_function_test,
             bump.alloc(Loc::debug_loc(bump, "native_function_test")),
         ),
-        Name::new(read_file, bump.alloc(Loc::debug_loc(bump, "read_file"))),
+        Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock"))),
     ]);
     let gc = &Gc::default();
     let mut globals = Environment::new(
         gc,
-        [clock, native_function_test, read_file]
+        [read_file, native_function_test, clock]
             .into_iter()
             .enumerate()
-            .map(|(i, x)| (x, 0_usize.wrapping_sub(i)))
+            .map(|(i, name)| (name, i))
             .collect(),
         GcRef::from_iter_in(gc, [].into_iter()),
-        globals_names.len(),
     );
     let mut line = String::new();
     'repl: loop {
@@ -298,16 +296,6 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
                 },
             Err(ControlFlow::Error(err)) => err.print(),
         }
-        for (&id, var) in &program.global_name_offsets {
-            if !globals_names.iter().any(|n| n.id() == id) {
-                let slot = match var.target() {
-                    Target::GlobalBySlot(slot) => Slot::Global(slot),
-                    _ => unreachable!(),
-                };
-                let value = globals.get(global_cells, 0, slot);
-                globals.add_builtin_global(id, value);
-            }
-        }
         globals_names = bump.alloc_slice_copy(
             &globals_names
                 .iter()
@@ -361,16 +349,16 @@ pub fn run<'a>(
 
         let globals = &*bump.alloc_slice_copy(&[
             Name::new(
-                interner.intern("clock"),
-                bump.alloc(Loc::debug_loc(bump, "clock")),
+                interner.intern("read_file"),
+                bump.alloc(Loc::debug_loc(bump, "read_file")),
             ),
             Name::new(
                 interner.intern("native_function_test"),
                 bump.alloc(Loc::debug_loc(bump, "native_function_test")),
             ),
             Name::new(
-                interner.intern("read_file"),
-                bump.alloc(Loc::debug_loc(bump, "read_file")),
+                interner.intern("clock"),
+                bump.alloc(Loc::debug_loc(bump, "clock")),
             ),
         ]);
         let program = time("scp", args.times, move || {
@@ -378,7 +366,8 @@ pub fn run<'a>(
         })?;
 
         if args.layout {
-            println!("{}\n", program.scopes.as_sexpr("layout", 3));
+            let globals_offset = GlobalsOffset::global(globals.len().saturating_sub(1));
+            println!("{}\n", program.scopes.as_sexpr("layout", 3, globals_offset));
         }
 
         if args.scopes {
@@ -395,7 +384,7 @@ pub fn run<'a>(
             .global_name_offsets
             .iter()
             .map(|(&name, v)| match v.target() {
-                Target::GlobalBySlot(slot) => (name, slot),
+                scope::Target::GlobalBySlot(slot) => (name, slot),
                 _ => unreachable!(),
             })
             .collect();
@@ -405,7 +394,7 @@ pub fn run<'a>(
                 .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
         let mut stack = time("stk", args.times, || {
-            Environment::new(gc, global_name_offsets, global_cells, globals.len())
+            Environment::new(gc, global_name_offsets, global_cells)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         let (bytecode, constants, metadata, error_locations) =

@@ -188,6 +188,9 @@ fn repl_produces_error_message(
 #[case::add_bools("true + false;")]
 #[case::var_statement_without_initialiser("var x; print x; print x == nil;")]
 #[case::use_variable_in_multiple_lines("var x = 42;\nprint x;")]
+#[case::use_variable_in_multiple_lines_and_use_builtin(
+    "var x = 42; var y = clock;\nprint x; print y; native_function_test(x, y);"
+)]
 fn repl(_filter_output: OutputFilter, #[by_ref] testname: &str, #[case] src: &str) {
     insta::allow_duplicates! {
         for interpreter in [

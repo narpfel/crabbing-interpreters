@@ -1,0 +1,30 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--scopes"
+  stdin: "var x = 42; var y = clock;\nprint x; print y; native_function_test(x, y);"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[0mλ» [1m[0m(program
+   (var x (global @1) 42.0)
+   (var y (global @2) (global clock @0)))
+[0mλ» [1m[0m(program
+   (print (global x @-1))
+   (print (global y @0))
+   (expr (call +1 (global native_function_test @-3) (global x @-1) (global y @0))))
+42
+<native fn>
+native test function called with [
+    Number(
+        42.0,
+    ),
+    NativeFunction(
+        [POINTER],
+    ),
+]
+[0mλ» [1m[0m
+----- stderr -----
