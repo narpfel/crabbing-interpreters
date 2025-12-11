@@ -14,6 +14,6 @@ exit_code: 0
    (fun foo (global @1) [] []
       (block))
    (print (global foo @1))
-   (print (global clock @-2)))
+   (print (global clock @0)))
 
 ----- stderr -----

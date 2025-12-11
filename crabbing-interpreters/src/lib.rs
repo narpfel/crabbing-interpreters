@@ -222,17 +222,17 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
     let native_function_test = interner.intern("native_function_test");
     let read_file = interner.intern("read_file");
     let mut globals_names = bump.alloc_slice_copy(&[
-        Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock"))),
+        Name::new(read_file, bump.alloc(Loc::debug_loc(bump, "read_file"))),
         Name::new(
             native_function_test,
             bump.alloc(Loc::debug_loc(bump, "native_function_test")),
         ),
-        Name::new(read_file, bump.alloc(Loc::debug_loc(bump, "read_file"))),
+        Name::new(clock, bump.alloc(Loc::debug_loc(bump, "clock"))),
     ]);
     let gc = &Gc::default();
     let mut globals = Environment::new(
         gc,
-        [clock, native_function_test, read_file]
+        [read_file, native_function_test, clock]
             .into_iter()
             .enumerate()
             .map(|(i, name)| (name, i))
@@ -349,16 +349,16 @@ pub fn run<'a>(
 
         let globals = &*bump.alloc_slice_copy(&[
             Name::new(
-                interner.intern("clock"),
-                bump.alloc(Loc::debug_loc(bump, "clock")),
+                interner.intern("read_file"),
+                bump.alloc(Loc::debug_loc(bump, "read_file")),
             ),
             Name::new(
                 interner.intern("native_function_test"),
                 bump.alloc(Loc::debug_loc(bump, "native_function_test")),
             ),
             Name::new(
-                interner.intern("read_file"),
-                bump.alloc(Loc::debug_loc(bump, "read_file")),
+                interner.intern("clock"),
+                bump.alloc(Loc::debug_loc(bump, "clock")),
             ),
         ]);
         let program = time("scp", args.times, move || {
