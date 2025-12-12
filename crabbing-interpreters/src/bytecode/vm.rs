@@ -955,7 +955,7 @@ fn execute_call<'a>(
                     .map(|_| vm.stack_mut(sp).pop().parse())
                     .collect();
                 args.reverse();
-                let value = native_fn(vm.env.gc, args)
+                let value = native_fn(&vm.env, args)
                     .map_err(|err| Box::new(err.at_expr(callee, vm.expr_at(pc))))?;
                 vm.stack_mut(sp).push(value.into_nanboxed());
                 Ok(*sp)

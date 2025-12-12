@@ -401,7 +401,7 @@ pub fn eval<'a>(
                         .iter()
                         .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
-                    func(env.gc, arguments).map_err(|err| err.at_expr(callee, expr))?
+                    func(env, arguments).map_err(|err| err.at_expr(callee, expr))?
                 }
                 Value::Class(class) => {
                     let instance = Value::Instance(GcRef::new_in(

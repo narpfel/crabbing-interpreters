@@ -10,6 +10,7 @@ use std::iter::from_fn;
 use variant_types::IntoVariant as _;
 
 use crate::closure_compiler::Execute;
+use crate::environment::Environment;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
@@ -20,13 +21,12 @@ use crate::scope::Expression;
 use crate::scope::Statement;
 use crate::scope::Variable;
 use crate::value::nanboxed::AsNanBoxed as _;
-use crate::Gc;
 
 pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
 pub(crate) type NativeFnPtr =
-    for<'a> fn(&'a Gc, Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
+    for<'a> fn(&Environment<'a>, Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {

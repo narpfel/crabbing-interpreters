@@ -53,7 +53,7 @@ impl<'a> Environment<'a> {
             global_cells,
         };
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
-            env.stack[slot] = Unboxed::NativeFunction(|_gc, arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
                 if !arguments.is_empty() {
                     return Err(NativeError::ArityMismatch { expected: 0 });
                 }
@@ -66,7 +66,7 @@ impl<'a> Environment<'a> {
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::NATIVE_FUNCTION_TEST) {
-            env.stack[slot] = Unboxed::NativeFunction(|_gc, arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
                 println!("native test function called with {arguments:#?}");
                 Ok(Unboxed::Nil)
             })
@@ -74,9 +74,9 @@ impl<'a> Environment<'a> {
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
-            env.stack[slot] = Unboxed::NativeFunction(|gc, arguments| match &arguments[..] {
+            env.stack[slot] = Unboxed::NativeFunction(|env, arguments| match &arguments[..] {
                 [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
-                    gc,
+                    env.gc,
                     &std::fs::read_to_string(&**filename).map_err(|error| {
                         NativeError::IoError {
                             name: "read_file".to_owned(),

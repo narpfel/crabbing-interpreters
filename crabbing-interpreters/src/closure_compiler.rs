@@ -539,7 +539,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 .iter()
                                 .map(|arg| arg(state))
                                 .collect::<Result<_, _>>()?;
-                            func(state.env.gc, arguments)
+                            func(state.env, arguments)
                                 .map_err(|err| Box::new(err.at_expr(callee, expr)))
                         }
                         Value::Class(class) => {
