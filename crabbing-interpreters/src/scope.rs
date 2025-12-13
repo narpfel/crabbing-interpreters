@@ -75,8 +75,8 @@ enum IsInit {
 impl IsInit {
     fn then<T>(self, iterator: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
         match self {
-            IsInit::Yes => Either::Left(iterator),
-            IsInit::No => Either::Right(iter::empty()),
+            Self::Yes => Either::Left(iterator),
+            Self::No => Either::Right(iter::empty()),
         }
     }
 }
@@ -116,13 +116,13 @@ enum FrameEntry<'a> {
 impl FrameEntry<'_> {
     fn as_sexpr(&self, indent: usize, globals_offset: GlobalsOffset) -> String {
         match self {
-            FrameEntry::Local(variable) => variable.as_sexpr(globals_offset),
-            FrameEntry::Call(stack_size_at_callsite) => format!(
+            Self::Local(variable) => variable.as_sexpr(globals_offset),
+            Self::Call(stack_size_at_callsite) => format!(
                 "(call +{})",
                 globals_offset.local_slot(stack_size_at_callsite.get()),
             ),
-            FrameEntry::ChildScope(scope) => scope.as_sexpr("block", indent, globals_offset),
-            FrameEntry::FunctionScope(scope) => scope.as_sexpr("function", indent, globals_offset),
+            Self::ChildScope(scope) => scope.as_sexpr("block", indent, globals_offset),
+            Self::FunctionScope(scope) => scope.as_sexpr("function", indent, globals_offset),
         }
     }
 }
@@ -609,16 +609,16 @@ pub enum Statement<'a> {
 impl Statement<'_> {
     fn as_sexpr(&self, indent: usize, globals_offset: GlobalsOffset) -> String {
         let result = match self {
-            Statement::Expression(expr) => format!("(expr {})", expr.as_sexpr(globals_offset)),
-            Statement::Print(expr) => format!("(print {})", expr.as_sexpr(globals_offset)),
-            Statement::Var(target, init) => format!(
+            Self::Expression(expr) => format!("(expr {})", expr.as_sexpr(globals_offset)),
+            Self::Print(expr) => format!("(print {})", expr.as_sexpr(globals_offset)),
+            Self::Var(target, init) => format!(
                 "(var {} {} {})",
                 target.name.slice(),
                 target.target().as_sexpr(globals_offset),
                 init.map(|init| init.as_sexpr(globals_offset))
                     .unwrap_or_else(|| "∅".to_string()),
             ),
-            Statement::Block(stmts) => format!(
+            Self::Block(stmts) => format!(
                 "(block{}{})",
                 if stmts.is_empty() { "" } else { "\n" },
                 stmts
@@ -627,7 +627,7 @@ impl Statement<'_> {
                     .collect::<String>()
                     .trim_end(),
             ),
-            Statement::If { condition, then, or_else } => format!(
+            Self::If { condition, then, or_else } => format!(
                 "(if\n{EMPTY:indent$}{}\n{}{})",
                 condition.as_sexpr(globals_offset),
                 then.as_sexpr(indent, globals_offset),
@@ -636,12 +636,12 @@ impl Statement<'_> {
                     .unwrap_or_else(|| format!("{EMPTY:indent$}∅\n"))
                     .trim_end(),
             ),
-            Statement::While { condition, body } => format!(
+            Self::While { condition, body } => format!(
                 "(while\n{EMPTY:indent$}{}\n{})",
                 condition.as_sexpr(globals_offset),
                 body.as_sexpr(indent, globals_offset).trim_end(),
             ),
-            Statement::For { init, condition, update, body } => format!(
+            Self::For { init, condition, update, body } => format!(
                 "(for\n{}{EMPTY:indent$}{}\n{EMPTY:indent$}{}\n{})",
                 init.map(|init| init.as_sexpr(indent, globals_offset))
                     .unwrap_or_else(|| format!("{EMPTY:indent$}∅\n")),
@@ -653,18 +653,18 @@ impl Statement<'_> {
                     .unwrap_or_else(|| "∅".to_string()),
                 body.as_sexpr(indent, globals_offset).trim_end(),
             ),
-            Statement::Function { target, function } => function.as_sexpr(
+            Self::Function { target, function } => function.as_sexpr(
                 indent,
                 FunctionKind::Function,
                 Some(*target),
                 globals_offset,
             ),
-            Statement::Return(expr) => format!(
+            Self::Return(expr) => format!(
                 "(return {})",
                 expr.map_or_else(|| "∅".to_string(), |expr| expr.as_sexpr(globals_offset)),
             ),
-            Statement::InitReturn(_) => "(init-return)".to_owned(),
-            Statement::Class { target, base, methods } => format!(
+            Self::InitReturn(_) => "(init-return)".to_owned(),
+            Self::Class { target, base, methods } => format!(
                 "(class {} {} {}{}{})",
                 target.name.slice(),
                 target.target().as_sexpr(globals_offset),
@@ -782,11 +782,11 @@ pub enum Target {
 impl Target {
     fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
         let (ty, slot) = match (globals_offset.scope, *self) {
-            (ScopeKind::Global, Target::Local(slot)) => ("local", globals_offset.apply(slot)),
-            (ScopeKind::Local, Target::Local(slot)) => ("local", slot.cast_signed()),
-            (_, Target::GlobalBySlot(slot)) => ("global", globals_offset.apply(slot)),
-            (_, Target::GlobalByName) => unreachable!(),
-            (_, Target::Cell(slot)) => ("cell", slot.cast_signed()),
+            (ScopeKind::Global, Self::Local(slot)) => ("local", globals_offset.apply(slot)),
+            (ScopeKind::Local, Self::Local(slot)) => ("local", slot.cast_signed()),
+            (_, Self::GlobalBySlot(slot)) => ("global", globals_offset.apply(slot)),
+            (_, Self::GlobalByName) => unreachable!(),
+            (_, Self::Cell(slot)) => ("cell", slot.cast_signed()),
         };
         format!("({ty} @{slot})")
     }
@@ -856,15 +856,15 @@ pub enum Expression<'a> {
 impl<'a> Expression<'a> {
     pub(crate) fn loc(&self) -> Loc<'a> {
         match self {
-            Expression::Literal(lit) => lit.loc(),
-            Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
-            Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
-            Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
-            Expression::Name(variable) => variable.name.loc(),
-            Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
-            Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
-            Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
-            Expression::Super { super_, this: _, attribute } => super_.loc().until(attribute.loc()),
+            Self::Literal(lit) => lit.loc(),
+            Self::Unary(op, expr) => op.token.loc().until(expr.loc()),
+            Self::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
+            Self::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
+            Self::Name(variable) => variable.name.loc(),
+            Self::Assign { target, value, .. } => target.loc().until(value.loc()),
+            Self::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
+            Self::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+            Self::Super { super_, this: _, attribute } => super_.loc().until(attribute.loc()),
         }
     }
 
@@ -874,26 +874,25 @@ impl<'a> Expression<'a> {
 
     fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
         match self {
-            Expression::Literal(lit) => lit.kind.value_string(),
-            Expression::Unary(operator, operand) => format!(
+            Self::Literal(lit) => lit.kind.value_string(),
+            Self::Unary(operator, operand) => format!(
                 "({} {})",
                 operator.token.slice(),
                 operand.as_sexpr(globals_offset),
             ),
-            Expression::Binary { lhs, op, rhs } => format!(
+            Self::Binary { lhs, op, rhs } => format!(
                 "({} {} {})",
                 op.token.slice(),
                 lhs.as_sexpr(globals_offset),
                 rhs.as_sexpr(globals_offset),
             ),
-            Expression::Grouping { expr, .. } =>
-                format!("(group {})", expr.as_sexpr(globals_offset)),
-            Expression::Assign { target, value, .. } => format!(
+            Self::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr(globals_offset)),
+            Self::Assign { target, value, .. } => format!(
                 "(= {} {})",
                 target.as_sexpr(globals_offset),
                 value.as_sexpr(globals_offset),
             ),
-            Expression::Call {
+            Self::Call {
                 callee,
                 arguments,
                 stack_size_at_callsite,
@@ -909,13 +908,13 @@ impl<'a> Expression<'a> {
                     .join(" "),
                 stack_size_at_callsite = globals_offset.local_slot(stack_size_at_callsite.get()),
             ),
-            Expression::Name(variable) => variable.as_sexpr(globals_offset),
-            Expression::Attribute { lhs, attribute } => format!(
+            Self::Name(variable) => variable.as_sexpr(globals_offset),
+            Self::Attribute { lhs, attribute } => format!(
                 "(attr {} {})",
                 lhs.as_sexpr(globals_offset),
                 attribute.slice(),
             ),
-            Expression::Super { super_, this, attribute } => format!(
+            Self::Super { super_, this, attribute } => format!(
                 "(super {} {} {})",
                 super_.as_sexpr(globals_offset),
                 this.as_sexpr(globals_offset),
@@ -938,8 +937,8 @@ pub enum AssignmentTarget<'a> {
 impl<'a> AssignmentTarget<'a> {
     fn as_sexpr(&self, globals_offset: GlobalsOffset) -> String {
         match self {
-            AssignmentTarget::Variable(variable) => variable.as_sexpr(globals_offset),
-            AssignmentTarget::Attribute { lhs, attribute } => format!(
+            Self::Variable(variable) => variable.as_sexpr(globals_offset),
+            Self::Attribute { lhs, attribute } => format!(
                 "(setattr {} {})",
                 lhs.as_sexpr(globals_offset),
                 attribute.slice(),
@@ -949,8 +948,8 @@ impl<'a> AssignmentTarget<'a> {
 
     fn loc(&self) -> Loc<'a> {
         match self {
-            AssignmentTarget::Variable(variable) => variable.loc(),
-            AssignmentTarget::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+            Self::Variable(variable) => variable.loc(),
+            Self::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
         }
     }
 
