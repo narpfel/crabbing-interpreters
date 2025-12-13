@@ -65,30 +65,29 @@ impl<'a> Value<'a> {
 
     pub fn typ(&self) -> &'static str {
         match self {
-            Value::Number(_) => "Number",
-            Value::String(_) => "String",
-            Value::Bool(_) => "Bool",
-            Value::Nil => "Nil",
-            Value::Function(_) => "Function",
-            Value::NativeFunction(_) => "NativeFunction",
-            Value::Class(_) => "Class",
-            Value::Instance(_) => "Instance",
-            Value::BoundMethod(_) => "BoundMethod",
+            Self::Number(_) => "Number",
+            Self::String(_) => "String",
+            Self::Bool(_) => "Bool",
+            Self::Nil => "Nil",
+            Self::Function(_) => "Function",
+            Self::NativeFunction(_) => "NativeFunction",
+            Self::Class(_) => "Class",
+            Self::Instance(_) => "Instance",
+            Self::BoundMethod(_) => "BoundMethod",
         }
     }
 
     pub(crate) fn is_truthy(&self) -> bool {
-        use Value::*;
         match self {
-            Bool(b) => *b,
-            Nil => false,
+            Self::Bool(b) => *b,
+            Self::Nil => false,
             _ => true,
         }
     }
 
     pub(crate) fn lox_debug(&self) -> String {
         match self {
-            Value::String(s) => format!("{s:?}"),
+            Self::String(s) => format!("{s:?}"),
             _ => self.to_string(),
         }
     }
@@ -97,15 +96,15 @@ impl<'a> Value<'a> {
 unsafe impl Trace for Value<'_> {
     fn trace(&self) {
         match self {
-            Value::Number(_) => (),
-            Value::String(s) => s.trace(),
-            Value::Bool(_) => (),
-            Value::Nil => (),
-            Value::Function(function) => function.trace(),
-            Value::NativeFunction(_) => (),
-            Value::Class(class) => class.trace(),
-            Value::Instance(instance) => instance.trace(),
-            Value::BoundMethod(bound_method) => bound_method.trace(),
+            Self::Number(_) => (),
+            Self::String(s) => s.trace(),
+            Self::Bool(_) => (),
+            Self::Nil => (),
+            Self::Function(function) => function.trace(),
+            Self::NativeFunction(_) => (),
+            Self::Class(class) => class.trace(),
+            Self::Instance(instance) => instance.trace(),
+            Self::BoundMethod(bound_method) => bound_method.trace(),
         }
     }
 }
@@ -113,15 +112,15 @@ unsafe impl Trace for Value<'_> {
 impl Display for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Number(x) => write!(f, "{x}"),
-            Value::String(s) => write!(f, "{s}"),
-            Value::Bool(b) => write!(f, "{b}"),
-            Value::Nil => write!(f, "nil"),
-            Value::Function(func) => write!(f, "{func:?}"),
-            Value::NativeFunction(_) => write!(f, "<native fn>"),
-            Value::Class(class) => write!(f, "{class:?}"),
-            Value::Instance(instance) => write!(f, "{instance:?}"),
-            Value::BoundMethod(bound_method) => write!(f, "{bound_method:?}"),
+            Self::Number(x) => write!(f, "{x}"),
+            Self::String(s) => write!(f, "{s}"),
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Nil => write!(f, "nil"),
+            Self::Function(func) => write!(f, "{func:?}"),
+            Self::NativeFunction(_) => write!(f, "<native fn>"),
+            Self::Class(class) => write!(f, "{class:?}"),
+            Self::Instance(instance) => write!(f, "{instance:?}"),
+            Self::BoundMethod(bound_method) => write!(f, "{bound_method:?}"),
         }
     }
 }
@@ -263,19 +262,19 @@ pub enum NativeError<'a> {
 impl<'a> NativeError<'a> {
     pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
         match self {
-            NativeError::Error(err) => err,
-            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+            Self::Error(err) => err,
+            Self::ArityMismatch { expected } => Error::ArityMismatch {
                 callee,
                 expected,
                 at: expr.into_variant(),
             },
-            NativeError::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
+            Self::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
                 name,
                 at: expr.into_variant(),
                 expected,
                 tys,
             },
-            NativeError::IoError { name, error, filename } => Error::NativeFnCallIoError {
+            Self::IoError { name, error, filename } => Error::NativeFnCallIoError {
                 name,
                 at: expr.into_variant(),
                 error,

@@ -48,7 +48,7 @@ pub enum Metadata<'a> {
 impl fmt::Debug for Metadata<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Metadata::Function { function, code_size } => f
+            Self::Function { function, code_size } => f
                 .debug_struct("Metadata::Function")
                 .field_with("function", |f| {
                     write!(
@@ -60,7 +60,7 @@ impl fmt::Debug for Metadata<'_> {
                 })
                 .field("code_size", code_size)
                 .finish(),
-            Metadata::Class { name, methods, base_error_location } => f
+            Self::Class { name, methods, base_error_location } => f
                 .debug_struct("Metadata::Class")
                 .field("name", name)
                 .field_with("methods", |f| {
@@ -92,7 +92,7 @@ pub enum ContainingExpression<'a> {
 impl ContainingExpression<'_> {
     pub(crate) fn at(&self) -> usize {
         match self {
-            ContainingExpression::Enter { at, expr: _ } | ContainingExpression::Exit { at } => *at,
+            Self::Enter { at, expr: _ } | Self::Exit { at } => *at,
         }
     }
 }

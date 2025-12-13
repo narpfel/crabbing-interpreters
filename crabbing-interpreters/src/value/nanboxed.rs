@@ -207,8 +207,8 @@ impl From<NaN> for NanBoxTag {
 impl From<bool> for NanBoxTag {
     fn from(value: bool) -> Self {
         match value {
-            true => NanBoxTag::True,
-            false => NanBoxTag::False,
+            true => Self::True,
+            false => Self::False,
         }
     }
 }

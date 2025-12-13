@@ -185,23 +185,22 @@ pub enum Statement<'a> {
 impl<'a> Statement<'a> {
     fn loc(&self) -> Loc<'a> {
         match self {
-            Statement::Expression { expr, semi } => expr.loc().until(semi.loc()),
-            Statement::Print { print, expr: _, semi } => print.loc().until(semi.loc()),
-            Statement::Var { var, name: _, init: _, semi } => var.loc().until(semi.loc()),
-            Statement::Block { open_brace, stmts: _, close_brace } =>
+            Self::Expression { expr, semi } => expr.loc().until(semi.loc()),
+            Self::Print { print, expr: _, semi } => print.loc().until(semi.loc()),
+            Self::Var { var, name: _, init: _, semi } => var.loc().until(semi.loc()),
+            Self::Block { open_brace, stmts: _, close_brace } =>
                 open_brace.loc().until(close_brace.loc()),
-            Statement::If { if_token, condition: _, then, or_else } =>
+            Self::If { if_token, condition: _, then, or_else } =>
                 if_token.loc().until(or_else.unwrap_or(then).loc()),
-            Statement::While { while_token, condition: _, body } =>
-                while_token.loc().until(body.loc()),
-            Statement::For {
+            Self::While { while_token, condition: _, body } => while_token.loc().until(body.loc()),
+            Self::For {
                 for_token,
                 init: _,
                 condition: _,
                 update: _,
                 body,
             } => for_token.loc().until(body.loc()),
-            Statement::Function {
+            Self::Function {
                 fun,
                 name,
                 parameters: _,
@@ -211,9 +210,8 @@ impl<'a> Statement<'a> {
                 .map(|fun| fun.loc())
                 .unwrap_or(name.loc())
                 .until(close_brace.loc()),
-            Statement::Return { return_token, expr: _, semi } =>
-                return_token.loc().until(semi.loc()),
-            Statement::Class {
+            Self::Return { return_token, expr: _, semi } => return_token.loc().until(semi.loc()),
+            Self::Class {
                 class,
                 name: _,
                 base: _,
@@ -225,16 +223,16 @@ impl<'a> Statement<'a> {
 
     fn kind_name(&self) -> &'static str {
         match self {
-            Statement::Expression { .. } => "expression",
-            Statement::Print { .. } => "print",
-            Statement::Var { .. } => "variable declaration",
-            Statement::Block { .. } => "block",
-            Statement::If { .. } => "if",
-            Statement::While { .. } => "while",
-            Statement::For { .. } => "for",
-            Statement::Function { .. } => "function definition",
-            Statement::Return { .. } => "return",
-            Statement::Class { .. } => "class",
+            Self::Expression { .. } => "expression",
+            Self::Print { .. } => "print",
+            Self::Var { .. } => "variable declaration",
+            Self::Block { .. } => "block",
+            Self::If { .. } => "if",
+            Self::While { .. } => "while",
+            Self::For { .. } => "for",
+            Self::Function { .. } => "function definition",
+            Self::Return { .. } => "return",
+            Self::Class { .. } => "class",
         }
     }
 }
@@ -279,16 +277,16 @@ pub enum Expression<'a> {
 impl<'a> Expression<'a> {
     pub(crate) fn loc(&self) -> Loc<'a> {
         match self {
-            Expression::Literal(lit) => lit.loc(),
-            Expression::Unary(op, expr) => op.token.loc().until(expr.loc()),
-            Expression::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
-            Expression::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
-            Expression::Ident(name) => name.loc(),
-            Expression::Assign { target, value, .. } => target.loc().until(value.loc()),
-            Expression::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
-            Expression::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
-            Expression::This(this) => this.loc(),
-            Expression::Super { super_, attribute } => super_.loc().until(attribute.loc()),
+            Self::Literal(lit) => lit.loc(),
+            Self::Unary(op, expr) => op.token.loc().until(expr.loc()),
+            Self::Binary { lhs, rhs, .. } => lhs.loc().until(rhs.loc()),
+            Self::Grouping { l_paren, r_paren, .. } => l_paren.loc().until(r_paren.loc()),
+            Self::Ident(name) => name.loc(),
+            Self::Assign { target, value, .. } => target.loc().until(value.loc()),
+            Self::Call { callee, r_paren, .. } => callee.loc().until(r_paren.loc()),
+            Self::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+            Self::This(this) => this.loc(),
+            Self::Super { super_, attribute } => super_.loc().until(attribute.loc()),
         }
     }
 
@@ -298,16 +296,16 @@ impl<'a> Expression<'a> {
 
     fn kind_name(&self) -> &'static str {
         match self {
-            Expression::Literal(_) => "literal",
-            Expression::Unary(_, _) => "unary operation",
-            Expression::Binary { .. } => "binary operation",
-            Expression::Grouping { .. } => "parenthesised expression",
-            Expression::Ident(_) => "name",
-            Expression::Assign { .. } => "assignment",
-            Expression::Call { .. } => "call expression",
-            Expression::Attribute { .. } => "attribute access",
-            Expression::This(_) => "this expression",
-            Expression::Super { .. } => "super expression",
+            Self::Literal(_) => "literal",
+            Self::Unary(_, _) => "unary operation",
+            Self::Binary { .. } => "binary operation",
+            Self::Grouping { .. } => "parenthesised expression",
+            Self::Ident(_) => "name",
+            Self::Assign { .. } => "assignment",
+            Self::Call { .. } => "call expression",
+            Self::Attribute { .. } => "attribute access",
+            Self::This(_) => "this expression",
+            Self::Super { .. } => "super expression",
         }
     }
 
@@ -316,33 +314,29 @@ impl<'a> Expression<'a> {
         use itertools::Itertools;
 
         match self {
-            Expression::Literal(lit) => lit.kind.value_string(),
-            Expression::Unary(operator, operand) =>
+            Self::Literal(lit) => lit.kind.value_string(),
+            Self::Unary(operator, operand) =>
                 format!("({} {})", operator.token.slice(), operand.as_sexpr()),
-            Expression::Binary { lhs, op, rhs } => format!(
+            Self::Binary { lhs, op, rhs } => format!(
                 "({} {} {})",
                 op.token.slice(),
                 lhs.as_sexpr(),
                 rhs.as_sexpr(),
             ),
-            Expression::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
-            Expression::Ident(name) => format!("(name {})", name.slice()),
-            Expression::Assign { target, value, .. } =>
+            Self::Grouping { expr, .. } => format!("(group {})", expr.as_sexpr()),
+            Self::Ident(name) => format!("(name {})", name.slice()),
+            Self::Assign { target, value, .. } =>
                 format!("(= {} {})", target.slice(), value.as_sexpr()),
-            Expression::Call { callee, arguments, .. } => format!(
+            Self::Call { callee, arguments, .. } => format!(
                 "(call {}{}{})",
                 callee.as_sexpr(),
                 if arguments.is_empty() { "" } else { " " },
-                arguments
-                    .iter()
-                    .map(Expression::as_sexpr)
-                    .collect_vec()
-                    .join(" ")
+                arguments.iter().map(Self::as_sexpr).collect_vec().join(" ")
             ),
-            Expression::Attribute { lhs, attribute } =>
+            Self::Attribute { lhs, attribute } =>
                 format!("(attr {} {})", lhs.as_sexpr(), attribute.slice()),
-            Expression::This(_) => "(this)".to_string(),
-            Expression::Super { super_: _, attribute } => format!("(super {})", attribute.slice()),
+            Self::This(_) => "(this)".to_string(),
+            Self::Super { super_: _, attribute } => format!("(super {})", attribute.slice()),
         }
     }
 }
@@ -371,11 +365,11 @@ pub enum LiteralKind<'a> {
 impl LiteralKind<'_> {
     pub(crate) fn value_string(self) -> String {
         match self {
-            LiteralKind::Number(x) => format!("{x:?}"),
-            LiteralKind::String(s) => format!("{s:?}"),
-            LiteralKind::True => "true".to_owned(),
-            LiteralKind::False => "false".to_owned(),
-            LiteralKind::Nil => "nil".to_owned(),
+            Self::Number(x) => format!("{x:?}"),
+            Self::String(s) => format!("{s:?}"),
+            Self::True => "true".to_owned(),
+            Self::False => "false".to_owned(),
+            Self::Nil => "nil".to_owned(),
         }
     }
 }
@@ -500,8 +494,8 @@ pub enum AssignmentTarget<'a> {
 impl<'a> AssignmentTarget<'a> {
     fn loc(&self) -> Loc<'a> {
         match self {
-            AssignmentTarget::Name(name) => name.loc(),
-            AssignmentTarget::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
+            Self::Name(name) => name.loc(),
+            Self::Attribute { lhs, attribute } => lhs.loc().until(attribute.loc()),
         }
     }
 
