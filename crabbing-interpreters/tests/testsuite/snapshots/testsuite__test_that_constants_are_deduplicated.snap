@@ -24,6 +24,11 @@ Interned strings
      s.3:  "super"
      s.4:  "native_function_test"
      s.5:  "read_file"
+     s.6:  "split"
+     s.7:  "SplitState"
+     s.8:  "string"
+     s.9:  "start"
+    s.10:  "delimiter"
 
 Metadata
 

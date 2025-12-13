@@ -221,7 +221,9 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
     let clock = interner.intern("clock");
     let native_function_test = interner.intern("native_function_test");
     let read_file = interner.intern("read_file");
+    let split = interner.intern("split");
     let mut globals_names = bump.alloc_slice_copy(&[
+        Name::new(split, bump.alloc(Loc::debug_loc(bump, "split"))),
         Name::new(read_file, bump.alloc(Loc::debug_loc(bump, "read_file"))),
         Name::new(
             native_function_test,
@@ -232,7 +234,7 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
     let gc = &Gc::default();
     let mut globals = Environment::new(
         gc,
-        [read_file, native_function_test, clock]
+        [split, read_file, native_function_test, clock]
             .into_iter()
             .enumerate()
             .map(|(i, name)| (name, i))
@@ -348,6 +350,10 @@ pub fn run<'a>(
         }
 
         let globals = &*bump.alloc_slice_copy(&[
+            Name::new(
+                interner.intern("split"),
+                bump.alloc(Loc::debug_loc(bump, "split")),
+            ),
             Name::new(
                 interner.intern("read_file"),
                 bump.alloc(Loc::debug_loc(bump, "read_file")),

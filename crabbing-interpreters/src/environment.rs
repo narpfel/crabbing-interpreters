@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::sync::OnceLock;
@@ -19,6 +20,10 @@ use crate::scope::Slot;
 use crate::scope::Target;
 use crate::value::nanboxed::Value;
 use crate::value::Cells;
+use crate::value::Class;
+use crate::value::ClassInner;
+use crate::value::Instance;
+use crate::value::InstanceInner;
 use crate::value::NativeError;
 use crate::value::Value as Unboxed;
 
@@ -34,6 +39,7 @@ pub struct Environment<'a> {
     is_global_defined: Box<[bool]>,
     pub(crate) gc: &'a Gc,
     global_cells: Cells<'a>,
+    builtin_split_stack: Class<'a>,
 }
 
 impl<'a> Environment<'a> {
@@ -51,6 +57,14 @@ impl<'a> Environment<'a> {
             globals,
             gc,
             global_cells,
+            builtin_split_stack: Class::new_in(
+                gc,
+                ClassInner {
+                    name: "SplitState",
+                    base: None,
+                    methods: Default::default(),
+                },
+            ),
         };
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
             env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
@@ -94,6 +108,99 @@ impl<'a> Environment<'a> {
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
+        if let Some(&slot) = env.globals.get(&interned::SPLIT) {
+            // TODO: decide whether `split("aba", "b")` and `split("abab", "b")` should behave the
+            // same or differently
+            env.stack[slot] = Unboxed::NativeFunction(|env, arguments| match &arguments[..] {
+                [Unboxed::String(string), Unboxed::String(delimiter)] => {
+                    let state = InstanceInner {
+                        class: env.builtin_split_stack,
+                        attributes: RefCell::default(),
+                    };
+                    let state = Instance::new_in(env.gc, state);
+                    let mut attrs = state.attributes.borrow_mut();
+                    attrs.insert(
+                        interned::DELIMITER,
+                        Unboxed::String(*delimiter).into_nanboxed(),
+                    );
+                    attrs.insert(interned::STRING, Unboxed::String(*string).into_nanboxed());
+                    let (split, start) = match string.split_once(&**delimiter) {
+                        Some((split, _rest)) =>
+                            (GcStr::new_in(env.gc, split), split.len() + delimiter.len()),
+                        None => (*string, string.len()),
+                    };
+                    attrs.insert(interned::SPLIT, Unboxed::String(split).into_nanboxed());
+                    #[expect(
+                        clippy::as_conversions,
+                        reason = "TODO: check that this does not round"
+                    )]
+                    attrs.insert(
+                        interned::START,
+                        Unboxed::Number(start as f64).into_nanboxed(),
+                    );
+
+                    Ok(Unboxed::Instance(state))
+                }
+                [Unboxed::Instance(state)] => {
+                    let mut attrs = state.attributes.borrow_mut();
+                    let string = attrs.get(&interned::STRING).unwrap();
+                    let Unboxed::String(string) = string.parse()
+                    else {
+                        todo!()
+                    };
+                    let start = attrs.get(&interned::START).unwrap();
+                    let Unboxed::Number(start) = start.parse()
+                    else {
+                        todo!()
+                    };
+                    #[expect(clippy::as_conversions, reason = "TODO: check that this fits")]
+                    let start = start as usize;
+                    let delimiter = attrs.get(&interned::DELIMITER).unwrap();
+                    let Unboxed::String(delimiter) = delimiter.parse()
+                    else {
+                        todo!()
+                    };
+                    let string = &string[start..];
+                    let (split, start) = match string.split_once(&*delimiter) {
+                        Some((split, _rest)) => (
+                            Unboxed::String(GcStr::new_in(env.gc, split)).into_nanboxed(),
+                            start + split.len() + delimiter.len(),
+                        ),
+                        None => {
+                            let split = match string {
+                                "" => Unboxed::Nil.into_nanboxed(),
+                                _ => Unboxed::String(GcStr::new_in(env.gc, string)).into_nanboxed(),
+                            };
+
+                            (split, start + string.len())
+                        }
+                    };
+                    attrs.insert(interned::SPLIT, split);
+                    #[expect(
+                        clippy::as_conversions,
+                        reason = "TODO: check that this does not round"
+                    )]
+                    attrs.insert(
+                        interned::START,
+                        Unboxed::Number(start as f64).into_nanboxed(),
+                    );
+
+                    Ok(Unboxed::Nil)
+                }
+                arguments => Err(NativeError::TypeError {
+                    name: "split".to_owned(),
+                    expected: "[String, String] | [SplitState]".to_owned(),
+                    tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
+                }),
+            })
+            .into_nanboxed();
+            env.is_global_defined[slot] = true;
+        }
+        if let Some(&slot) = env.globals.get(&interned::SPLIT_STATE) {
+            env.stack[slot] = Unboxed::Class(env.builtin_split_stack).into_nanboxed();
+            env.is_global_defined[slot] = true;
+        }
+
         env
     }
 
@@ -182,6 +289,7 @@ impl<'a> Environment<'a> {
     pub(crate) fn trace(&self) {
         self.stack.trace();
         self.global_cells.trace();
+        self.builtin_split_stack.trace();
     }
 
     pub(crate) fn collect_if_necessary(
