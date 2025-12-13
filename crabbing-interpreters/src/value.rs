@@ -262,19 +262,19 @@ pub enum NativeError<'a> {
 impl<'a> NativeError<'a> {
     pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
         match self {
-            NativeError::Error(err) => err,
-            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
+            Self::Error(err) => err,
+            Self::ArityMismatch { expected } => Error::ArityMismatch {
                 callee,
                 expected,
                 at: expr.into_variant(),
             },
-            NativeError::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
+            Self::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
                 name,
                 at: expr.into_variant(),
                 expected,
                 tys,
             },
-            NativeError::IoError { name, error, filename } => Error::NativeFnCallIoError {
+            Self::IoError { name, error, filename } => Error::NativeFnCallIoError {
                 name,
                 at: expr.into_variant(),
                 error,
