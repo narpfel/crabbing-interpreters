@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::sync::OnceLock;
@@ -18,12 +17,12 @@ use crate::interner::InternedString;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
+use crate::value::instance::InstanceInner;
 use crate::value::nanboxed::Value;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::Instance;
-use crate::value::InstanceInner;
 use crate::value::NativeError;
 use crate::value::Value as Unboxed;
 
@@ -113,28 +112,24 @@ impl<'a> Environment<'a> {
             // same or differently
             env.stack[slot] = Unboxed::NativeFunction(|env, arguments| match &arguments[..] {
                 [Unboxed::String(string), Unboxed::String(delimiter)] => {
-                    let state = InstanceInner {
-                        class: env.builtin_split_stack,
-                        attributes: RefCell::default(),
-                    };
+                    let state = InstanceInner::new(env.builtin_split_stack);
                     let state = Instance::new_in(env.gc, state);
-                    let mut attrs = state.attributes.borrow_mut();
-                    attrs.insert(
+                    state.setattr(
                         interned::DELIMITER,
                         Unboxed::String(*delimiter).into_nanboxed(),
                     );
-                    attrs.insert(interned::STRING, Unboxed::String(*string).into_nanboxed());
+                    state.setattr(interned::STRING, Unboxed::String(*string).into_nanboxed());
                     let (split, start) = match string.split_once(&**delimiter) {
                         Some((split, _rest)) =>
                             (GcStr::new_in(env.gc, split), split.len() + delimiter.len()),
                         None => (*string, string.len()),
                     };
-                    attrs.insert(interned::SPLIT, Unboxed::String(split).into_nanboxed());
+                    state.setattr(interned::SPLIT, Unboxed::String(split).into_nanboxed());
                     #[expect(
                         clippy::as_conversions,
                         reason = "TODO: check that this does not round"
                     )]
-                    attrs.insert(
+                    state.setattr(
                         interned::START,
                         Unboxed::Number(start as f64).into_nanboxed(),
                     );
@@ -142,20 +137,19 @@ impl<'a> Environment<'a> {
                     Ok(Unboxed::Instance(state))
                 }
                 [Unboxed::Instance(state)] => {
-                    let mut attrs = state.attributes.borrow_mut();
-                    let string = attrs.get(&interned::STRING).unwrap();
+                    let string = state.getattr(interned::STRING).unwrap();
                     let Unboxed::String(string) = string.parse()
                     else {
                         todo!()
                     };
-                    let start = attrs.get(&interned::START).unwrap();
+                    let start = state.getattr(interned::START).unwrap();
                     let Unboxed::Number(start) = start.parse()
                     else {
                         todo!()
                     };
                     #[expect(clippy::as_conversions, reason = "TODO: check that this fits")]
                     let start = start as usize;
-                    let delimiter = attrs.get(&interned::DELIMITER).unwrap();
+                    let delimiter = state.getattr(interned::DELIMITER).unwrap();
                     let Unboxed::String(delimiter) = delimiter.parse()
                     else {
                         todo!()
@@ -175,12 +169,12 @@ impl<'a> Environment<'a> {
                             (split, start + string.len())
                         }
                     };
-                    attrs.insert(interned::SPLIT, split);
+                    state.setattr(interned::SPLIT, split);
                     #[expect(
                         clippy::as_conversions,
                         reason = "TODO: check that this does not round"
                     )]
-                    attrs.insert(
+                    state.setattr(
                         interned::START,
                         Unboxed::Number(start as f64).into_nanboxed(),
                     );

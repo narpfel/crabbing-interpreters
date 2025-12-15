@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::iter::zip;
 use std::iter::Skip;
@@ -17,7 +16,6 @@ use crate::gc::Gc;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace as _;
-use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -33,13 +31,13 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::instance::InstanceInner;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
-use crate::value::InstanceInner;
 use crate::value::Value;
 use crate::Report;
 use crate::Sliced;
@@ -257,12 +255,8 @@ pub fn eval<'a>(
                 AssignmentTarget::Attribute { lhs, attribute } => {
                     let target_value = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
                     match target_value {
-                        Value::Instance(instance) => {
-                            instance
-                                .attributes
-                                .borrow_mut()
-                                .insert(attribute.id(), value.into_nanboxed());
-                        }
+                        Value::Instance(instance) =>
+                            instance.setattr(attribute.id(), value.into_nanboxed()),
                         _ => Err(Error::NoFields {
                             lhs: target_value,
                             at: target.into_variant(),
@@ -404,13 +398,8 @@ pub fn eval<'a>(
                     func(env, arguments).map_err(|err| err.at_expr(callee, expr))?
                 }
                 Value::Class(class) => {
-                    let instance = Value::Instance(GcRef::new_in(
-                        env.gc,
-                        InstanceInner {
-                            class,
-                            attributes: RefCell::new(HashMap::default()),
-                        },
-                    ));
+                    let instance =
+                        Value::Instance(GcRef::new_in(env.gc, InstanceInner::new(class)));
                     match class
                         .lookup_method(interned::INIT)
                         .map(nanboxed::Value::parse)
@@ -451,10 +440,7 @@ pub fn eval<'a>(
             let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
             match lhs {
                 Value::Instance(instance) => instance
-                    .attributes
-                    .borrow()
-                    .get(&attribute.id())
-                    .copied()
+                    .getattr(attribute.id())
                     .map(nanboxed::Value::parse)
                     .or_else(|| {
                         instance.class.lookup_method(attribute.id()).map(|method| {

@@ -2,7 +2,6 @@
 #![expect(unpredictable_function_pointer_comparisons)]
 
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::from_fn;
@@ -189,22 +188,50 @@ impl Debug for Class<'_> {
     }
 }
 
-pub type Instance<'a> = GcRef<'a, InstanceInner<'a>>;
+pub mod instance {
+    use std::cell::RefCell;
 
-pub struct InstanceInner<'a> {
-    pub(crate) class: Class<'a>,
-    pub(crate) attributes: RefCell<HashMap<InternedString, nanboxed::Value<'a>>>,
-}
+    use crate::gc::Trace;
+    use crate::hash_map::HashMap;
+    use crate::interner::InternedString;
+    use crate::value::nanboxed;
+    use crate::value::Class;
 
-unsafe impl Trace for InstanceInner<'_> {
-    fn trace(&self) {
-        self.class.trace();
-        self.attributes
-            .borrow()
-            .values()
-            .for_each(|value| value.trace());
+    pub struct InstanceInner<'a> {
+        pub(crate) class: Class<'a>,
+        attributes: RefCell<HashMap<InternedString, nanboxed::Value<'a>>>,
+    }
+
+    impl<'a> InstanceInner<'a> {
+        pub(crate) fn new(class: Class<'a>) -> Self {
+            Self { class, attributes: RefCell::default() }
+        }
+
+        pub(crate) fn setattr(&self, name: InternedString, value: nanboxed::Value<'a>) {
+            // SAFETY: there are no references to/into `self.attributes` because `getattr`
+            // returns a copied value, so we can mutate here
+            unsafe { &mut *self.attributes.as_ptr() }.insert(name, value);
+        }
+
+        pub(crate) fn getattr(&self, name: InternedString) -> Option<nanboxed::Value<'a>> {
+            // SAFETY: there are no mutable references to/into `self.attributes`, so we can create
+            // a shared reference here
+            unsafe { &*self.attributes.as_ptr() }.get(&name).copied()
+        }
+    }
+
+    unsafe impl Trace for InstanceInner<'_> {
+        fn trace(&self) {
+            self.class.trace();
+            self.attributes
+                .borrow()
+                .values()
+                .for_each(|value| value.trace());
+        }
     }
 }
+
+pub type Instance<'a> = GcRef<'a, instance::InstanceInner<'a>>;
 
 impl Debug for Instance<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

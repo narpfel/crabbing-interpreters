@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::ptr::NonNull;
 
 use variant_types::IntoEnum;
@@ -23,20 +22,19 @@ use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace;
-use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
 use crate::scope::Target;
+use crate::value::instance::InstanceInner;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
-use crate::value::InstanceInner;
 use crate::value::NativeFnPtr;
 use crate::value::Value;
 use crate::value::Value::*;
@@ -410,8 +408,7 @@ pub(crate) fn execute_bytecode<'a>(
             let assignment_target = vm.stack_mut(sp).pop();
             let value = vm.stack_mut(sp).pop();
             match assignment_target.parse() {
-                Instance(instance) =>
-                    unsafe { &mut *instance.attributes.as_ptr() }.insert(name, value),
+                Instance(instance) => instance.setattr(name, value),
                 _ => {
                     let expr: ExpressionTypes::Assign = vm.error_location_at(*pc);
                     Err(Box::new(Error::NoFields {
@@ -980,13 +977,7 @@ fn execute_call<'a>(
                 let pc = &mut pc;
                 let sp = &mut sp;
                 let offset = &mut offset;
-                let instance = GcRef::new_in(
-                    vm.env.gc,
-                    InstanceInner {
-                        class,
-                        attributes: RefCell::new(HashMap::default()),
-                    },
-                );
+                let instance = GcRef::new_in(vm.env.gc, InstanceInner::new(class));
                 match class
                     .lookup_method(interned::INIT)
                     .map(nanboxed::Value::parse)
@@ -1147,10 +1138,8 @@ fn execute_attribute_lookup<'a>(
     let sp = &mut sp;
     let nanboxed_value = vm.stack_mut(sp).pop();
     let () = match nanboxed_value.parse() {
-        Instance(instance) => unsafe { instance.attributes.try_borrow_unguarded() }
-            .unwrap()
-            .get(&name)
-            .copied()
+        Instance(instance) => instance
+            .getattr(name)
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
             .or_else(|| {
                 let method = match vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] {
