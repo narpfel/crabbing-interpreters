@@ -1,0 +1,95 @@
+use itertools::Itertools as _;
+
+use crate::environment::Environment;
+use crate::gc::GcStr;
+use crate::interner::interned;
+use crate::value::instance::InstanceInner;
+use crate::value::Instance;
+use crate::value::NativeError;
+use crate::value::Value as Unboxed;
+
+// TODO: decide whether `split("aba", "b")` and `split("abab", "b")` should behave the
+// same or differently
+#[expect(clippy::result_large_err)]
+pub(crate) fn split<'a>(
+    env: &Environment<'a>,
+    arguments: Vec<Unboxed<'a>>,
+) -> Result<Unboxed<'a>, NativeError<'a>> {
+    match &arguments[..] {
+        [Unboxed::String(string), Unboxed::String(delimiter)] => {
+            let state = InstanceInner::new(env.builtin_split_stack);
+            let state = Instance::new_in(env.gc, state);
+            state.setattr(
+                interned::DELIMITER,
+                Unboxed::String(*delimiter).into_nanboxed(),
+            );
+            state.setattr(interned::STRING, Unboxed::String(*string).into_nanboxed());
+            let (split, start) = match string.split_once(&**delimiter) {
+                Some((split, _rest)) =>
+                    (GcStr::new_in(env.gc, split), split.len() + delimiter.len()),
+                None => (*string, string.len()),
+            };
+            state.setattr(interned::SPLIT, Unboxed::String(split).into_nanboxed());
+            #[expect(
+                clippy::as_conversions,
+                reason = "TODO: check that this does not round"
+            )]
+            state.setattr(
+                interned::START,
+                Unboxed::Number(start as f64).into_nanboxed(),
+            );
+
+            Ok(Unboxed::Instance(state))
+        }
+        [Unboxed::Instance(state)] => {
+            let string = state.getattr(interned::STRING).unwrap();
+            let Unboxed::String(string) = string.parse()
+            else {
+                todo!()
+            };
+            let start = state.getattr(interned::START).unwrap();
+            let Unboxed::Number(start) = start.parse()
+            else {
+                todo!()
+            };
+            #[expect(clippy::as_conversions, reason = "TODO: check that this fits")]
+            let start = start as usize;
+            let delimiter = state.getattr(interned::DELIMITER).unwrap();
+            let Unboxed::String(delimiter) = delimiter.parse()
+            else {
+                todo!()
+            };
+            let string = &string[start..];
+            let (split, start) = match string.split_once(&*delimiter) {
+                Some((split, _rest)) => (
+                    Unboxed::String(GcStr::new_in(env.gc, split)).into_nanboxed(),
+                    start + split.len() + delimiter.len(),
+                ),
+                None => {
+                    let split = match string {
+                        "" => Unboxed::Nil.into_nanboxed(),
+                        _ => Unboxed::String(GcStr::new_in(env.gc, string)).into_nanboxed(),
+                    };
+
+                    (split, start + string.len())
+                }
+            };
+            state.setattr(interned::SPLIT, split);
+            #[expect(
+                clippy::as_conversions,
+                reason = "TODO: check that this does not round"
+            )]
+            state.setattr(
+                interned::START,
+                Unboxed::Number(start as f64).into_nanboxed(),
+            );
+
+            Ok(Unboxed::Nil)
+        }
+        arguments => Err(NativeError::TypeError {
+            name: "split".to_owned(),
+            expected: "[String, String] | [SplitState]".to_owned(),
+            tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
+        }),
+    }
+}
