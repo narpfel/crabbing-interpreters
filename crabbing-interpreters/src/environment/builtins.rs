@@ -70,19 +70,18 @@ pub(super) fn split<'a>(
             let string = &string[start..];
             let (split, start) = match string.split_once(&*delimiter) {
                 Some((split, _rest)) => (
-                    Unboxed::String(GcStr::new_in(env.gc, split)).into_nanboxed(),
+                    Unboxed::String(GcStr::new_in(env.gc, split)),
                     start + split.len() + delimiter.len(),
                 ),
                 None => {
                     let split = match string {
-                        "" => Unboxed::Nil.into_nanboxed(),
-                        _ => Unboxed::String(GcStr::new_in(env.gc, string)).into_nanboxed(),
+                        "" => Unboxed::Nil,
+                        _ => Unboxed::String(GcStr::new_in(env.gc, string)),
                     };
-
                     (split, start + string.len())
                 }
             };
-            state.setattr(interned::SPLIT, split);
+            state.setattr(interned::SPLIT, split.into_nanboxed());
             #[expect(
                 clippy::as_conversions,
                 reason = "TODO: check that this does not round"
