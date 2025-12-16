@@ -1,0 +1,24 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/split_string_on_spaces.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (var s (global @1) "split this string on spaces")
+   (for
+      (var state (local @2) (call +2 (global split @-3) (global s @1) " "))
+      (!= (attr (local state @2) split) nil)
+      (call +3 (global split @-3) (local state @2))
+      (block
+         (print (attr (local state @2) start))
+         (print (attr (local state @2) split))
+         (print "==============="))))
+
+----- stderr -----

@@ -1,0 +1,7 @@
+var s = "split this string on spaces";
+
+for (var state = split(s, " "); state.split != nil; split(state)) {
+    print state.start;
+    print state.split;
+    print "===============";
+}
