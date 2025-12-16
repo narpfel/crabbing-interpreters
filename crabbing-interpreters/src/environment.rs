@@ -12,6 +12,7 @@ use crate::gc::GcRef;
 use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
+use crate::interner::Interner;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
@@ -38,6 +39,7 @@ pub struct Environment<'a> {
     pub(crate) gc: &'a Gc,
     global_cells: Cells<'a>,
     builtin_split_stack: Class<'a>,
+    pub(crate) interner: Interner<'a>,
 }
 
 impl<'a> Environment<'a> {
@@ -45,6 +47,7 @@ impl<'a> Environment<'a> {
         gc: &'a Gc,
         globals: HashMap<InternedString, usize>,
         global_cells: Cells<'a>,
+        interner: Interner<'a>,
     ) -> Self {
         let mut env = Self {
             stack: vec![Unboxed::Nil.into_nanboxed(); ENV_SIZE]
@@ -63,6 +66,7 @@ impl<'a> Environment<'a> {
                     methods: Default::default(),
                 },
             ),
+            interner,
         };
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
             env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {

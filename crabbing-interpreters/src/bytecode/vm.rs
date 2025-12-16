@@ -952,8 +952,9 @@ fn execute_call<'a>(
                     .map(|_| vm.stack_mut(sp).pop().parse())
                     .collect();
                 args.reverse();
-                let value = native_fn(&vm.env, args)
-                    .map_err(|err| Box::new(err.at_expr(callee, vm.expr_at(pc))))?;
+                let value = native_fn(&vm.env, args).map_err(|err| {
+                    Box::new(err.at_expr(&vm.env.interner, callee, vm.expr_at(pc)))
+                })?;
                 vm.stack_mut(sp).push(value.into_nanboxed());
                 Ok(*sp)
             }
@@ -1253,6 +1254,7 @@ mod stack_ref {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::interner::Interner;
     use crate::Gc;
 
     // Implementing `Stack` by using `Box` internally breaks stacked borrow rules (but not tree
@@ -1272,7 +1274,12 @@ mod tests {
             &[],
             &[],
             &[],
-            Environment::new(&gc, rustc_hash::FxHashMap::default(), global_cells),
+            Environment::new(
+                &gc,
+                rustc_hash::FxHashMap::default(),
+                global_cells,
+                Interner::default(),
+            ),
             global_cells,
             compiled_bytecodes,
         )

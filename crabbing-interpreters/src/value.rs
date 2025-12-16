@@ -16,6 +16,7 @@ use crate::gc::GcStr;
 use crate::gc::Trace;
 use crate::hash_map::HashMap;
 use crate::interner::InternedString;
+use crate::interner::Interner;
 use crate::scope::Expression;
 use crate::scope::Statement;
 use crate::scope::Variable;
@@ -277,7 +278,7 @@ impl Debug for BoundMethod<'_> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct NoSuchAttribute(#[expect(dead_code)] InternedString);
+pub(crate) struct NoSuchAttribute(InternedString);
 
 pub enum NativeError<'a> {
     #[expect(dead_code)]
@@ -293,6 +294,13 @@ pub enum NativeError<'a> {
         error: std::io::Error,
         filename: String,
     },
+    NoSuchAttribute(InternedString),
+}
+
+impl From<NoSuchAttribute> for NativeError<'_> {
+    fn from(NoSuchAttribute(attr): NoSuchAttribute) -> Self {
+        Self::NoSuchAttribute(attr)
+    }
 }
 
 pub struct NativeErrorWithName<'a> {
@@ -301,7 +309,12 @@ pub struct NativeErrorWithName<'a> {
 }
 
 impl<'a> NativeErrorWithName<'a> {
-    pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
+    pub(crate) fn at_expr(
+        self,
+        interner: &Interner<'a>,
+        callee: Value<'a>,
+        expr: &Expression<'a>,
+    ) -> Error<'a> where {
         let Self { callee_name: name, error } = self;
         match error {
             NativeError::Error(err) => err,
@@ -321,6 +334,11 @@ impl<'a> NativeErrorWithName<'a> {
                 at: expr.into_variant(),
                 error,
                 filename,
+            },
+            NativeError::NoSuchAttribute(attr) => Error::NativeFnUndefinedProperty {
+                name,
+                at: expr.into_variant(),
+                attr: interner.get(attr),
             },
         }
     }

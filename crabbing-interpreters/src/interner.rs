@@ -1,5 +1,5 @@
+use indexmap::IndexMap;
 use itertools::Itertools;
-use rustc_hash::FxHashMap as HashMap;
 
 use crate::DEBUG_INDENT;
 
@@ -30,7 +30,7 @@ impl std::fmt::Display for InternedString {
 
 #[derive(Clone)]
 pub struct Interner<'a> {
-    interned_strings: HashMap<&'a str, InternedString>,
+    interned_strings: IndexMap<&'a str, InternedString, rustc_hash::FxBuildHasher>,
 }
 
 impl Default for Interner<'_> {
@@ -72,5 +72,12 @@ impl<'a> Interner<'a> {
         for (s, interned) in interned_strings {
             println!("{interned:>DEBUG_INDENT$}:  {s:?}");
         }
+    }
+
+    pub(crate) fn get(&self, InternedString(index): InternedString) -> &'a str {
+        self.interned_strings
+            .get_index(usize::try_from(index).unwrap())
+            .unwrap()
+            .0
     }
 }

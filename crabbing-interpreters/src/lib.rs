@@ -240,6 +240,7 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
             .map(|(i, name)| (name, i))
             .collect(),
         GcRef::from_iter_in(gc, [].into_iter()),
+        interner,
     );
     let mut line = String::new();
     'repl: loop {
@@ -266,7 +267,7 @@ fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
             }
             first = false;
             let (tokens, eof_loc) = lex(bump, Path::new("<input>"), &line);
-            match parse(program, bump, tokens, eof_loc, &mut interner) {
+            match parse(program, bump, tokens, eof_loc, &mut globals.interner) {
                 Ok(stmts) => break stmts,
                 Err(parse::Error::Eof { at: _ }) => (),
                 Err(err) => {
@@ -400,7 +401,7 @@ pub fn run<'a>(
                 .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
         );
         let mut stack = time("stk", args.times, || {
-            Environment::new(gc, global_name_offsets, global_cells)
+            Environment::new(gc, global_name_offsets, global_cells, interner)
         });
         let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
         let (bytecode, constants, metadata, error_locations) =
@@ -415,7 +416,7 @@ pub fn run<'a>(
 
         if args.bytecode {
             println!("Interned strings");
-            interner.print_interned_strings();
+            stack.interner.print_interned_strings();
             println!();
 
             println!("Metadata");

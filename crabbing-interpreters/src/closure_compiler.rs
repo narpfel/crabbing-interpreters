@@ -533,8 +533,9 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 .iter()
                                 .map(|arg| arg(state))
                                 .collect::<Result<_, _>>()?;
-                            func(state.env, arguments)
-                                .map_err(|err| Box::new(err.at_expr(callee, expr)))
+                            func(state.env, arguments).map_err(|err| {
+                                Box::new(err.at_expr(&state.env.interner, callee, expr))
+                            })
                         }
                         Value::Class(class) => {
                             let instance = Value::Instance(GcRef::new_in(

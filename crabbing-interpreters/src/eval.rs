@@ -213,6 +213,14 @@ pub enum Error<'a> {
         at: ExpressionTypes::Call<'a>,
         error: std::io::Error,
     },
+
+    #[error("access of undefined property `{attr}` in native function `{name}`")]
+    NativeFnUndefinedProperty {
+        name: &'static str,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        attr: &'a str,
+    },
 }
 
 pub fn eval<'a>(
@@ -395,7 +403,7 @@ pub fn eval<'a>(
                         .iter()
                         .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
-                    func(env, arguments).map_err(|err| err.at_expr(callee, expr))?
+                    func(env, arguments).map_err(|err| err.at_expr(&env.interner, callee, expr))?
                 }
                 Value::Class(class) => {
                     let instance =
@@ -711,6 +719,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::interner::Interner;
     use crate::parse;
     use crate::scope;
     use crate::scope::Program;
@@ -754,7 +763,7 @@ mod tests {
             .collect();
         let global_cells = GcRef::from_iter_in(gc, [].into_iter());
         eval(
-            &mut Environment::new(gc, global_name_offsets, global_cells),
+            &mut Environment::new(gc, global_name_offsets, global_cells, Interner::default()),
             global_cells,
             0,
             scoped_ast,

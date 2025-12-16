@@ -62,19 +62,19 @@ pub(super) fn split<'a>(
             Ok(Unboxed::Instance(state))
         }
         [Unboxed::Instance(state)] => {
-            let string = state.getattr(interned::STRING).unwrap();
+            let string = state.getattr(interned::STRING)?;
             let Unboxed::String(string) = string.parse()
             else {
                 todo!()
             };
-            let start = state.getattr(interned::START).unwrap();
+            let start = state.getattr(interned::START)?;
             let Unboxed::Number(start) = start.parse()
             else {
                 todo!()
             };
             #[expect(clippy::as_conversions, reason = "TODO: check that this fits")]
             let start = start as usize;
-            let delimiter = state.getattr(interned::DELIMITER).unwrap();
+            let delimiter = state.getattr(interned::DELIMITER)?;
             let Unboxed::String(delimiter) = delimiter.parse()
             else {
                 todo!()
