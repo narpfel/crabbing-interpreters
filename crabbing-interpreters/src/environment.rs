@@ -22,6 +22,7 @@ use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::NativeError;
+use crate::value::NativeErrorWithName;
 use crate::value::Value as Unboxed;
 
 mod builtins;
@@ -68,7 +69,10 @@ impl<'a> Environment<'a> {
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
             env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
                 if !arguments.is_empty() {
-                    return Err(NativeError::ArityMismatch { expected: 0 });
+                    return Err(NativeErrorWithName {
+                        callee_name: "clock",
+                        error: NativeError::ArityMismatch { expected: 0 },
+                    });
                 }
                 static START_TIME: OnceLock<Instant> = OnceLock::new();
                 Ok(Unboxed::Number(
@@ -90,25 +94,28 @@ impl<'a> Environment<'a> {
             env.stack[slot] = Unboxed::NativeFunction(|env, arguments| match &arguments[..] {
                 [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
                     env.gc,
-                    &std::fs::read_to_string(&**filename).map_err(|error| {
-                        NativeError::IoError {
-                            name: "read_file".to_owned(),
-                            error,
-                            filename: (**filename).to_owned(),
-                        }
+                    &std::fs::read_to_string(&**filename).map_err(|error| NativeErrorWithName {
+                        callee_name: "read_file",
+                        error: NativeError::IoError { error, filename: (**filename).to_owned() },
                     })?,
                 ))),
-                arguments => Err(NativeError::TypeError {
-                    name: "read_file".to_owned(),
-                    expected: "[String]".to_owned(),
-                    tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
+                arguments => Err(NativeErrorWithName {
+                    callee_name: "read_file",
+                    error: NativeError::TypeError {
+                        expected: "[String]".to_owned(),
+                        tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
+                    },
                 }),
             })
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::SPLIT) {
-            env.stack[slot] = Unboxed::NativeFunction(builtins::split).into_nanboxed();
+            env.stack[slot] = Unboxed::NativeFunction(|env, args| {
+                builtins::split(env, args)
+                    .map_err(|error| NativeErrorWithName { error, callee_name: "split" })
+            })
+            .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::SPLIT_STATE) {

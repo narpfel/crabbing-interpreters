@@ -193,7 +193,7 @@ pub enum Error<'a> {
 
     #[error("native function `{name}` expects `{expected}` but got arguments of types `{tys}`")]
     NativeFnCallArgTypeMismatch {
-        name: String,
+        name: &'static str,
         #[diagnostics(callee(colour = Red))]
         at: ExpressionTypes::Call<'a>,
         expected: String,
@@ -207,7 +207,7 @@ pub enum Error<'a> {
         reason = "renaming this variant would not make the code clearer"
     )]
     NativeFnCallIoError {
-        name: String,
+        name: &'static str,
         filename: String,
         #[diagnostics(callee(colour = Red))]
         at: ExpressionTypes::Call<'a>,

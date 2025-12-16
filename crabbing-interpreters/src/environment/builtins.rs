@@ -87,7 +87,6 @@ pub(crate) fn split<'a>(
             Ok(Unboxed::Nil)
         }
         arguments => Err(NativeError::TypeError {
-            name: "split".to_owned(),
             expected: "[String, String] | [SplitState]".to_owned(),
             tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
         }),

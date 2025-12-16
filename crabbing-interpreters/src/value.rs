@@ -25,7 +25,7 @@ pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
 pub(crate) type NativeFnPtr =
-    for<'a> fn(&Environment<'a>, Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
+    for<'a> fn(&Environment<'a>, Vec<Value<'a>>) -> Result<Value<'a>, NativeErrorWithName<'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -280,38 +280,43 @@ impl Debug for BoundMethod<'_> {
 pub(crate) struct NoSuchAttribute(#[expect(dead_code)] InternedString);
 
 pub enum NativeError<'a> {
+    #[expect(dead_code)]
     Error(Error<'a>),
     ArityMismatch {
         expected: usize,
     },
     TypeError {
-        name: String,
         expected: String,
         tys: String,
     },
     IoError {
-        name: String,
         error: std::io::Error,
         filename: String,
     },
 }
 
-impl<'a> NativeError<'a> {
+pub struct NativeErrorWithName<'a> {
+    pub(crate) callee_name: &'static str,
+    pub(crate) error: NativeError<'a>,
+}
+
+impl<'a> NativeErrorWithName<'a> {
     pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
-        match self {
-            Self::Error(err) => err,
-            Self::ArityMismatch { expected } => Error::ArityMismatch {
+        let Self { callee_name: name, error } = self;
+        match error {
+            NativeError::Error(err) => err,
+            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
                 callee,
                 expected,
                 at: expr.into_variant(),
             },
-            Self::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
+            NativeError::TypeError { expected, tys } => Error::NativeFnCallArgTypeMismatch {
                 name,
                 at: expr.into_variant(),
                 expected,
                 tys,
             },
-            Self::IoError { name, error, filename } => Error::NativeFnCallIoError {
+            NativeError::IoError { error, filename } => Error::NativeFnCallIoError {
                 name,
                 at: expr.into_variant(),
                 error,
