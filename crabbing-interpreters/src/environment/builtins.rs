@@ -62,23 +62,11 @@ pub(super) fn split<'a>(
             Ok(Unboxed::Instance(state))
         }
         [Unboxed::Instance(state)] => {
-            let string = state.getattr(interned::STRING)?;
-            let Unboxed::String(string) = string.parse()
-            else {
-                todo!()
-            };
-            let start = state.getattr(interned::START)?;
-            let Unboxed::Number(start) = start.parse()
-            else {
-                todo!()
-            };
+            let string: GcStr = state.getattr(interned::STRING)?.parse().try_into()?;
+            let start: f64 = state.getattr(interned::START)?.parse().try_into()?;
             #[expect(clippy::as_conversions, reason = "TODO: check that this fits")]
             let start = start as usize;
-            let delimiter = state.getattr(interned::DELIMITER)?;
-            let Unboxed::String(delimiter) = delimiter.parse()
-            else {
-                todo!()
-            };
+            let delimiter: GcStr = state.getattr(interned::DELIMITER)?.parse().try_into()?;
             let string = &string[start..];
             let (split, start) = match string.split_once(&*delimiter) {
                 Some((split, _rest)) => (

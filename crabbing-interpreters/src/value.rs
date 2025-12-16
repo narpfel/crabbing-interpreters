@@ -125,6 +125,30 @@ impl Display for Value<'_> {
     }
 }
 
+pub struct TypeMismatch<'a>(Value<'a>);
+
+impl<'a> TryFrom<Value<'a>> for f64 {
+    type Error = TypeMismatch<'a>;
+
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::Number(number) => Ok(number),
+            value => Err(TypeMismatch(value)),
+        }
+    }
+}
+
+impl<'a> TryFrom<Value<'a>> for GcStr<'a> {
+    type Error = TypeMismatch<'a>;
+
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::String(string) => Ok(string),
+            value => Err(TypeMismatch(value)),
+        }
+    }
+}
+
 pub type Function<'a> = GcRef<'a, FunctionInner<'a>>;
 
 pub struct FunctionInner<'a> {
@@ -295,11 +319,18 @@ pub enum NativeError<'a> {
         filename: String,
     },
     NoSuchAttribute(InternedString),
+    TypeMismatch(Value<'a>),
 }
 
 impl From<NoSuchAttribute> for NativeError<'_> {
     fn from(NoSuchAttribute(attr): NoSuchAttribute) -> Self {
         Self::NoSuchAttribute(attr)
+    }
+}
+
+impl<'a> From<TypeMismatch<'a>> for NativeError<'a> {
+    fn from(TypeMismatch(value): TypeMismatch<'a>) -> Self {
+        Self::TypeMismatch(value)
     }
 }
 
@@ -340,6 +371,8 @@ impl<'a> NativeErrorWithName<'a> {
                 at: expr.into_variant(),
                 attr: interner.get(attr),
             },
+            NativeError::TypeMismatch(value) =>
+                Error::NativeFnTypeMismatch { name, at: expr.into_variant(), value },
         }
     }
 }

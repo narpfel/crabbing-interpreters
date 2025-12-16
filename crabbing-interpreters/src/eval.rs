@@ -221,6 +221,14 @@ pub enum Error<'a> {
         at: ExpressionTypes::Call<'a>,
         attr: &'a str,
     },
+
+    #[error("type error in call to native function `{name}`: `{value}`")]
+    NativeFnTypeMismatch {
+        name: &'static str,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        value: Value<'a>,
+    },
 }
 
 pub fn eval<'a>(

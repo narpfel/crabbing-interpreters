@@ -1,0 +1,8 @@
+class FakeState {
+    init() {
+        this.string = "string";
+        this.start = "string";
+    }
+}
+
+split(FakeState());
