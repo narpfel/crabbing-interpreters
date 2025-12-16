@@ -8,10 +8,30 @@ use crate::value::Instance;
 use crate::value::NativeError;
 use crate::value::Value as Unboxed;
 
+#[expect(clippy::result_large_err)]
+pub(super) fn read_file<'a>(
+    env: &Environment<'a>,
+    arguments: Vec<Unboxed<'a>>,
+) -> Result<Unboxed<'a>, NativeError<'a>> {
+    match &arguments[..] {
+        [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
+            env.gc,
+            &std::fs::read_to_string(&**filename).map_err(|error| NativeError::IoError {
+                error,
+                filename: (**filename).to_owned(),
+            })?,
+        ))),
+        arguments => Err(NativeError::TypeError {
+            expected: "[String]".to_owned(),
+            tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
+        }),
+    }
+}
+
 // TODO: decide whether `split("aba", "b")` and `split("abab", "b")` should behave the
 // same or differently
 #[expect(clippy::result_large_err)]
-pub(crate) fn split<'a>(
+pub(super) fn split<'a>(
     env: &Environment<'a>,
     arguments: Vec<Unboxed<'a>>,
 ) -> Result<Unboxed<'a>, NativeError<'a>> {

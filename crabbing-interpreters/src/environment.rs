@@ -4,13 +4,11 @@ use std::ops::IndexMut;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::eval::Error;
 use crate::gc::Gc;
 use crate::gc::GcRef;
-use crate::gc::GcStr;
 use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
@@ -91,21 +89,9 @@ impl<'a> Environment<'a> {
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
-            env.stack[slot] = Unboxed::NativeFunction(|env, arguments| match &arguments[..] {
-                [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
-                    env.gc,
-                    &std::fs::read_to_string(&**filename).map_err(|error| NativeErrorWithName {
-                        callee_name: "read_file",
-                        error: NativeError::IoError { error, filename: (**filename).to_owned() },
-                    })?,
-                ))),
-                arguments => Err(NativeErrorWithName {
-                    callee_name: "read_file",
-                    error: NativeError::TypeError {
-                        expected: "[String]".to_owned(),
-                        tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
-                    },
-                }),
+            env.stack[slot] = Unboxed::NativeFunction(|env, args| {
+                builtins::read_file(env, args)
+                    .map_err(|error| NativeErrorWithName { error, callee_name: "read_file" })
             })
             .into_nanboxed();
             env.is_global_defined[slot] = true;
