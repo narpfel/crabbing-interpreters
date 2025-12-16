@@ -1140,6 +1140,7 @@ fn execute_attribute_lookup<'a>(
     let () = match nanboxed_value.parse() {
         Instance(instance) => instance
             .getattr(name)
+            .ok()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
             .or_else(|| {
                 let method = match vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] {

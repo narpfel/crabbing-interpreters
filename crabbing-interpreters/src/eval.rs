@@ -441,6 +441,7 @@ pub fn eval<'a>(
             match lhs {
                 Value::Instance(instance) => instance
                     .getattr(attribute.id())
+                    .ok()
                     .map(nanboxed::Value::parse)
                     .or_else(|| {
                         instance.class.lookup_method(attribute.id()).map(|method| {

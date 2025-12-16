@@ -196,6 +196,7 @@ pub mod instance {
     use crate::interner::InternedString;
     use crate::value::nanboxed;
     use crate::value::Class;
+    use crate::value::NoSuchAttribute;
 
     pub struct InstanceInner<'a> {
         pub(crate) class: Class<'a>,
@@ -213,10 +214,16 @@ pub mod instance {
             unsafe { &mut *self.attributes.as_ptr() }.insert(name, value);
         }
 
-        pub(crate) fn getattr(&self, name: InternedString) -> Option<nanboxed::Value<'a>> {
+        pub(crate) fn getattr(
+            &self,
+            name: InternedString,
+        ) -> Result<nanboxed::Value<'a>, NoSuchAttribute> {
             // SAFETY: there are no mutable references to/into `self.attributes`, so we can create
             // a shared reference here
-            unsafe { &*self.attributes.as_ptr() }.get(&name).copied()
+            unsafe { &*self.attributes.as_ptr() }
+                .get(&name)
+                .copied()
+                .ok_or(NoSuchAttribute(name))
         }
     }
 
@@ -268,6 +275,9 @@ impl Debug for BoundMethod<'_> {
         )
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NoSuchAttribute(#[expect(dead_code)] InternedString);
 
 pub enum NativeError<'a> {
     Error(Error<'a>),

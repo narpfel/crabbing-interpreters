@@ -578,6 +578,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     match lhs {
                         Value::Instance(instance) => instance
                             .getattr(attr_id)
+                            .ok()
                             .map(nanboxed::Value::parse)
                             .or_else(|| {
                                 instance.class.lookup_method(attr_id).map(|method| {
