@@ -1,0 +1,28 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/split_on_empty_string.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+2
+ä
+===============
+6
+🐍
+===============
+7
+b
+===============
+10
+ᗢ
+===============
+11
+c
+===============
+
+----- stderr -----

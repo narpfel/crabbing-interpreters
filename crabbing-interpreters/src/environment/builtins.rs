@@ -28,6 +28,14 @@ pub(super) fn read_file<'a>(
     }
 }
 
+fn split_once<'a>(string: &'a str, delimiter: &str) -> Option<&'a str> {
+    match delimiter.is_empty() {
+        true if string.is_empty() => None,
+        true => Some(&string[..string.ceil_char_boundary(1)]),
+        false => Some(string.split_once(delimiter)?.0),
+    }
+}
+
 // TODO: decide whether `split("aba", "b")` and `split("abab", "b")` should behave the
 // same or differently
 #[expect(clippy::result_large_err)]
@@ -44,9 +52,8 @@ pub(super) fn split<'a>(
                 Unboxed::String(*delimiter).into_nanboxed(),
             );
             state.setattr(interned::STRING, Unboxed::String(*string).into_nanboxed());
-            let (split, start) = match string.split_once(&**delimiter) {
-                Some((split, _rest)) =>
-                    (GcStr::new_in(env.gc, split), split.len() + delimiter.len()),
+            let (split, start) = match split_once(string, delimiter) {
+                Some(split) => (GcStr::new_in(env.gc, split), split.len() + delimiter.len()),
                 None => (*string, string.len()),
             };
             state.setattr(interned::SPLIT, Unboxed::String(split).into_nanboxed());
@@ -68,8 +75,8 @@ pub(super) fn split<'a>(
             let start = start as usize;
             let delimiter: GcStr = state.getattr(interned::DELIMITER)?.parse().try_into()?;
             let string = &string[start..];
-            let (split, start) = match string.split_once(&*delimiter) {
-                Some((split, _rest)) => (
+            let (split, start) = match split_once(string, &delimiter) {
+                Some(split) => (
                     Unboxed::String(GcStr::new_in(env.gc, split)),
                     start + split.len() + delimiter.len(),
                 ),
