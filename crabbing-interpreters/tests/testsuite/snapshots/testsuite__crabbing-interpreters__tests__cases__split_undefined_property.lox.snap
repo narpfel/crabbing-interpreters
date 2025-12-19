@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/split_undefined_property.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: access of undefined property `start` in native function `split`
+   ╭─[crabbing-interpreters/tests/cases/split_undefined_property.lox:7:1]
+   │
+ 7 │ split(FakeState());
+   │ ─────  
+───╯

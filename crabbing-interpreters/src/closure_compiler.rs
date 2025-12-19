@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::iter::zip;
 use std::iter::Skip;
 use std::slice;
@@ -14,7 +13,6 @@ use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace as _;
-use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -26,12 +24,12 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::instance::InstanceInner;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
-use crate::value::InstanceInner;
 use crate::value::Value;
 
 pub(crate) struct State<'a, 'b> {
@@ -436,12 +434,8 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                             let value = value(state)?;
                             let target_value = lhs(state)?;
                             match target_value {
-                                Value::Instance(instance) => {
-                                    instance
-                                        .attributes
-                                        .borrow_mut()
-                                        .insert(attribute.id(), value.into_nanboxed());
-                                }
+                                Value::Instance(instance) =>
+                                    instance.setattr(attribute.id(), value.into_nanboxed()),
                                 _ => Err(Error::NoFields {
                                     lhs: target_value,
                                     at: target.into_variant(),
@@ -539,16 +533,14 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 .iter()
                                 .map(|arg| arg(state))
                                 .collect::<Result<_, _>>()?;
-                            func(state.env.gc, arguments)
-                                .map_err(|err| Box::new(err.at_expr(callee, expr)))
+                            func(state.env, arguments).map_err(|err| {
+                                Box::new(err.at_expr(&state.env.interner, callee, expr))
+                            })
                         }
                         Value::Class(class) => {
                             let instance = Value::Instance(GcRef::new_in(
                                 state.env.gc,
-                                InstanceInner {
-                                    class,
-                                    attributes: RefCell::new(HashMap::default()),
-                                },
+                                InstanceInner::new(class),
                             ));
                             match class
                                 .lookup_method(interned::INIT)
@@ -586,10 +578,8 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     let lhs = lhs(state)?;
                     match lhs {
                         Value::Instance(instance) => instance
-                            .attributes
-                            .borrow()
-                            .get(&attr_id)
-                            .copied()
+                            .getattr(attr_id)
+                            .ok()
                             .map(nanboxed::Value::parse)
                             .or_else(|| {
                                 instance.class.lookup_method(attr_id).map(|method| {

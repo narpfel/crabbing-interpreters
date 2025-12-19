@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::iter::zip;
 use std::iter::Skip;
@@ -17,7 +16,6 @@ use crate::gc::Gc;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace as _;
-use crate::hash_map::HashMap;
 use crate::interner::interned;
 use crate::parse::BinOp;
 use crate::parse::BinOpKind;
@@ -33,13 +31,13 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
+use crate::value::instance::InstanceInner;
 use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
-use crate::value::InstanceInner;
 use crate::value::Value;
 use crate::Report;
 use crate::Sliced;
@@ -195,7 +193,7 @@ pub enum Error<'a> {
 
     #[error("native function `{name}` expects `{expected}` but got arguments of types `{tys}`")]
     NativeFnCallArgTypeMismatch {
-        name: String,
+        name: &'static str,
         #[diagnostics(callee(colour = Red))]
         at: ExpressionTypes::Call<'a>,
         expected: String,
@@ -209,11 +207,27 @@ pub enum Error<'a> {
         reason = "renaming this variant would not make the code clearer"
     )]
     NativeFnCallIoError {
-        name: String,
+        name: &'static str,
         filename: String,
         #[diagnostics(callee(colour = Red))]
         at: ExpressionTypes::Call<'a>,
         error: std::io::Error,
+    },
+
+    #[error("access of undefined property `{attr}` in native function `{name}`")]
+    NativeFnUndefinedProperty {
+        name: &'static str,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        attr: &'a str,
+    },
+
+    #[error("type error in call to native function `{name}`: `{value}`")]
+    NativeFnTypeMismatch {
+        name: &'static str,
+        #[diagnostics(callee(colour = Red))]
+        at: ExpressionTypes::Call<'a>,
+        value: Value<'a>,
     },
 }
 
@@ -257,12 +271,8 @@ pub fn eval<'a>(
                 AssignmentTarget::Attribute { lhs, attribute } => {
                     let target_value = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
                     match target_value {
-                        Value::Instance(instance) => {
-                            instance
-                                .attributes
-                                .borrow_mut()
-                                .insert(attribute.id(), value.into_nanboxed());
-                        }
+                        Value::Instance(instance) =>
+                            instance.setattr(attribute.id(), value.into_nanboxed()),
                         _ => Err(Error::NoFields {
                             lhs: target_value,
                             at: target.into_variant(),
@@ -401,16 +411,11 @@ pub fn eval<'a>(
                         .iter()
                         .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
                         .collect::<Result<_, _>>()?;
-                    func(env.gc, arguments).map_err(|err| err.at_expr(callee, expr))?
+                    func(env, arguments).map_err(|err| err.at_expr(&env.interner, callee, expr))?
                 }
                 Value::Class(class) => {
-                    let instance = Value::Instance(GcRef::new_in(
-                        env.gc,
-                        InstanceInner {
-                            class,
-                            attributes: RefCell::new(HashMap::default()),
-                        },
-                    ));
+                    let instance =
+                        Value::Instance(GcRef::new_in(env.gc, InstanceInner::new(class)));
                     match class
                         .lookup_method(interned::INIT)
                         .map(nanboxed::Value::parse)
@@ -451,10 +456,8 @@ pub fn eval<'a>(
             let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
             match lhs {
                 Value::Instance(instance) => instance
-                    .attributes
-                    .borrow()
-                    .get(&attribute.id())
-                    .copied()
+                    .getattr(attribute.id())
+                    .ok()
                     .map(nanboxed::Value::parse)
                     .or_else(|| {
                         instance.class.lookup_method(attribute.id()).map(|method| {
@@ -724,6 +727,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::interner::Interner;
     use crate::parse;
     use crate::scope;
     use crate::scope::Program;
@@ -767,7 +771,7 @@ mod tests {
             .collect();
         let global_cells = GcRef::from_iter_in(gc, [].into_iter());
         eval(
-            &mut Environment::new(gc, global_name_offsets, global_cells),
+            &mut Environment::new(gc, global_name_offsets, global_cells, Interner::default()),
             global_cells,
             0,
             scoped_ast,

@@ -1,0 +1,19 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/split_state_type_error_number_is_string.lox
+---
+success: false
+exit_code: 70
+----- stdout -----
+
+----- stderr -----
+Error: type error in call to native function `split`: `string`
+   ╭─[crabbing-interpreters/tests/cases/split_state_type_error_number_is_string.lox:8:1]
+   │
+ 8 │ split(FakeState());
+   │ ─────  
+───╯

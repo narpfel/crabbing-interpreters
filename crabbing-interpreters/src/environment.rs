@@ -4,23 +4,27 @@ use std::ops::IndexMut;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::eval::Error;
 use crate::gc::Gc;
 use crate::gc::GcRef;
-use crate::gc::GcStr;
 use crate::gc::Trace as _;
 use crate::interner::interned;
 use crate::interner::InternedString;
+use crate::interner::Interner;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
 use crate::value::nanboxed::Value;
 use crate::value::Cells;
+use crate::value::Class;
+use crate::value::ClassInner;
 use crate::value::NativeError;
+use crate::value::NativeErrorWithName;
 use crate::value::Value as Unboxed;
+
+mod builtins;
 
 #[cfg(not(miri))]
 pub(crate) const ENV_SIZE: usize = 100_000;
@@ -34,6 +38,8 @@ pub struct Environment<'a> {
     is_global_defined: Box<[bool]>,
     pub(crate) gc: &'a Gc,
     global_cells: Cells<'a>,
+    builtin_split_stack: Class<'a>,
+    pub(crate) interner: Interner<'a>,
 }
 
 impl<'a> Environment<'a> {
@@ -41,6 +47,7 @@ impl<'a> Environment<'a> {
         gc: &'a Gc,
         globals: HashMap<InternedString, usize>,
         global_cells: Cells<'a>,
+        interner: Interner<'a>,
     ) -> Self {
         let mut env = Self {
             stack: vec![Unboxed::Nil.into_nanboxed(); ENV_SIZE]
@@ -51,11 +58,23 @@ impl<'a> Environment<'a> {
             globals,
             gc,
             global_cells,
+            builtin_split_stack: Class::new_in(
+                gc,
+                ClassInner {
+                    name: "SplitState",
+                    base: None,
+                    methods: Default::default(),
+                },
+            ),
+            interner,
         };
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
-            env.stack[slot] = Unboxed::NativeFunction(|_gc, arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
                 if !arguments.is_empty() {
-                    return Err(NativeError::ArityMismatch { expected: 0 });
+                    return Err(Box::new(NativeErrorWithName {
+                        callee_name: "clock",
+                        error: NativeError::ArityMismatch { expected: 0 },
+                    }));
                 }
                 static START_TIME: OnceLock<Instant> = OnceLock::new();
                 Ok(Unboxed::Number(
@@ -66,7 +85,7 @@ impl<'a> Environment<'a> {
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::NATIVE_FUNCTION_TEST) {
-            env.stack[slot] = Unboxed::NativeFunction(|_gc, arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
                 println!("native test function called with {arguments:#?}");
                 Ok(Unboxed::Nil)
             })
@@ -74,26 +93,28 @@ impl<'a> Environment<'a> {
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
-            env.stack[slot] = Unboxed::NativeFunction(|gc, arguments| match &arguments[..] {
-                [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
-                    gc,
-                    &std::fs::read_to_string(&**filename).map_err(|error| {
-                        NativeError::IoError {
-                            name: "read_file".to_owned(),
-                            error,
-                            filename: (**filename).to_owned(),
-                        }
-                    })?,
-                ))),
-                arguments => Err(NativeError::TypeError {
-                    name: "read_file".to_owned(),
-                    expected: "[String]".to_owned(),
-                    tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
-                }),
+            env.stack[slot] = Unboxed::NativeFunction(|env, args| {
+                builtins::read_file(env, args).map_err(|error| {
+                    Box::new(NativeErrorWithName { error: *error, callee_name: "read_file" })
+                })
             })
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
+        if let Some(&slot) = env.globals.get(&interned::SPLIT) {
+            env.stack[slot] = Unboxed::NativeFunction(|env, args| {
+                builtins::split(env, args).map_err(|error| {
+                    Box::new(NativeErrorWithName { error: *error, callee_name: "split" })
+                })
+            })
+            .into_nanboxed();
+            env.is_global_defined[slot] = true;
+        }
+        if let Some(&slot) = env.globals.get(&interned::SPLIT_STATE) {
+            env.stack[slot] = Unboxed::Class(env.builtin_split_stack).into_nanboxed();
+            env.is_global_defined[slot] = true;
+        }
+
         env
     }
 
@@ -182,6 +203,7 @@ impl<'a> Environment<'a> {
     pub(crate) fn trace(&self) {
         self.stack.trace();
         self.global_cells.trace();
+        self.builtin_split_stack.trace();
     }
 
     pub(crate) fn collect_if_necessary(

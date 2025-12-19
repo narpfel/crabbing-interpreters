@@ -1,5 +1,5 @@
+use indexmap::IndexMap;
 use itertools::Itertools;
-use rustc_hash::FxHashMap as HashMap;
 
 use crate::DEBUG_INDENT;
 
@@ -12,6 +12,11 @@ pub mod interned {
     pub const SUPER: InternedString = InternedString(3);
     pub const NATIVE_FUNCTION_TEST: InternedString = InternedString(4);
     pub const READ_FILE: InternedString = InternedString(5);
+    pub const SPLIT: InternedString = InternedString(6);
+    pub const SPLIT_STATE: InternedString = InternedString(7);
+    pub const STRING: InternedString = InternedString(8);
+    pub const START: InternedString = InternedString(9);
+    pub const DELIMITER: InternedString = InternedString(10);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -25,7 +30,7 @@ impl std::fmt::Display for InternedString {
 
 #[derive(Clone)]
 pub struct Interner<'a> {
-    interned_strings: HashMap<&'a str, InternedString>,
+    interned_strings: IndexMap<&'a str, InternedString, rustc_hash::FxBuildHasher>,
 }
 
 impl Default for Interner<'_> {
@@ -38,6 +43,11 @@ impl Default for Interner<'_> {
                 ("super", interned::SUPER),
                 ("native_function_test", interned::NATIVE_FUNCTION_TEST),
                 ("read_file", interned::READ_FILE),
+                ("split", interned::SPLIT),
+                ("SplitState", interned::SPLIT_STATE),
+                ("string", interned::STRING),
+                ("start", interned::START),
+                ("delimiter", interned::DELIMITER),
             ]
             .into_iter()
             .collect(),
@@ -62,5 +72,12 @@ impl<'a> Interner<'a> {
         for (s, interned) in interned_strings {
             println!("{interned:>DEBUG_INDENT$}:  {s:?}");
         }
+    }
+
+    pub(crate) fn get(&self, InternedString(index): InternedString) -> &'a str {
+        self.interned_strings
+            .get_index(usize::try_from(index).unwrap())
+            .unwrap()
+            .0
     }
 }

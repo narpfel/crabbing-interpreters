@@ -1,0 +1,21 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - crabbing-interpreters/tests/cases/split_undefined_property.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class FakeState (global @1) ∅
+      (method init [(local this @0)] []
+         (block
+            (expr (= (setattr (local this @0) string) "string"))
+            (init-return))))
+   (expr (call +2 (global split @-3) (call +2 (global FakeState @1)))))
+
+----- stderr -----

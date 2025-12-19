@@ -2,7 +2,6 @@
 #![expect(unpredictable_function_pointer_comparisons)]
 
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::from_fn;
@@ -10,23 +9,24 @@ use std::iter::from_fn;
 use variant_types::IntoVariant as _;
 
 use crate::closure_compiler::Execute;
+use crate::environment::Environment;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace;
 use crate::hash_map::HashMap;
 use crate::interner::InternedString;
+use crate::interner::Interner;
 use crate::scope::Expression;
 use crate::scope::Statement;
 use crate::scope::Variable;
 use crate::value::nanboxed::AsNanBoxed as _;
-use crate::Gc;
 
 pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
 pub(crate) type NativeFnPtr =
-    for<'a> fn(&'a Gc, Vec<Value<'a>>) -> Result<Value<'a>, NativeError<'a>>;
+    for<'a> fn(&Environment<'a>, Vec<Value<'a>>) -> Result<Value<'a>, Box<NativeErrorWithName<'a>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -125,6 +125,30 @@ impl Display for Value<'_> {
     }
 }
 
+pub struct TypeMismatch<'a>(Value<'a>);
+
+impl<'a> TryFrom<Value<'a>> for f64 {
+    type Error = TypeMismatch<'a>;
+
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::Number(number) => Ok(number),
+            value => Err(TypeMismatch(value)),
+        }
+    }
+}
+
+impl<'a> TryFrom<Value<'a>> for GcStr<'a> {
+    type Error = TypeMismatch<'a>;
+
+    fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
+        match value {
+            Value::String(string) => Ok(string),
+            value => Err(TypeMismatch(value)),
+        }
+    }
+}
+
 pub type Function<'a> = GcRef<'a, FunctionInner<'a>>;
 
 pub struct FunctionInner<'a> {
@@ -189,22 +213,57 @@ impl Debug for Class<'_> {
     }
 }
 
-pub type Instance<'a> = GcRef<'a, InstanceInner<'a>>;
+pub mod instance {
+    use std::cell::RefCell;
 
-pub struct InstanceInner<'a> {
-    pub(crate) class: Class<'a>,
-    pub(crate) attributes: RefCell<HashMap<InternedString, nanboxed::Value<'a>>>,
-}
+    use crate::gc::Trace;
+    use crate::hash_map::HashMap;
+    use crate::interner::InternedString;
+    use crate::value::nanboxed;
+    use crate::value::Class;
+    use crate::value::NoSuchAttribute;
 
-unsafe impl Trace for InstanceInner<'_> {
-    fn trace(&self) {
-        self.class.trace();
-        self.attributes
-            .borrow()
-            .values()
-            .for_each(|value| value.trace());
+    pub struct InstanceInner<'a> {
+        pub(crate) class: Class<'a>,
+        attributes: RefCell<HashMap<InternedString, nanboxed::Value<'a>>>,
+    }
+
+    impl<'a> InstanceInner<'a> {
+        pub(crate) fn new(class: Class<'a>) -> Self {
+            Self { class, attributes: RefCell::default() }
+        }
+
+        pub(crate) fn setattr(&self, name: InternedString, value: nanboxed::Value<'a>) {
+            // SAFETY: there are no references to/into `self.attributes` because `getattr`
+            // returns a copied value, so we can mutate here
+            unsafe { &mut *self.attributes.as_ptr() }.insert(name, value);
+        }
+
+        pub(crate) fn getattr(
+            &self,
+            name: InternedString,
+        ) -> Result<nanboxed::Value<'a>, NoSuchAttribute> {
+            // SAFETY: there are no mutable references to/into `self.attributes`, so we can create
+            // a shared reference here
+            unsafe { &*self.attributes.as_ptr() }
+                .get(&name)
+                .copied()
+                .ok_or(NoSuchAttribute(name))
+        }
+    }
+
+    unsafe impl Trace for InstanceInner<'_> {
+        fn trace(&self) {
+            self.class.trace();
+            self.attributes
+                .borrow()
+                .values()
+                .for_each(|value| value.trace());
+        }
     }
 }
+
+pub type Instance<'a> = GcRef<'a, instance::InstanceInner<'a>>;
 
 impl Debug for Instance<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -242,44 +301,76 @@ impl Debug for BoundMethod<'_> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NoSuchAttribute(InternedString);
+
 pub enum NativeError<'a> {
-    Error(Error<'a>),
     ArityMismatch {
         expected: usize,
     },
-    TypeError {
-        name: String,
+    ArgumentTypeError {
         expected: String,
         tys: String,
     },
     IoError {
-        name: String,
         error: std::io::Error,
         filename: String,
     },
+    NoSuchAttribute(InternedString),
+    TypeMismatch(Value<'a>),
 }
 
-impl<'a> NativeError<'a> {
-    pub(crate) fn at_expr(self, callee: Value<'a>, expr: &Expression<'a>) -> Error<'a> where {
-        match self {
-            Self::Error(err) => err,
-            Self::ArityMismatch { expected } => Error::ArityMismatch {
+impl From<NoSuchAttribute> for Box<NativeError<'_>> {
+    fn from(NoSuchAttribute(attr): NoSuchAttribute) -> Self {
+        Box::new(NativeError::NoSuchAttribute(attr))
+    }
+}
+
+impl<'a> From<TypeMismatch<'a>> for Box<NativeError<'a>> {
+    fn from(TypeMismatch(value): TypeMismatch<'a>) -> Self {
+        Box::new(NativeError::TypeMismatch(value))
+    }
+}
+
+pub struct NativeErrorWithName<'a> {
+    pub(crate) callee_name: &'static str,
+    pub(crate) error: NativeError<'a>,
+}
+
+impl<'a> NativeErrorWithName<'a> {
+    pub(crate) fn at_expr(
+        self,
+        interner: &Interner<'a>,
+        callee: Value<'a>,
+        expr: &Expression<'a>,
+    ) -> Error<'a> where {
+        let Self { callee_name: name, error } = self;
+        match error {
+            NativeError::ArityMismatch { expected } => Error::ArityMismatch {
                 callee,
                 expected,
                 at: expr.into_variant(),
             },
-            Self::TypeError { name, expected, tys } => Error::NativeFnCallArgTypeMismatch {
-                name,
-                at: expr.into_variant(),
-                expected,
-                tys,
-            },
-            Self::IoError { name, error, filename } => Error::NativeFnCallIoError {
+            NativeError::ArgumentTypeError { expected, tys } =>
+                Error::NativeFnCallArgTypeMismatch {
+                    name,
+                    at: expr.into_variant(),
+                    expected,
+                    tys,
+                },
+            NativeError::IoError { error, filename } => Error::NativeFnCallIoError {
                 name,
                 at: expr.into_variant(),
                 error,
                 filename,
             },
+            NativeError::NoSuchAttribute(attr) => Error::NativeFnUndefinedProperty {
+                name,
+                at: expr.into_variant(),
+                attr: interner.get(attr),
+            },
+            NativeError::TypeMismatch(value) =>
+                Error::NativeFnTypeMismatch { name, at: expr.into_variant(), value },
         }
     }
 }

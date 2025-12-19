@@ -1,0 +1,28 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/split_string_on_spaces.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+6
+split
+===============
+11
+this
+===============
+18
+string
+===============
+21
+on
+===============
+27
+spaces
+===============
+
+----- stderr -----
