@@ -20,7 +20,7 @@ pub(super) fn read_file<'a>(
                 filename: (**filename).to_owned(),
             })?,
         ))),
-        arguments => Err(Box::new(NativeError::TypeError {
+        arguments => Err(Box::new(NativeError::ArgumentTypeError {
             expected: "[String]".to_owned(),
             tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
         })),
@@ -98,7 +98,7 @@ pub(super) fn split<'a>(
 
             Ok(Unboxed::Nil)
         }
-        arguments => Err(Box::new(NativeError::TypeError {
+        arguments => Err(Box::new(NativeError::ArgumentTypeError {
             expected: "[String, String] | [SplitState]".to_owned(),
             tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
         })),

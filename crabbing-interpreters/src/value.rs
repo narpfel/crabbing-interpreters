@@ -308,7 +308,7 @@ pub enum NativeError<'a> {
     ArityMismatch {
         expected: usize,
     },
-    TypeError {
+    ArgumentTypeError {
         expected: String,
         tys: String,
     },
@@ -351,12 +351,13 @@ impl<'a> NativeErrorWithName<'a> {
                 expected,
                 at: expr.into_variant(),
             },
-            NativeError::TypeError { expected, tys } => Error::NativeFnCallArgTypeMismatch {
-                name,
-                at: expr.into_variant(),
-                expected,
-                tys,
-            },
+            NativeError::ArgumentTypeError { expected, tys } =>
+                Error::NativeFnCallArgTypeMismatch {
+                    name,
+                    at: expr.into_variant(),
+                    expected,
+                    tys,
+                },
             NativeError::IoError { error, filename } => Error::NativeFnCallIoError {
                 name,
                 at: expr.into_variant(),
