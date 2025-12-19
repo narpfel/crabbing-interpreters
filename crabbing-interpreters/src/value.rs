@@ -305,8 +305,6 @@ impl Debug for BoundMethod<'_> {
 pub(crate) struct NoSuchAttribute(InternedString);
 
 pub enum NativeError<'a> {
-    #[expect(dead_code)]
-    Error(Error<'a>),
     ArityMismatch {
         expected: usize,
     },
@@ -348,7 +346,6 @@ impl<'a> NativeErrorWithName<'a> {
     ) -> Error<'a> where {
         let Self { callee_name: name, error } = self;
         match error {
-            NativeError::Error(err) => err,
             NativeError::ArityMismatch { expected } => Error::ArityMismatch {
                 callee,
                 expected,

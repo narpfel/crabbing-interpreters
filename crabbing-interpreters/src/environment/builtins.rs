@@ -8,7 +8,6 @@ use crate::value::Instance;
 use crate::value::NativeError;
 use crate::value::Value as Unboxed;
 
-#[expect(clippy::result_large_err)]
 pub(super) fn read_file<'a>(
     env: &Environment<'a>,
     arguments: Vec<Unboxed<'a>>,
@@ -38,7 +37,6 @@ fn split_once<'a>(string: &'a str, delimiter: &str) -> Option<&'a str> {
 
 // TODO: decide whether `split("aba", "b")` and `split("abab", "b")` should behave the
 // same or differently
-#[expect(clippy::result_large_err)]
 pub(super) fn split<'a>(
     env: &Environment<'a>,
     arguments: Vec<Unboxed<'a>>,
