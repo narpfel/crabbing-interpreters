@@ -137,6 +137,10 @@ impl<'a> Value<'a> {
     pub(crate) fn eq_nanboxed(self, other: Self) -> bool {
         self.data == other.data
     }
+
+    pub(crate) fn typ(self) -> &'static str {
+        self.parse().typ()
+    }
 }
 
 unsafe impl Trace for Value<'_> {

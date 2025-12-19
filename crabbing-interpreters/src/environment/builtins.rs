@@ -24,10 +24,7 @@ pub(super) fn read_file<'a>(
             ))),
         arguments => Err(Box::new(NativeError::ArgumentTypeError {
             expected: "[String]".to_owned(),
-            tys: format!(
-                "[{}]",
-                arguments.iter().map(|arg| arg.parse().typ()).join(", ")
-            ),
+            tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
         })),
     }
 }
@@ -108,10 +105,7 @@ pub(super) fn split<'a>(
         }
         arguments => Err(Box::new(NativeError::ArgumentTypeError {
             expected: "[String, String] | [SplitState]".to_owned(),
-            tys: format!(
-                "[{}]",
-                arguments.iter().map(|arg| arg.parse().typ()).join(", ")
-            ),
+            tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
         })),
     }
 }
