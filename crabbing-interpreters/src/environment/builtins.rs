@@ -11,7 +11,7 @@ use crate::value::Value as Unboxed;
 pub(super) fn read_file<'a>(
     env: &Environment<'a>,
     arguments: Vec<Unboxed<'a>>,
-) -> Result<Unboxed<'a>, NativeError<'a>> {
+) -> Result<Unboxed<'a>, Box<NativeError<'a>>> {
     match &arguments[..] {
         [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
             env.gc,
@@ -20,10 +20,10 @@ pub(super) fn read_file<'a>(
                 filename: (**filename).to_owned(),
             })?,
         ))),
-        arguments => Err(NativeError::TypeError {
+        arguments => Err(Box::new(NativeError::TypeError {
             expected: "[String]".to_owned(),
             tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
-        }),
+        })),
     }
 }
 
@@ -40,7 +40,7 @@ fn split_once<'a>(string: &'a str, delimiter: &str) -> Option<&'a str> {
 pub(super) fn split<'a>(
     env: &Environment<'a>,
     arguments: Vec<Unboxed<'a>>,
-) -> Result<Unboxed<'a>, NativeError<'a>> {
+) -> Result<Unboxed<'a>, Box<NativeError<'a>>> {
     match &arguments[..] {
         [Unboxed::String(string), Unboxed::String(delimiter)] => {
             let state = InstanceInner::new(env.builtin_split_stack);
@@ -98,9 +98,9 @@ pub(super) fn split<'a>(
 
             Ok(Unboxed::Nil)
         }
-        arguments => Err(NativeError::TypeError {
+        arguments => Err(Box::new(NativeError::TypeError {
             expected: "[String, String] | [SplitState]".to_owned(),
             tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
-        }),
+        })),
     }
 }

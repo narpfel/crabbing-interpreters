@@ -71,10 +71,10 @@ impl<'a> Environment<'a> {
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
             env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
                 if !arguments.is_empty() {
-                    return Err(NativeErrorWithName {
+                    return Err(Box::new(NativeErrorWithName {
                         callee_name: "clock",
                         error: NativeError::ArityMismatch { expected: 0 },
-                    });
+                    }));
                 }
                 static START_TIME: OnceLock<Instant> = OnceLock::new();
                 Ok(Unboxed::Number(
@@ -94,16 +94,18 @@ impl<'a> Environment<'a> {
         }
         if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
             env.stack[slot] = Unboxed::NativeFunction(|env, args| {
-                builtins::read_file(env, args)
-                    .map_err(|error| NativeErrorWithName { error, callee_name: "read_file" })
+                builtins::read_file(env, args).map_err(|error| {
+                    Box::new(NativeErrorWithName { error: *error, callee_name: "read_file" })
+                })
             })
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::SPLIT) {
             env.stack[slot] = Unboxed::NativeFunction(|env, args| {
-                builtins::split(env, args)
-                    .map_err(|error| NativeErrorWithName { error, callee_name: "split" })
+                builtins::split(env, args).map_err(|error| {
+                    Box::new(NativeErrorWithName { error: *error, callee_name: "split" })
+                })
             })
             .into_nanboxed();
             env.is_global_defined[slot] = true;

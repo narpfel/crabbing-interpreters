@@ -26,7 +26,7 @@ pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
 pub(crate) type NativeFnPtr =
-    for<'a> fn(&Environment<'a>, Vec<Value<'a>>) -> Result<Value<'a>, NativeErrorWithName<'a>>;
+    for<'a> fn(&Environment<'a>, Vec<Value<'a>>) -> Result<Value<'a>, Box<NativeErrorWithName<'a>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value<'a> {
@@ -320,15 +320,15 @@ pub enum NativeError<'a> {
     TypeMismatch(Value<'a>),
 }
 
-impl From<NoSuchAttribute> for NativeError<'_> {
+impl From<NoSuchAttribute> for Box<NativeError<'_>> {
     fn from(NoSuchAttribute(attr): NoSuchAttribute) -> Self {
-        Self::NoSuchAttribute(attr)
+        Box::new(NativeError::NoSuchAttribute(attr))
     }
 }
 
-impl<'a> From<TypeMismatch<'a>> for NativeError<'a> {
+impl<'a> From<TypeMismatch<'a>> for Box<NativeError<'a>> {
     fn from(TypeMismatch(value): TypeMismatch<'a>) -> Self {
-        Self::TypeMismatch(value)
+        Box::new(NativeError::TypeMismatch(value))
     }
 }
 
