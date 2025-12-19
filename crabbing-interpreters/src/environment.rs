@@ -4,6 +4,7 @@ use std::ops::IndexMut;
 use std::sync::OnceLock;
 use std::time::Instant;
 
+use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::eval::Error;
@@ -86,6 +87,7 @@ impl<'a> Environment<'a> {
         }
         if let Some(&slot) = env.globals.get(&interned::NATIVE_FUNCTION_TEST) {
             env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
+                let arguments = arguments.iter().map(|value| value.parse()).collect_vec();
                 println!("native test function called with {arguments:#?}");
                 Ok(Unboxed::Nil)
             })

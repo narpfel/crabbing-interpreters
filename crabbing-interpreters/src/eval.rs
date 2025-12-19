@@ -409,9 +409,12 @@ pub fn eval<'a>(
                 Value::NativeFunction(func) => {
                     let arguments = arguments
                         .iter()
-                        .map(|arg| eval(env, cell_vars, offset, arg, trace_call_stack))
-                        .collect::<Result<_, _>>()?;
-                    func(env, arguments).map_err(|err| err.at_expr(&env.interner, callee, expr))?
+                        .map(|arg| {
+                            eval(env, cell_vars, offset, arg, trace_call_stack)
+                                .map(Value::into_nanboxed)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    func(env, &arguments).map_err(|err| err.at_expr(&env.interner, callee, expr))?
                 }
                 Value::Class(class) => {
                     let instance =

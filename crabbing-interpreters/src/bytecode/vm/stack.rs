@@ -85,6 +85,10 @@ where
     pub(super) fn is_empty(&self) -> bool {
         self.pointer == 0
     }
+
+    pub(super) fn used_stack(&self) -> &[T] {
+        &self.stack[..self.pointer]
+    }
 }
 
 unsafe impl<T> Trace for Stack<T>

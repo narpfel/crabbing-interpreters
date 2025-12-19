@@ -946,15 +946,16 @@ fn execute_call<'a>(
                 native_fn: NativeFnPtr,
                 callee: Value<'a>,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
-                let sp = &mut sp;
-                // FIXME: This can be more efficient
-                let mut args: Vec<_> = (0..argument_count)
-                    .map(|_| vm.stack_mut(sp).pop().parse())
-                    .collect();
-                args.reverse();
+                let stack = vm.stack(sp);
+                let stack = stack.used_stack();
+                let args = &stack[stack.len() - argument_count.cast()..];
                 let value = native_fn(&vm.env, args).map_err(|err| {
                     Box::new(err.at_expr(&vm.env.interner, callee, vm.expr_at(pc)))
                 })?;
+                let sp = &mut sp;
+                for _ in 0..argument_count {
+                    vm.stack_mut(sp).pop();
+                }
                 vm.stack_mut(sp).push(value.into_nanboxed());
                 Ok(*sp)
             }
