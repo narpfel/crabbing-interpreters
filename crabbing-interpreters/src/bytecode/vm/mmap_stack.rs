@@ -162,7 +162,7 @@ impl<T> Stack<T> {
         unsafe { self.stack.byte_add(Self::START_OFFSET) }
     }
 
-    fn used_stack(&self) -> &[T] {
+    pub(super) fn used_stack(&self) -> &[T] {
         unsafe {
             std::slice::from_ptr_range(self.useable_stack_start().as_ptr()..self.pointer.as_ptr())
         }

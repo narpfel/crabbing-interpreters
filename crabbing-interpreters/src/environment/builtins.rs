@@ -4,22 +4,24 @@ use crate::environment::Environment;
 use crate::gc::GcStr;
 use crate::interner::interned;
 use crate::value::instance::InstanceInner;
+use crate::value::nanboxed::Value;
 use crate::value::Instance;
 use crate::value::NativeError;
 use crate::value::Value as Unboxed;
 
 pub(super) fn read_file<'a>(
     env: &Environment<'a>,
-    arguments: Vec<Unboxed<'a>>,
+    arguments: &[Value<'a>],
 ) -> Result<Unboxed<'a>, Box<NativeError<'a>>> {
-    match &arguments[..] {
-        [Unboxed::String(filename)] => Ok(Unboxed::String(GcStr::new_in(
-            env.gc,
-            &std::fs::read_to_string(&**filename).map_err(|error| NativeError::IoError {
-                error,
-                filename: (**filename).to_owned(),
-            })?,
-        ))),
+    match arguments {
+        [filename] if let Unboxed::String(filename) = filename.parse() =>
+            Ok(Unboxed::String(GcStr::new_in(
+                env.gc,
+                &std::fs::read_to_string(&*filename).map_err(|error| NativeError::IoError {
+                    error,
+                    filename: (*filename).to_owned(),
+                })?,
+            ))),
         arguments => Err(Box::new(NativeError::ArgumentTypeError {
             expected: "[String]".to_owned(),
             tys: format!("[{}]", arguments.iter().map(|arg| arg.typ()).join(", ")),
@@ -39,20 +41,23 @@ fn split_once<'a>(string: &'a str, delimiter: &str) -> Option<&'a str> {
 // same or differently
 pub(super) fn split<'a>(
     env: &Environment<'a>,
-    arguments: Vec<Unboxed<'a>>,
+    arguments: &[Value<'a>],
 ) -> Result<Unboxed<'a>, Box<NativeError<'a>>> {
-    match &arguments[..] {
-        [Unboxed::String(string), Unboxed::String(delimiter)] => {
+    match arguments {
+        [string, delimiter]
+            if let Unboxed::String(string) = string.parse()
+                && let Unboxed::String(delimiter) = delimiter.parse() =>
+        {
             let state = InstanceInner::new(env.builtin_split_stack);
             let state = Instance::new_in(env.gc, state);
             state.setattr(
                 interned::DELIMITER,
-                Unboxed::String(*delimiter).into_nanboxed(),
+                Unboxed::String(delimiter).into_nanboxed(),
             );
-            state.setattr(interned::STRING, Unboxed::String(*string).into_nanboxed());
-            let (split, start) = match split_once(string, delimiter) {
+            state.setattr(interned::STRING, Unboxed::String(string).into_nanboxed());
+            let (split, start) = match split_once(&string, &delimiter) {
                 Some(split) => (GcStr::new_in(env.gc, split), split.len() + delimiter.len()),
-                None => (*string, string.len()),
+                None => (string, string.len()),
             };
             state.setattr(interned::SPLIT, Unboxed::String(split).into_nanboxed());
             #[expect(
@@ -66,7 +71,7 @@ pub(super) fn split<'a>(
 
             Ok(Unboxed::Instance(state))
         }
-        [Unboxed::Instance(state)] => {
+        [state] if let Unboxed::Instance(state) = state.parse() => {
             let string: GcStr = state.getattr(interned::STRING)?.parse().try_into()?;
             let start: f64 = state.getattr(interned::START)?.parse().try_into()?;
             #[expect(clippy::as_conversions, reason = "TODO: check that this fits")]

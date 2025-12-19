@@ -2,6 +2,7 @@
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
 #![feature(explicit_tail_calls)]
+#![feature(if_let_guard)]
 #![feature(macro_metavar_expr)]
 #![feature(never_type)]
 #![feature(ptr_metadata)]
