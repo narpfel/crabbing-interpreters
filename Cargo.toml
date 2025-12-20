@@ -11,22 +11,22 @@ members = [
 ]
 
 [workspace.dependencies]
-bumpalo = "3.16.0"
-libc = { version = "0.2.155" }
-clap = { version = "4.5.4", features = ["derive"] }
-indexmap = "2.2.6"
-itertools = "0.13.0"
-logos = "0.14.0"
-proc-macro2 = "1.0.81"
-quote = "1.0.36"
-regex = "1.10.4"
-rustc-hash = "2.0.0"
-syn = { version = "2.0.60", features = ["fold", "visit"] }
+bumpalo = "3.19.1"
+libc = { version = "0.2.178" }
+clap = { version = "4.5.53", features = ["derive"] }
+indexmap = "2.12.1"
+itertools = "0.14.0"
+logos = "0.16.0"
+proc-macro2 = "1.0.103"
+quote = "1.0.42"
+regex = "1.12.2"
+rustc-hash = "2.1.1"
+syn = { version = "2.0.111", features = ["fold", "visit"] }
 
-insta = { version = "1.38.0", features = ["filters"] }
+insta = { version = "1.45.0", features = ["filters"] }
 insta-cmd = "0.6.0"
-pretty_assertions = { version = "1.4.0", features = ["unstable"] }
-rstest = { version = "0.21.0", default-features = false }
+pretty_assertions = { version = "1.4.1", features = ["unstable"] }
+rstest = { version = "0.26.1", default-features = false }
 rstest_reuse = "0.7.0"
 
 [workspace.dependencies.ariadne]
