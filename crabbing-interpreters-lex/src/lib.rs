@@ -23,40 +23,11 @@ impl<'a> Token<'a> {
     pub fn slice(&self) -> &'a str {
         self.loc.slice()
     }
-
-    pub fn as_debug_string(&self) -> String {
-        format!("{} {} {}", self.kind.kind_str(), self.slice(), self.value())
-    }
-
-    fn value(&self) -> TokenValue<'_> {
-        match self.kind {
-            TokenKind::String => TokenValue::String(&self.slice()[1..self.slice().len() - 1]),
-            TokenKind::Number => TokenValue::Number(self.slice().parse().unwrap()),
-            _ => TokenValue::None,
-        }
-    }
 }
 
 impl std::fmt::Debug for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}({:?})@{:?}", self.kind, self.slice(), self.loc)
-    }
-}
-
-enum TokenValue<'a> {
-    None,
-    String(&'a str),
-    Number(f64),
-}
-
-impl std::fmt::Display for TokenValue<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use TokenValue::*;
-        match self {
-            None => write!(f, "null"),
-            String(s) => write!(f, "{s}"),
-            Number(x) => write!(f, "{x:?}"),
-        }
     }
 }
 
@@ -277,25 +248,6 @@ pub enum TokenKind {
     Var,
     #[token("while")]
     While,
-}
-
-impl TokenKind {
-    pub fn kind_str(self) -> String {
-        use TokenKind::*;
-        match self {
-            LParen => "LEFT_PAREN".to_owned(),
-            RParen => "RIGHT_PAREN".to_owned(),
-            LBrace => "LEFT_BRACE".to_owned(),
-            RBrace => "RIGHT_BRACE".to_owned(),
-            LBracket => "LEFT_BRACKET".to_owned(),
-            RBracket => "RIGHT_BRACKET".to_owned(),
-            BangEqual => "BANG_EQUAL".to_owned(),
-            EqualEqual => "EQUAL_EQUAL".to_owned(),
-            GreaterEqual => "GREATER_EQUAL".to_owned(),
-            LessEqual => "LESS_EQUAL".to_owned(),
-            _ => format!("{self:?}").to_uppercase(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
