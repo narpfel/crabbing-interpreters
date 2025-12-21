@@ -34,6 +34,15 @@ fn testname() -> String {
         .replace(':', "_")
 }
 
+fn loop_as_arg(l: Loop) -> &'static str {
+    match l {
+        Loop::Ast => "ast",
+        Loop::Closures => "closures",
+        Loop::Bytecode => "bytecode",
+        Loop::Threaded => "threaded",
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Interpreter {
     Native(Loop),
@@ -43,61 +52,29 @@ enum Interpreter {
 
 impl From<Interpreter> for Command {
     fn from(interpreter: Interpreter) -> Self {
-        #[cfg(feature = "miri_tests")]
-        let features = std::env::var("TEST_FEATURES").unwrap_or_else(|_| "".to_string());
-        #[cfg(feature = "miri_tests")]
-        let miri_args = ["miri", "run", "-q", "--features", &features, "--"];
-        #[cfg(feature = "miri_tests")]
-        const MIRIFLAGS: &str = "-Zmiri-disable-isolation -Zmiri-deterministic-floats";
-
         match interpreter {
-            Interpreter::Native(Loop::Ast) => Command::new(get_cargo_bin("crabbing-interpreters")),
-            Interpreter::Native(Loop::Closures) => {
+            Interpreter::Native(r#loop) => {
                 let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
-                command.arg("--loop=closures");
-                command
-            }
-            Interpreter::Native(Loop::Bytecode) => {
-                let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
-                command.arg("--loop=bytecode");
-                command
-            }
-            Interpreter::Native(Loop::Threaded) => {
-                let mut command = Command::new(get_cargo_bin("crabbing-interpreters"));
-                command.arg("--loop=threaded");
+                command.arg(format!("--loop={}", loop_as_arg(r#loop)));
                 command
             }
             #[cfg(feature = "miri_tests")]
-            Interpreter::Miri(Loop::Ast) => {
-                let mut command = Command::new("cargo");
-                command.args(&miri_args).env("MIRIFLAGS", MIRIFLAGS);
-                command
-            }
-            #[cfg(feature = "miri_tests")]
-            Interpreter::Miri(Loop::Closures) => {
+            Interpreter::Miri(r#loop) => {
                 let mut command = Command::new("cargo");
                 command
-                    .args(&miri_args)
-                    .arg("--loop=closures")
-                    .env("MIRIFLAGS", MIRIFLAGS);
-                command
-            }
-            #[cfg(feature = "miri_tests")]
-            Interpreter::Miri(Loop::Bytecode) => {
-                let mut command = Command::new("cargo");
-                command
-                    .args(&miri_args)
-                    .arg("--loop=bytecode")
-                    .env("MIRIFLAGS", MIRIFLAGS);
-                command
-            }
-            #[cfg(feature = "miri_tests")]
-            Interpreter::Miri(Loop::Threaded) => {
-                let mut command = Command::new("cargo");
-                command
-                    .args(&miri_args)
-                    .arg("--loop=threaded")
-                    .env("MIRIFLAGS", MIRIFLAGS);
+                    .env(
+                        "MIRIFLAGS",
+                        "-Zmiri-disable-isolation -Zmiri-deterministic-floats",
+                    )
+                    .args([
+                        "miri",
+                        "run",
+                        "-q",
+                        "--features",
+                        &std::env::var("TEST_FEATURES").unwrap_or_else(|_| "".to_string()),
+                        "--",
+                        &format!("--loop={}", loop_as_arg(r#loop)),
+                    ]);
                 command
             }
         }
