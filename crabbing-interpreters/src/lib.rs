@@ -209,10 +209,10 @@ enum StopAt {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Loop {
-    #[default]
     Ast,
     Closures,
     Bytecode,
+    #[default]
     Threaded,
 }
 
