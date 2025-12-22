@@ -233,8 +233,8 @@ impl<'a> Compiler<'a> {
                 }
                 self.code.push(Return);
             }
-            Statement::InitReturn(_) => {
-                self.code.push(BoundMethodGetInstance);
+            Statement::InitReturn(this) => {
+                self.compile_expr(this);
                 self.code.push(Return);
             }
             Statement::Class { target, base, methods } => {

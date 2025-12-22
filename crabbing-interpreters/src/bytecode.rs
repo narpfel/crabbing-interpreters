@@ -232,7 +232,6 @@ bytecode! {
         Pop2,
         Pop23,
         BuildClass(u32),
-        BoundMethodGetInstance,
         Super(InternedString),
         SuperForCall(InternedString),
         ConstNil,
@@ -301,7 +300,6 @@ impl fmt::Display for Bytecode {
             Pop2 => write!(f, "pop2"),
             Pop23 => write!(f, "pop23"),
             BuildClass(meta_index) => write!(f, "build_class {meta_index}"),
-            BoundMethodGetInstance => write!(f, "bound_method_get_instance"),
             Super(name) => write!(f, "super {name}"),
             SuperForCall(name) => write!(f, "super {name} (immediate_call)"),
             ConstNil => write!(f, "const_nil"),
@@ -414,7 +412,6 @@ fn validate_bytecode(
             | Bytecode::Pop2
             | Bytecode::Pop23
             | Bytecode::BuildClass(_)
-            | Bytecode::BoundMethodGetInstance
             | Bytecode::Super(_)
             | Bytecode::SuperForCall(_)
             | Bytecode::ConstNil

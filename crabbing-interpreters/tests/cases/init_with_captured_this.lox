@@ -1,0 +1,21 @@
+class C {
+    init(x) {
+        print this;
+        print x;
+        return;
+        fun f() {
+            this;
+        }
+    }
+
+    f(x) {
+        print this;
+        print x;
+    }
+}
+
+var c = C(42);
+print "====================";
+print c.f(27);
+print "====================";
+print c.init(123);

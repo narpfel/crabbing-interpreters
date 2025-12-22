@@ -136,12 +136,6 @@ impl<T> Stack<T> {
         Ok(())
     }
 
-    pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
-        let offset = peek_offset(index);
-        assert!(self.is_in_bounds(offset));
-        unsafe { self.pointer.offset(offset).as_mut() }
-    }
-
     #[must_use]
     fn is_in_bounds(&self, offset: isize) -> bool {
         let target_ptr = self.pointer.as_ptr().wrapping_offset(offset);

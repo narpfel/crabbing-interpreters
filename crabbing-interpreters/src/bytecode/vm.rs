@@ -233,6 +233,24 @@ impl<'a, 'b> Vm<'a, 'b> {
         &mut self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }]
     }
 
+    unsafe fn lookup_inline_cache(
+        &mut self,
+        pc: NonNull<CompiledBytecode>,
+        name: InternedString,
+        class: Class<'a>,
+    ) -> Option<nanboxed::Value<'a>> {
+        match self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }] {
+            Some(CachedMethod { class: cached_class, method }) if cached_class == class =>
+                Some(method),
+            _ => {
+                let method = class.lookup_method(name)?;
+                self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }] =
+                    Some(CachedMethod { class, method });
+                Some(method)
+            }
+        }
+    }
+
     #[cold]
     fn error_location_at<ExpressionType>(&self, pc: NonNull<CompiledBytecode>) -> ExpressionType
     where
@@ -673,18 +691,6 @@ pub(crate) fn execute_bytecode<'a>(
             }
             vm.stack_mut(sp).push(Class(class).into_nanboxed());
         }
-        b @ BoundMethodGetInstance => {
-            let value = vm.stack(*sp).peek();
-            match value.parse() {
-                BoundMethod(bound_method) => vm
-                    .stack_mut(sp)
-                    .push(Value::Instance(bound_method.instance).into_nanboxed()),
-                Instance(_) => vm.stack_mut(sp).push(value),
-                value => unreachable!(
-                    "invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"
-                ),
-            }
-        }
         Super(name) => {
             let value = vm.stack_mut(sp).pop();
             let super_class = match value.parse() {
@@ -980,33 +986,23 @@ fn execute_call<'a>(
                 let sp = &mut sp;
                 let offset = &mut offset;
                 let instance = GcRef::new_in(vm.env.gc, InstanceInner::new(class));
-                match class
-                    .lookup_method(interned::INIT)
-                    .map(nanboxed::Value::parse)
+                vm.stack_mut(sp)
+                    .push(Value::Instance(instance).into_nanboxed());
+                match unsafe { vm.lookup_inline_cache(*pc, interned::INIT, class) }
+                    .map(|value| value.parse())
                 {
-                    Some(Value::Function(init)) => {
-                        *vm.stack_mut(sp).peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
-                            vm.env.gc,
-                            BoundMethodInner { method: init, instance },
-                        ))
-                        .into_nanboxed();
-                        vm.stack_mut(sp)
-                            .push(Value::Instance(instance).into_nanboxed());
-                        execute_function_call(
-                            vm,
-                            pc,
-                            offset,
-                            init,
-                            init.parameters.len() - 1,
-                            argument_count,
-                            stack_size_at_callsite,
-                            || callee,
-                        )?
-                    }
+                    Some(Value::Function(init)) => execute_function_call(
+                        vm,
+                        pc,
+                        offset,
+                        init,
+                        init.parameters.len() - 1,
+                        argument_count,
+                        stack_size_at_callsite,
+                        || callee,
+                    )?,
                     Some(_) => unreachable!(),
-                    None if argument_count == 0 => vm
-                        .stack_mut(sp)
-                        .push(Value::Instance(instance).into_nanboxed()),
+                    None if argument_count == 0 => (),
                     None => Err(Box::new(Error::ArityMismatch {
                         callee,
                         expected: 0,
@@ -1145,15 +1141,7 @@ fn execute_attribute_lookup<'a>(
             .ok()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
             .or_else(|| {
-                let method = match vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] {
-                    Some(CachedMethod { class, method }) if class == instance.class => method,
-                    _ => {
-                        let method = instance.class.lookup_method(name)?;
-                        vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] =
-                            Some(CachedMethod { class: instance.class, method });
-                        method
-                    }
-                };
+                let method = unsafe { vm.lookup_inline_cache(pc, name, instance.class) }?;
                 push_method(vm, sp, Attribute(method), nanboxed_value);
                 Some(())
             })
@@ -1209,10 +1197,6 @@ mod stack_ref {
 
         pub(super) fn push(&mut self, value: T) {
             self.stack.push(value);
-        }
-
-        pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
-            self.stack.peek_at_mut(index)
         }
     }
 

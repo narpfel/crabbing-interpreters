@@ -1,0 +1,35 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=ast"
+    - crabbing-interpreters/tests/cases/init_with_captured_this.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (class C (global @1) ∅
+      (method init [(cell this @0) (local x @0)] [None]
+         (block
+            (print (cell this @0))
+            (print (local x @0))
+            (init-return)
+            (fun f (local @1) [] [Some(0)]
+               (block
+                  (expr (cell this @0))))
+            (init-return)))
+      (method f [(local this @0) (local x @1)] []
+         (block
+            (print (local this @0))
+            (print (local x @1)))))
+   (var c (global @2) (call +2 (global C @1) 42.0))
+   (print "====================")
+   (print (call +3 (attr (global c @2) f) 27.0))
+   (print "====================")
+   (print (call +3 (attr (global c @2) init) 123.0)))
+
+----- stderr -----

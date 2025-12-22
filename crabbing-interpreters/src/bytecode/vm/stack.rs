@@ -77,10 +77,6 @@ where
         self.stack[self.pointer - 1 - usize::try_from(index).unwrap()]
     }
 
-    pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
-        &mut self.stack[self.pointer - 1 - usize::try_from(index).unwrap()]
-    }
-
     #[must_use]
     pub(super) fn is_empty(&self) -> bool {
         self.pointer == 0
