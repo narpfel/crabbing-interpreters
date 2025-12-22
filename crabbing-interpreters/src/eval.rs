@@ -343,7 +343,7 @@ pub fn eval<'a>(
             let stack_size_at_callsite = stack_size_at_callsite.get();
             let callee = eval(env, cell_vars, offset, callee, trace_call_stack)?;
 
-            let eval_call = #[inline(always)]
+            let eval_call = #[cfg_attr(not(debug_assertions), inline(always))]
             |env: &mut Environment<'a>,
                              function: &crate::value::Function<'a>,
                              parameters: Skip<slice::Iter<Variable<'a>>>|
@@ -383,7 +383,7 @@ pub fn eval<'a>(
                 // FIXME: truncate env here to drop the callee’s locals
             };
 
-            let eval_method_call = #[inline(always)]
+            let eval_method_call = #[cfg_attr(not(debug_assertions), inline(always))]
             |env: &mut Environment<'a>,
                                     method: &crate::value::Function<'a>,
                                     instance: Value<'a>|
