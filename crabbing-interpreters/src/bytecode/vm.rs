@@ -233,6 +233,24 @@ impl<'a, 'b> Vm<'a, 'b> {
         &mut self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }]
     }
 
+    unsafe fn lookup_inline_cache(
+        &mut self,
+        pc: NonNull<CompiledBytecode>,
+        name: InternedString,
+        class: Class<'a>,
+    ) -> Option<nanboxed::Value<'a>> {
+        match self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }] {
+            Some(CachedMethod { class: cached_class, method }) if cached_class == class =>
+                Some(method),
+            _ => {
+                let method = class.lookup_method(name)?;
+                self.inline_cache[unsafe { self.compiled_bytecodes.index(pc) }] =
+                    Some(CachedMethod { class, method });
+                Some(method)
+            }
+        }
+    }
+
     #[cold]
     fn error_location_at<ExpressionType>(&self, pc: NonNull<CompiledBytecode>) -> ExpressionType
     where
@@ -970,9 +988,8 @@ fn execute_call<'a>(
                 let instance = GcRef::new_in(vm.env.gc, InstanceInner::new(class));
                 vm.stack_mut(sp)
                     .push(Value::Instance(instance).into_nanboxed());
-                match class
-                    .lookup_method(interned::INIT)
-                    .map(nanboxed::Value::parse)
+                match unsafe { vm.lookup_inline_cache(*pc, interned::INIT, class) }
+                    .map(|value| value.parse())
                 {
                     Some(Value::Function(init)) => execute_function_call(
                         vm,
@@ -1124,15 +1141,7 @@ fn execute_attribute_lookup<'a>(
             .ok()
             .map(|attr| push_attribute(vm, sp, Attribute(attr)))
             .or_else(|| {
-                let method = match vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] {
-                    Some(CachedMethod { class, method }) if class == instance.class => method,
-                    _ => {
-                        let method = instance.class.lookup_method(name)?;
-                        vm.inline_cache[unsafe { vm.compiled_bytecodes.index(pc) }] =
-                            Some(CachedMethod { class: instance.class, method });
-                        method
-                    }
-                };
+                let method = unsafe { vm.lookup_inline_cache(pc, name, instance.class) }?;
                 push_method(vm, sp, Attribute(method), nanboxed_value);
                 Some(())
             })
