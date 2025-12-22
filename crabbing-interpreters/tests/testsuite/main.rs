@@ -253,7 +253,6 @@ fn test_that_threaded_interpreter_is_properly_tailrecursive(
         "that_threaded_interpreter_is_properly_tailrecursive",
         apply_panic_strategy(Command::new("cargo").arg("run"))
             .args([
-                "--profile=perf",
                 "--quiet",
                 &format!("--features=count_bytecode_execution,{additional_features}"),
                 "--",
