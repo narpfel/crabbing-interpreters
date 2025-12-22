@@ -673,18 +673,6 @@ pub(crate) fn execute_bytecode<'a>(
             }
             vm.stack_mut(sp).push(Class(class).into_nanboxed());
         }
-        b @ BoundMethodGetInstance => {
-            let value = vm.stack(*sp).peek();
-            match value.parse() {
-                BoundMethod(bound_method) => vm
-                    .stack_mut(sp)
-                    .push(Value::Instance(bound_method.instance).into_nanboxed()),
-                Instance(_) => vm.stack_mut(sp).push(value),
-                value => unreachable!(
-                    "invalid operand for bytecode `{b}`: {value}, expected `BoundMethod`"
-                ),
-            }
-        }
         Super(name) => {
             let value = vm.stack_mut(sp).pop();
             let super_class = match value.parse() {
@@ -980,33 +968,24 @@ fn execute_call<'a>(
                 let sp = &mut sp;
                 let offset = &mut offset;
                 let instance = GcRef::new_in(vm.env.gc, InstanceInner::new(class));
+                vm.stack_mut(sp)
+                    .push(Value::Instance(instance).into_nanboxed());
                 match class
                     .lookup_method(interned::INIT)
                     .map(nanboxed::Value::parse)
                 {
-                    Some(Value::Function(init)) => {
-                        *vm.stack_mut(sp).peek_at_mut(argument_count) = BoundMethod(GcRef::new_in(
-                            vm.env.gc,
-                            BoundMethodInner { method: init, instance },
-                        ))
-                        .into_nanboxed();
-                        vm.stack_mut(sp)
-                            .push(Value::Instance(instance).into_nanboxed());
-                        execute_function_call(
-                            vm,
-                            pc,
-                            offset,
-                            init,
-                            init.parameters.len() - 1,
-                            argument_count,
-                            stack_size_at_callsite,
-                            || callee,
-                        )?
-                    }
+                    Some(Value::Function(init)) => execute_function_call(
+                        vm,
+                        pc,
+                        offset,
+                        init,
+                        init.parameters.len() - 1,
+                        argument_count,
+                        stack_size_at_callsite,
+                        || callee,
+                    )?,
                     Some(_) => unreachable!(),
-                    None if argument_count == 0 => vm
-                        .stack_mut(sp)
-                        .push(Value::Instance(instance).into_nanboxed()),
+                    None if argument_count == 0 => (),
                     None => Err(Box::new(Error::ArityMismatch {
                         callee,
                         expected: 0,
@@ -1209,10 +1188,6 @@ mod stack_ref {
 
         pub(super) fn push(&mut self, value: T) {
             self.stack.push(value);
-        }
-
-        pub(super) fn peek_at_mut(&mut self, index: u32) -> &mut T {
-            self.stack.peek_at_mut(index)
         }
     }
 

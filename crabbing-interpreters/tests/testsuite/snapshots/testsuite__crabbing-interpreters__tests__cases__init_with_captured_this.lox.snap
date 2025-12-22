@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/init_with_captured_this.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+<C instance at [POINTER]>
+42
+====================
+<C instance at [POINTER]>
+27
+nil
+====================
+<C instance at [POINTER]>
+123
+<C instance at [POINTER]>
+
+----- stderr -----

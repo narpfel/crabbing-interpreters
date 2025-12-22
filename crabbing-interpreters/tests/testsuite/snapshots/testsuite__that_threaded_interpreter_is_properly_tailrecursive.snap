@@ -18,56 +18,55 @@ exit_code: 0
 
 ----- stderr -----
 Bytecode execution counts
-                   Pop ( 0):     36000000
-                 Const ( 1):      6000000
-            UnaryMinus ( 2):      1000000
-              UnaryNot ( 3):      1000000
-                 Equal ( 4):      1000000
-              NotEqual ( 5):      1000000
-                  Less ( 6):      3000002
-             LessEqual ( 7):      1000000
-               Greater ( 8):      1000000
-          GreaterEqual ( 9):      1000000
-                   Add (10):      4000000
-              Subtract (11):      1000000
-              Multiply (12):      2000000
-                Divide (13):      1000000
-                 Power (14):      1000000
-                 Local (15):     14000001
-                Global (16):      6000000
-                  Cell (17):      7000001
-                   Dup (18):      5000000
-             StoreAttr (19):      1000000
-              LoadAttr (20):      1000000
-            LoadMethod (21):      3000000
-            StoreLocal (22):   1046000001
-           StoreGlobal (23):      1000006
-             StoreCell (24):      1000000
-            DefineCell (25):      1000001
-                  Call (26):      1000000
-             ShortCall (27):      8000000
-            CallMethod (28):      1000000
-       ShortCallMethod (29):      3000000
-                 Print (30):      1000000
-          GlobalByName (31):      1000000
-     StoreGlobalByName (32):      1000000
-            JumpIfTrue (33):      3000002
-           JumpIfFalse (34):      2000000
-         PopJumpIfTrue (35):      1000000
-        PopJumpIfFalse (36):      2000000
-                  Jump (37):      1000002
-         BeginFunction (38):      3000005
-                Return (39):      9000000
-         BuildFunction (40):      3000005
-                   End (41):            1
-                  Pop2 (42):      9000000
-                 Pop23 (43):      4000000
-            BuildClass (44):      2000002
-BoundMethodGetInstance (45):      1000000
-                 Super (46):      1000000
-          SuperForCall (47):      1000000
-              ConstNil (48):     10000000
-             ConstTrue (49):      2000000
-            ConstFalse (50):      3000000
-           ConstNumber (51):   1061000005
-                 Total     :   2281000034
+              Pop ( 0):     36000000
+            Const ( 1):      6000000
+       UnaryMinus ( 2):      1000000
+         UnaryNot ( 3):      1000000
+            Equal ( 4):      1000000
+         NotEqual ( 5):      1000000
+             Less ( 6):      3000002
+        LessEqual ( 7):      1000000
+          Greater ( 8):      1000000
+     GreaterEqual ( 9):      1000000
+              Add (10):      4000000
+         Subtract (11):      1000000
+         Multiply (12):      2000000
+           Divide (13):      1000000
+            Power (14):      1000000
+            Local (15):     15000001
+           Global (16):      6000000
+             Cell (17):      7000001
+              Dup (18):      5000000
+        StoreAttr (19):      1000000
+         LoadAttr (20):      1000000
+       LoadMethod (21):      3000000
+       StoreLocal (22):   1046000001
+      StoreGlobal (23):      1000006
+        StoreCell (24):      1000000
+       DefineCell (25):      1000001
+             Call (26):      1000000
+        ShortCall (27):      8000000
+       CallMethod (28):      1000000
+  ShortCallMethod (29):      3000000
+            Print (30):      1000000
+     GlobalByName (31):      1000000
+StoreGlobalByName (32):      1000000
+       JumpIfTrue (33):      3000002
+      JumpIfFalse (34):      2000000
+    PopJumpIfTrue (35):      1000000
+   PopJumpIfFalse (36):      2000000
+             Jump (37):      1000002
+    BeginFunction (38):      3000005
+           Return (39):      9000000
+    BuildFunction (40):      3000005
+              End (41):            1
+             Pop2 (42):      9000000
+            Pop23 (43):      4000000
+       BuildClass (44):      2000002
+            Super (45):      1000000
+     SuperForCall (46):      1000000
+         ConstNil (47):     10000000
+        ConstTrue (48):      2000000
+       ConstFalse (49):      3000000
+      ConstNumber (50):   1061000005
+            Total     :   2281000034
