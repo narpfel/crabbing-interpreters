@@ -196,7 +196,7 @@ impl<'a, 'b> Vm<'a, 'b> {
         SetSpOnDrop::new(self.stack_base, sp)
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(debug_assertions), inline(always))]
     fn collect_if_necessary(&self, sp: NonNull<nanboxed::Value<'a>>) {
         if self.env.gc.collection_necessary() {
             #[cold]
@@ -294,7 +294,7 @@ pub fn run_bytecode<'a>(
     }
 }
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 pub(crate) fn execute_bytecode<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut NonNull<CompiledBytecode>,
@@ -727,7 +727,7 @@ pub(crate) fn execute_bytecode<'a>(
                 Some(CachedMethod { class, method }) if class == super_class => method,
                 _ => {
                     let method = super_class.lookup_method(name).ok_or_else(
-                        #[inline(always)]
+                        #[cfg_attr(not(debug_assertions), inline(always))]
                         || {
                             let at = vm.error_location_at(*pc);
                             Box::new(Error::UndefinedSuperProperty {
@@ -765,7 +765,7 @@ pub(crate) fn execute_bytecode<'a>(
     Ok(())
 }
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 #[track_caller]
 fn any_binop<'a>(
     vm: &mut Vm<'a, '_>,
@@ -778,7 +778,7 @@ fn any_binop<'a>(
     vm.stack_mut(sp).push(result.into_nanboxed());
 }
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 #[track_caller]
 fn number_binop<'a>(
     vm: &mut Vm<'a, '_>,
@@ -824,7 +824,7 @@ fn number_binop<'a>(
     }
 }
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 #[track_caller]
 fn nan_preserving_number_binop<'a>(
     vm: &mut Vm<'a, '_>,
@@ -897,7 +897,7 @@ impl Peeker for BoundsCheckedPeek {
     }
 }
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 fn execute_call<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut NonNull<CompiledBytecode>,
@@ -1035,7 +1035,7 @@ fn execute_call<'a>(
     Ok(())
 }
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 fn execute_call_method<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut NonNull<CompiledBytecode>,
@@ -1092,7 +1092,7 @@ fn execute_call_method<'a>(
 }
 
 #[expect(clippy::too_many_arguments)]
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 fn execute_function_call<'a>(
     vm: &mut Vm<'a, '_>,
     pc: &mut NonNull<CompiledBytecode>,
@@ -1123,7 +1123,7 @@ fn execute_function_call<'a>(
 
 struct Attribute<'a>(nanboxed::Value<'a>);
 
-#[inline(always)]
+#[cfg_attr(not(debug_assertions), inline(always))]
 fn execute_attribute_lookup<'a>(
     vm: &mut Vm<'a, '_>,
     pc: NonNull<CompiledBytecode>,

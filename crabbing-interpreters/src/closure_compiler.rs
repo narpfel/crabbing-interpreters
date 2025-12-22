@@ -462,7 +462,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                 for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                     let callee = callee(state)?;
 
-                    let eval_call = #[inline(always)]
+                    let eval_call = #[cfg_attr(not(debug_assertions), inline(always))]
                     |state: &mut State<'a, '_>,
                                      function: &Function<'a>,
                                      parameters: Skip<slice::Iter<Variable<'a>>>|
@@ -505,7 +505,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     };
 
                     let eval_method_call =
-                        #[inline(always)]
+                        #[cfg_attr(not(debug_assertions), inline(always))]
                         |state: &mut State<'a, '_>,
                          method: &Function<'a>,
                          instance: Value<'a>|

@@ -99,7 +99,7 @@ impl<'a> Value<'a> {
         self.data.data()
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(debug_assertions), inline(always))]
     pub fn parse(self) -> Unboxed<'a> {
         let data = u64::try_from(self.data.addr()).unwrap();
 
