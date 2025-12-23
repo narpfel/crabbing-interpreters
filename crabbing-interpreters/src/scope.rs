@@ -122,7 +122,8 @@ impl FrameEntry<'_> {
                 globals_offset.local_slot(stack_size_at_callsite.get()),
             ),
             Self::ChildScope(scope) => scope.as_sexpr("block", indent, globals_offset),
-            Self::FunctionScope(scope) => scope.as_sexpr("function", indent, globals_offset),
+            Self::FunctionScope(scope) =>
+                scope.as_sexpr("function", indent, globals_offset.local()),
         }
     }
 }
