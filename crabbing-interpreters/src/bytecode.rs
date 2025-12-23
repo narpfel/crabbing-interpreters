@@ -354,6 +354,15 @@ fn validate_bytecode(
                     return Err(vm::InvalidBytecode::JumpOutOfBounds);
                 }
             }
+            Bytecode::BuildClass(metadata_index) =>
+                match metadata[usize::try_from(metadata_index).unwrap()] {
+                    Metadata::Function { .. } =>
+                        return Err(vm::InvalidBytecode::BuildClassHasFunctionMetadata),
+                    Metadata::Class { name: _, methods: _, base_error_location } =>
+                        if base_error_location.is_some_and(|location| location >= bytecodes.len()) {
+                            return Err(vm::InvalidBytecode::BaseClassErrorLocationOutOfRange);
+                        },
+                },
             Bytecode::ShortCall(CallInner {
                 argument_count,
                 stack_size_at_callsite: _,
@@ -411,7 +420,6 @@ fn validate_bytecode(
             | Bytecode::End
             | Bytecode::Pop2
             | Bytecode::Pop23
-            | Bytecode::BuildClass(_)
             | Bytecode::Super(_)
             | Bytecode::SuperForCall(_)
             | Bytecode::ConstNil
