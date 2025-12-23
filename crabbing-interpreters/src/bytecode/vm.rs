@@ -83,6 +83,8 @@ pub(crate) enum InvalidBytecode {
     JumpOutOfBounds,
     TooManyArgsInShortCall,
     ConstNumberIsNaN,
+    BuildClassHasFunctionMetadata,
+    BaseClassErrorLocationOutOfRange,
 }
 
 impl Report for InvalidBytecode {
