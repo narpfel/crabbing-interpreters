@@ -18,6 +18,7 @@ type BoxedValue<'a, T> = Box<GcValue<'a, T>>;
 enum Action {
     Keep,
     Drop,
+    Immortal,
 }
 
 /// # Safety
@@ -78,6 +79,7 @@ where
                 self.value().value.trace();
             }
             State::Done => (),
+            State::Immortal => (),
         }
     }
 }
@@ -126,6 +128,9 @@ where
 pub struct Gc {
     last: Cell<Option<NonNull<Cell<GcHead>>>>,
     allocation_count: Cell<usize>,
+    // TODO: only the first 128 entries are used, but reducing the size introduces an unnecessary
+    // bounds check in `GcStr::new_in`
+    small_string_cache: [Cell<Option<NonNull<()>>>; 256] = [const { Cell::new(None) }; _],
 }
 
 impl Gc {
@@ -176,11 +181,40 @@ impl Gc {
         }
     }
 
+    fn disown<'a>(&'a self, head: &'a GcHead) {
+        let prev = head.prev;
+        let next = head.next;
+
+        if let Some(prev) = prev {
+            let prev = unsafe { prev.as_ref() };
+            prev.set(GcHead { next, ..prev.get() });
+        }
+
+        if let Some(next) = next {
+            let next = unsafe { next.as_ref() };
+            next.set(GcHead { prev, ..next.get() });
+        }
+        else {
+            // `head` is last
+            self.last.set(prev);
+        }
+    }
+
+    fn immortalise<'a, T>(&'a self, value: &GcValue<'a, T>)
+    where
+        T: ?Sized,
+    {
+        let head = &value.head;
+        head.set(GcHead { state: State::Immortal, ..head.get() });
+        self.disown(&head.get());
+    }
+
     pub(crate) unsafe fn sweep(&self) {
         self.allocation_count.set(0);
         self.iter_with(|head| match head.state {
             State::Unvisited => Action::Drop,
             State::Done => Action::Keep,
+            State::Immortal => Action::Immortal,
         });
     }
 
@@ -193,28 +227,14 @@ impl Gc {
             match f(head) {
                 Action::Keep => head_ref.set(GcHead { state: State::Unvisited, ..head }),
                 Action::Drop => {
-                    let prev = head.prev;
-                    let next = head.next;
-
-                    if let Some(prev) = prev {
-                        let prev = unsafe { prev.as_ref() };
-                        prev.set(GcHead { next, ..prev.get() });
-                    }
-
-                    if let Some(next) = next {
-                        let next = unsafe { next.as_ref() };
-                        next.set(GcHead { prev, ..next.get() });
-                    }
-                    else {
-                        // `head` is last
-                        self.last.set(prev);
-                    }
+                    self.disown(&head);
 
                     // SAFETY: we have removed the value from the list of gc’d values, so it will
                     // not be seen again in a future collection. Therefore, this is the only `drop`
                     // call for this value.
                     unsafe { (head.drop)(head_ptr.cast(), head.length) }
                 }
+                Action::Immortal => (),
             }
         }
     }
@@ -227,6 +247,12 @@ impl Gc {
 impl Drop for Gc {
     fn drop(&mut self) {
         self.iter_with(|_| Action::Drop);
+        for head_ptr in self.small_string_cache.iter().filter_map(|s| s.get()) {
+            let str = unsafe { GcStr::from_ptr(head_ptr) };
+            let gc_value = str.0.as_gc_ref().value();
+            let GcHead { drop, length, .. } = gc_value.head.get();
+            unsafe { drop(head_ptr, length) };
+        }
     }
 }
 
@@ -261,6 +287,7 @@ struct GcHead {
 enum State {
     Unvisited,
     Done,
+    Immortal,
 }
 
 pub struct GcRef<'gc, T>(NonNull<GcValue<'gc, T>>, PhantomData<&'gc GcValue<'gc, T>>)
@@ -437,7 +464,7 @@ where
     <T as Pointee>::Metadata: IsUsize,
 {
     fn from_ref(gc_ref: GcRef<'a, T>) -> Self {
-        let (ptr, _metadata) = NonNull::from(gc_ref.value()).to_raw_parts();
+        let (ptr, _metadata) = gc_ref.0.to_raw_parts();
         Self(ptr.cast(), PhantomData)
     }
 
@@ -466,7 +493,21 @@ pub struct GcStr<'a>(GcThin<'a, [u8]>);
 
 impl<'a> GcStr<'a> {
     pub(crate) fn new_in(gc: &'a Gc, s: &str) -> Self {
-        Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())))
+        match s.len() {
+            1 => {
+                let cached_string = &gc.small_string_cache[usize::from(s.as_bytes()[0])];
+                match cached_string.get() {
+                    Some(string) => unsafe { Self::from_ptr(string) },
+                    None => {
+                        let string = Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())));
+                        gc.immortalise(string.0.as_gc_ref().value());
+                        cached_string.set(Some(GcStr::as_inner(string)));
+                        string
+                    }
+                }
+            }
+            _ => Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes()))),
+        }
     }
 
     pub(crate) unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
