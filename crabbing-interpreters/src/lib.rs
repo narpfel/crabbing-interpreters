@@ -1,6 +1,7 @@
 #![feature(closure_lifetime_binder)]
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
+#![feature(default_field_values)]
 #![feature(explicit_tail_calls)]
 #![feature(if_let_guard)]
 #![feature(macro_metavar_expr)]
