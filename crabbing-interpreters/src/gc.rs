@@ -18,7 +18,7 @@ type BoxedValue<'a, T> = Box<GcValue<'a, T>>;
 enum Action {
     Keep,
     Drop,
-    Immortal,
+    Immortalise,
 }
 
 /// # Safety
@@ -196,7 +196,7 @@ impl Gc {
         self.iter_with(|head| match head.state {
             State::Unvisited => Action::Drop,
             State::Done => Action::Keep,
-            State::Immortal => Action::Immortal,
+            State::Immortal => Action::Immortalise,
         });
     }
 
@@ -219,7 +219,7 @@ impl Gc {
                     // call for this value.
                     unsafe { (head.drop)(head_ptr.cast(), head.length) }
                 }
-                Action::Immortal => self.disown(head_ref, prev),
+                Action::Immortalise => self.disown(head_ref, prev),
             }
             ptr = head.next;
         }
@@ -234,7 +234,7 @@ impl Drop for Gc {
     fn drop(&mut self) {
         self.iter_with(|head| match head.state {
             State::Unvisited | State::Done => Action::Drop,
-            State::Immortal => Action::Immortal,
+            State::Immortal => Action::Immortalise,
         });
         for head_ptr in self.small_string_cache.iter().filter_map(|s| s.get()) {
             let str = unsafe { GcStr::from_ptr(head_ptr) };
