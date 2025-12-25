@@ -141,7 +141,7 @@ impl Gc {
         let gc_value = BoxedValue::<'a, T>::into_raw(BoxedValue::<'a, T>::new(GcValue {
             head: Cell::new(GcHead {
                 next: None,
-                length_and_state: LengthAndState::new(0, State::Unvisited),
+                length_and_state: LengthAndState::new(0),
                 drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
             }),
             _gc: PhantomData,
@@ -264,8 +264,8 @@ impl<T> GcValue<'_, [T]> {
 struct LengthAndState(usize);
 
 impl LengthAndState {
-    fn new(length: usize, state: State) -> Self {
-        Self(length.shl_exact(2).unwrap() | usize::from(state))
+    fn new(length: usize) -> Self {
+        Self(length.shl_exact(2).unwrap() | usize::from(State::Unvisited))
     }
 
     fn length(self) -> usize {
@@ -383,7 +383,7 @@ impl<'gc, T> GcRef<'gc, [T]> {
 
             ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
                 next: None,
-                length_and_state: LengthAndState::new(length, State::Unvisited),
+                length_and_state: LengthAndState::new(length),
                 drop: |memory, length| {
                     let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
                     ptr::drop_in_place(gc_value.as_ptr());
