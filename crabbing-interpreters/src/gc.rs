@@ -126,7 +126,7 @@ where
 
 #[derive(Default)]
 pub struct Gc {
-    last: Cell<Option<NonNull<Cell<GcHead>>>>,
+    allocated_heads: Cell<Option<NonNull<Cell<GcHead>>>>,
     allocation_count: Cell<usize>,
     // TODO: only the first 128 entries are used, but reducing the size introduces an unnecessary
     // bounds check in `GcStr::new_in`
@@ -140,7 +140,6 @@ impl Gc {
     {
         let gc_value = BoxedValue::<'a, T>::into_raw(BoxedValue::<'a, T>::new(GcValue {
             head: Cell::new(GcHead {
-                prev: None,
                 next: None,
                 length: 0,
                 drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
@@ -162,41 +161,25 @@ impl Gc {
         T: ?Sized,
     {
         self.allocation_count.set(self.allocation_count.get() + 1);
-        let last = self.last.get();
-        unsafe {
-            let value_ref = value.as_ref();
-            let head_ptr = NonNull::new(ptr::addr_of_mut!((*value.as_ptr()).head));
-            let mut head = value_ref.head.get();
-            debug_assert!(head.prev.is_none());
-            debug_assert!(head.next.is_none());
-            head.prev = last;
-            value_ref.head.set(head);
-
-            if let Some(last) = last {
-                let last = last.as_ref();
-                last.set(GcHead { next: head_ptr, ..last.get() });
-            }
-
-            self.last.set(head_ptr);
-        }
+        let first = self.allocated_heads.get();
+        let value_ref = unsafe { value.as_ref() };
+        let head_ptr = unsafe { NonNull::new(ptr::addr_of_mut!((*value.as_ptr()).head)) };
+        let mut head = value_ref.head.get();
+        debug_assert!(head.next.is_none());
+        head.next = first;
+        value_ref.head.set(head);
+        self.allocated_heads.set(head_ptr);
     }
 
-    fn disown<'a>(&'a self, head: &'a GcHead) {
-        let prev = head.prev;
-        let next = head.next;
-
-        if let Some(prev) = prev {
-            let prev = unsafe { prev.as_ref() };
-            prev.set(GcHead { next, ..prev.get() });
-        }
-
-        if let Some(next) = next {
-            let next = unsafe { next.as_ref() };
-            next.set(GcHead { prev, ..next.get() });
-        }
-        else {
-            // `head` is last
-            self.last.set(prev);
+    fn disown<'a>(&'a self, head: &'a Cell<GcHead>, prev: Option<NonNull<Cell<GcHead>>>) {
+        let next = head.get().next;
+        head.set(GcHead { next: None, ..head.get() });
+        match prev {
+            Some(prev) => {
+                let prev = unsafe { prev.as_ref() };
+                prev.set(GcHead { next, ..prev.get() });
+            }
+            None => self.allocated_heads.set(next),
         }
     }
 
@@ -206,7 +189,6 @@ impl Gc {
     {
         let head = &value.head;
         head.set(GcHead { state: State::Immortal, ..head.get() });
-        self.disown(&head.get());
     }
 
     pub(crate) unsafe fn sweep(&self) {
@@ -219,23 +201,27 @@ impl Gc {
     }
 
     fn iter_with(&self, f: impl Fn(GcHead) -> Action) {
-        let mut ptr = self.last.get();
+        let mut ptr = self.allocated_heads.get();
+        let mut prev = None;
         while let Some(head_ptr) = ptr {
             let head_ref = unsafe { head_ptr.as_ref() };
             let head = head_ref.get();
-            ptr = head.prev;
             match f(head) {
-                Action::Keep => head_ref.set(GcHead { state: State::Unvisited, ..head }),
+                Action::Keep => {
+                    head_ref.set(GcHead { state: State::Unvisited, ..head });
+                    prev = ptr;
+                }
                 Action::Drop => {
-                    self.disown(&head);
+                    self.disown(head_ref, prev);
 
                     // SAFETY: we have removed the value from the list of gc’d values, so it will
                     // not be seen again in a future collection. Therefore, this is the only `drop`
                     // call for this value.
                     unsafe { (head.drop)(head_ptr.cast(), head.length) }
                 }
-                Action::Immortal => (),
+                Action::Immortal => self.disown(head_ref, prev),
             }
+            ptr = head.next;
         }
     }
 
@@ -246,7 +232,10 @@ impl Gc {
 
 impl Drop for Gc {
     fn drop(&mut self) {
-        self.iter_with(|_| Action::Drop);
+        self.iter_with(|head| match head.state {
+            State::Unvisited | State::Done => Action::Drop,
+            State::Immortal => Action::Immortal,
+        });
         for head_ptr in self.small_string_cache.iter().filter_map(|s| s.get()) {
             let str = unsafe { GcStr::from_ptr(head_ptr) };
             let gc_value = str.0.as_gc_ref().value();
@@ -274,7 +263,6 @@ impl<T> GcValue<'_, [T]> {
 
 #[derive(Debug, Clone, Copy)]
 struct GcHead {
-    prev: Option<NonNull<Cell<GcHead>>>,
     next: Option<NonNull<Cell<GcHead>>>,
     length: usize,
     /// SAFETY: This must only be called once, and it must be a deallocation function matching the
@@ -341,7 +329,6 @@ impl<'gc, T> GcRef<'gc, [T]> {
             let gc_value = nonnull_gc_value.as_ptr();
 
             ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
-                prev: None,
                 next: None,
                 length,
                 drop: |memory, length| {
@@ -662,7 +649,7 @@ mod tests {
         unsafe {
             gc.sweep();
         }
-        assert!(gc.last.get().is_none());
+        assert!(gc.allocated_heads.get().is_none());
         unsafe {
             gc.sweep();
         }
@@ -711,7 +698,7 @@ mod tests {
                 }
             }
         }
-        assert!(gc.last.get().is_none());
+        assert!(gc.allocated_heads.get().is_none());
     }
 
     #[test]
