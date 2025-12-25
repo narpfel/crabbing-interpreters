@@ -193,20 +193,20 @@ impl Gc {
 
     pub(crate) unsafe fn sweep(&self) {
         self.allocation_count.set(0);
-        self.iter_with(|head| match head.state {
+        self.iter_with(|state| match state {
             State::Unvisited => Action::Drop,
             State::Done => Action::Keep,
             State::Immortal => Action::Immortalise,
         });
     }
 
-    fn iter_with(&self, f: impl Fn(GcHead) -> Action) {
+    fn iter_with(&self, f: impl Fn(State) -> Action) {
         let mut ptr = self.allocated_heads.get();
         let mut prev = None;
         while let Some(head_ptr) = ptr {
             let head_ref = unsafe { head_ptr.as_ref() };
             let head = head_ref.get();
-            match f(head) {
+            match f(head.state) {
                 Action::Keep => {
                     head_ref.set(GcHead { state: State::Unvisited, ..head });
                     prev = ptr;
@@ -232,7 +232,7 @@ impl Gc {
 
 impl Drop for Gc {
     fn drop(&mut self) {
-        self.iter_with(|head| match head.state {
+        self.iter_with(|state| match state {
             State::Unvisited | State::Done => Action::Drop,
             State::Immortal => Action::Immortalise,
         });
