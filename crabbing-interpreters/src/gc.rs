@@ -72,10 +72,10 @@ where
 {
     fn trace(&self) {
         let head = &self.value().head;
-        let state = head.get().state;
+        let state = head.get().state();
         match state {
             State::Unvisited => {
-                head.set(GcHead { state: State::Done, ..head.get() });
+                head.set(head.get().with_state(State::Done));
                 self.value().value.trace();
             }
             State::Done => (),
@@ -141,9 +141,8 @@ impl Gc {
         let gc_value = BoxedValue::<'a, T>::into_raw(BoxedValue::<'a, T>::new(GcValue {
             head: Cell::new(GcHead {
                 next: None,
-                length: 0,
+                length_and_state: LengthAndState::new(0, State::Unvisited),
                 drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
-                state: State::Unvisited,
             }),
             _gc: PhantomData,
             value,
@@ -188,7 +187,7 @@ impl Gc {
         T: ?Sized,
     {
         let head = &value.head;
-        head.set(GcHead { state: State::Immortal, ..head.get() });
+        head.set(head.get().with_state(State::Immortal));
     }
 
     pub(crate) unsafe fn sweep(&self) {
@@ -206,9 +205,9 @@ impl Gc {
         while let Some(head_ptr) = ptr {
             let head_ref = unsafe { head_ptr.as_ref() };
             let head = head_ref.get();
-            match f(head.state) {
+            match f(head.state()) {
                 Action::Keep => {
-                    head_ref.set(GcHead { state: State::Unvisited, ..head });
+                    head_ref.set(head.with_state(State::Unvisited));
                     prev = ptr;
                 }
                 Action::Drop => {
@@ -217,7 +216,7 @@ impl Gc {
                     // SAFETY: we have removed the value from the list of gc’d values, so it will
                     // not be seen again in a future collection. Therefore, this is the only `drop`
                     // call for this value.
-                    unsafe { (head.drop)(head_ptr.cast(), head.length) }
+                    unsafe { (head.drop)(head_ptr.cast(), head.length()) }
                 }
                 Action::Immortalise => self.disown(head_ref, prev),
             }
@@ -239,8 +238,8 @@ impl Drop for Gc {
         for head_ptr in self.small_string_cache.iter().filter_map(|s| s.get()) {
             let str = unsafe { GcStr::from_ptr(head_ptr) };
             let gc_value = str.0.as_gc_ref().value();
-            let GcHead { drop, length, .. } = gc_value.head.get();
-            unsafe { drop(head_ptr, length) };
+            let GcHead { drop, length_and_state, .. } = gc_value.head.get();
+            unsafe { drop(head_ptr, length_and_state.length()) };
         }
     }
 }
@@ -262,20 +261,74 @@ impl<T> GcValue<'_, [T]> {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct GcHead {
-    next: Option<NonNull<Cell<GcHead>>>,
-    length: usize,
-    /// SAFETY: This must only be called once, and it must be a deallocation function matching the
-    /// allocation function used to allocate this gc value.
-    drop: unsafe fn(NonNull<()>, usize),
-    state: State,
+struct LengthAndState(usize);
+
+impl LengthAndState {
+    fn new(length: usize, state: State) -> Self {
+        Self(length.shl_exact(2).unwrap() | usize::from(state))
+    }
+
+    fn length(self) -> usize {
+        self.0 >> 2
+    }
+
+    fn state(self) -> State {
+        match self.0 & 0b11 {
+            0 => State::Unvisited,
+            1 => State::Done,
+            2 => State::Immortal,
+            3 => State::Immortal,
+            _ => unreachable!(),
+        }
+    }
+
+    fn with_state(&self, state: State) -> Self {
+        Self((self.0 & !0b11) | usize::from(state))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
+struct GcHead {
+    next: Option<NonNull<Cell<GcHead>>>,
+    length_and_state: LengthAndState,
+    /// SAFETY: This must only be called once, and it must be a deallocation function matching the
+    /// allocation function used to allocate this gc value.
+    drop: unsafe fn(NonNull<()>, usize),
+}
+
+impl GcHead {
+    fn length(&self) -> usize {
+        self.length_and_state.length()
+    }
+
+    fn state(&self) -> State {
+        self.length_and_state.state()
+    }
+
+    fn with_state(&self, state: State) -> Self {
+        Self {
+            length_and_state: self.length_and_state.with_state(state),
+            ..*self
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 enum State {
     Unvisited,
     Done,
     Immortal,
+}
+
+impl From<State> for usize {
+    fn from(value: State) -> Self {
+        #[expect(
+            clippy::as_conversions,
+            reason = "converting an enum to its underlying type is okay"
+        )]
+        Self::from(value as u8)
+    }
 }
 
 pub struct GcRef<'gc, T>(NonNull<GcValue<'gc, T>>, PhantomData<&'gc GcValue<'gc, T>>)
@@ -330,13 +383,12 @@ impl<'gc, T> GcRef<'gc, [T]> {
 
             ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
                 next: None,
-                length,
+                length_and_state: LengthAndState::new(length, State::Unvisited),
                 drop: |memory, length| {
                     let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
                     ptr::drop_in_place(gc_value.as_ptr());
                     std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
                 },
-                state: State::Unvisited,
             }));
             ptr::addr_of_mut!((*gc_value)._gc).write(PhantomData);
 
@@ -466,7 +518,7 @@ where
     fn as_gc_ref(self) -> GcRef<'a, T> {
         let head_ptr: NonNull<Cell<GcHead>> = self.0.cast();
         unsafe {
-            let length = head_ptr.as_ref().get().length;
+            let length = head_ptr.as_ref().get().length();
             // SAFETY: this pointer cast is safe because we restrict `<T as Pointee>::Metadata` to
             // be `usize`
             let ptr = NonNull::from_raw_parts(self.0, *ptr::from_ref(&length).cast());
