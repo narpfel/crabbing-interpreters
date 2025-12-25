@@ -75,10 +75,10 @@ where
         let state = head.get().state();
         match state {
             State::Unvisited => {
-                head.set(head.get().with_state(State::Done));
+                head.set(head.get().with_state(State::Marked));
                 self.value().value.trace();
             }
-            State::Done => (),
+            State::Marked => (),
             State::Immortal => (),
         }
     }
@@ -194,7 +194,7 @@ impl Gc {
         self.allocation_count.set(0);
         self.iter_with(|state| match state {
             State::Unvisited => Action::Drop,
-            State::Done => Action::Keep,
+            State::Marked => Action::Keep,
             State::Immortal => Action::Immortalise,
         });
     }
@@ -232,7 +232,7 @@ impl Gc {
 impl Drop for Gc {
     fn drop(&mut self) {
         self.iter_with(|state| match state {
-            State::Unvisited | State::Done => Action::Drop,
+            State::Unvisited | State::Marked => Action::Drop,
             State::Immortal => Action::Immortalise,
         });
         for head_ptr in self.small_string_cache.iter().filter_map(|s| s.get()) {
@@ -275,7 +275,7 @@ impl LengthAndState {
     fn state(self) -> State {
         match self.0 & 0b11 {
             0 => State::Unvisited,
-            1 => State::Done,
+            1 => State::Marked,
             2 => State::Immortal,
             3 => State::Immortal,
             _ => unreachable!(),
@@ -317,7 +317,7 @@ impl GcHead {
 #[repr(u8)]
 enum State {
     Unvisited,
-    Done,
+    Marked,
     Immortal,
 }
 
