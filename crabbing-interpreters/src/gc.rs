@@ -7,6 +7,8 @@ use std::ptr;
 use std::ptr::NonNull;
 use std::ptr::Pointee;
 
+mod heads;
+
 #[cfg(not(miri))]
 const COLLECTION_INTERVAL: usize = 100_000;
 
@@ -126,7 +128,7 @@ where
 
 #[derive(Default)]
 pub struct Gc {
-    allocated_heads: Cell<Option<NonNull<Cell<GcHead>>>>,
+    allocated_heads: heads::Heads,
     allocation_count: Cell<usize>,
     // TODO: only the first 128 entries are used, but reducing the size introduces an unnecessary
     // bounds check in `GcStr::new_in`
@@ -160,26 +162,7 @@ impl Gc {
         T: ?Sized,
     {
         self.allocation_count.set(self.allocation_count.get() + 1);
-        let first = self.allocated_heads.get();
-        let value_ref = unsafe { value.as_ref() };
-        let head_ptr = unsafe { NonNull::new(ptr::addr_of_mut!((*value.as_ptr()).head)) };
-        let mut head = value_ref.head.get();
-        debug_assert!(head.next.is_none());
-        head.next = first;
-        value_ref.head.set(head);
-        self.allocated_heads.set(head_ptr);
-    }
-
-    fn disown<'a>(&'a self, head: &'a Cell<GcHead>, prev: Option<NonNull<Cell<GcHead>>>) {
-        let next = head.get().next;
-        head.set(GcHead { next: None, ..head.get() });
-        match prev {
-            Some(prev) => {
-                let prev = unsafe { prev.as_ref() };
-                prev.set(GcHead { next, ..prev.get() });
-            }
-            None => self.allocated_heads.set(next),
-        }
+        self.allocated_heads.push(value.cast());
     }
 
     fn immortalise<'a, T>(&'a self, value: &GcValue<'a, T>)
@@ -200,28 +183,7 @@ impl Gc {
     }
 
     fn iter_with(&self, f: impl Fn(State) -> Action) {
-        let mut ptr = self.allocated_heads.get();
-        let mut prev = None;
-        while let Some(head_ptr) = ptr {
-            let head_ref = unsafe { head_ptr.as_ref() };
-            let head = head_ref.get();
-            match f(head.state()) {
-                Action::Keep => {
-                    head_ref.set(head.with_state(State::Unvisited));
-                    prev = ptr;
-                }
-                Action::Drop => {
-                    self.disown(head_ref, prev);
-
-                    // SAFETY: we have removed the value from the list of gc’d values, so it will
-                    // not be seen again in a future collection. Therefore, this is the only `drop`
-                    // call for this value.
-                    unsafe { (head.drop)(head_ptr.cast(), head.length()) }
-                }
-                Action::Immortalise => self.disown(head_ref, prev),
-            }
-            ptr = head.next;
-        }
+        self.allocated_heads.iter_with(f);
     }
 
     pub(crate) fn collection_necessary(&self) -> bool {
@@ -701,7 +663,7 @@ mod tests {
         unsafe {
             gc.sweep();
         }
-        assert!(gc.allocated_heads.get().is_none());
+        assert!(gc.allocated_heads.is_empty());
         unsafe {
             gc.sweep();
         }
@@ -750,7 +712,7 @@ mod tests {
                 }
             }
         }
-        assert!(gc.allocated_heads.get().is_none());
+        assert!(gc.allocated_heads.is_empty());
     }
 
     #[test]
