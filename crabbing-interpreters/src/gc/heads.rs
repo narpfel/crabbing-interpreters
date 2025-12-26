@@ -37,7 +37,10 @@ impl Heads {
         }
     }
 
-    pub(super) fn iter_with(&self, f: impl Fn(State) -> Action) {
+    pub(super) fn iter_with<F>(&self, f: impl Fn(State) -> Action<F>)
+    where
+        F: Fn(HeadPtr),
+    {
         let mut ptr = self.0.get();
         let mut prev = None;
         while let Some(head_ptr) = ptr {
@@ -56,7 +59,10 @@ impl Heads {
                     // call for this value.
                     unsafe { (head.drop)(head_ptr.cast(), head.length()) }
                 }
-                Action::Immortalise => unsafe { self.remove(head_ref, prev) },
+                Action::Immortalise(immortalise) => {
+                    unsafe { self.remove(head_ref, prev) };
+                    immortalise(head_ptr);
+                }
             }
             ptr = head.next;
         }
@@ -65,5 +71,15 @@ impl Heads {
     #[cfg(test)]
     pub(super) fn is_empty(&self) -> bool {
         self.0.get().is_none()
+    }
+}
+
+impl Drop for Heads {
+    fn drop(&mut self) {
+        self.iter_with(|_| match false {
+            // hack so that the generic parameter can be inferred
+            true => Action::Immortalise(|_| unreachable!()),
+            false => Action::Drop,
+        });
     }
 }

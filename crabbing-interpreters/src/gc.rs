@@ -17,10 +17,10 @@ const COLLECTION_INTERVAL: usize = 1;
 
 type BoxedValue<'a, T> = Box<GcValue<'a, T>>;
 
-enum Action {
+enum Action<F> {
     Keep,
     Drop,
-    Immortalise,
+    Immortalise(F),
 }
 
 /// # Safety
@@ -133,6 +133,7 @@ pub struct Gc {
     // TODO: only the first 128 entries are used, but reducing the size introduces an unnecessary
     // bounds check in `GcStr::new_in`
     small_string_cache: [Cell<Option<NonNull<()>>>; 256] = [const { Cell::new(None) }; _],
+    immortals: heads::Heads,
 }
 
 impl Gc {
@@ -175,34 +176,15 @@ impl Gc {
 
     pub(crate) unsafe fn sweep(&self) {
         self.allocation_count.set(0);
-        self.iter_with(|state| match state {
+        self.allocated_heads.iter_with(|state| match state {
             State::Unvisited => Action::Drop,
             State::Marked => Action::Keep,
-            State::Immortal => Action::Immortalise,
+            State::Immortal => Action::Immortalise(|head_ptr| self.immortals.push(head_ptr)),
         });
-    }
-
-    fn iter_with(&self, f: impl Fn(State) -> Action) {
-        self.allocated_heads.iter_with(f);
     }
 
     pub(crate) fn collection_necessary(&self) -> bool {
         self.allocation_count.get() >= COLLECTION_INTERVAL
-    }
-}
-
-impl Drop for Gc {
-    fn drop(&mut self) {
-        self.iter_with(|state| match state {
-            State::Unvisited | State::Marked => Action::Drop,
-            State::Immortal => Action::Immortalise,
-        });
-        for head_ptr in self.small_string_cache.iter().filter_map(|s| s.get()) {
-            let str = unsafe { GcStr::from_ptr(head_ptr) };
-            let gc_value = str.0.as_gc_ref().value();
-            let GcHead { drop, length_and_state, .. } = gc_value.head.get();
-            unsafe { drop(head_ptr, length_and_state.length()) };
-        }
     }
 }
 
