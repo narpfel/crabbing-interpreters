@@ -128,12 +128,12 @@ where
 
 #[derive(Default)]
 pub struct Gc {
-    allocated_heads: heads::Heads,
     allocation_count: Cell<usize>,
+    allocated_heads: heads::Heads,
+    immortals: heads::Heads,
     // TODO: only the first 128 entries are used, but reducing the size introduces an unnecessary
     // bounds check in `GcStr::new_in`
     small_string_cache: [Cell<Option<NonNull<()>>>; 256] = [const { Cell::new(None) }; _],
-    immortals: heads::Heads,
 }
 
 impl Gc {
