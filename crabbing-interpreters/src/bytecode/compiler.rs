@@ -275,7 +275,9 @@ impl<'a> Compiler<'a> {
                     let entry = self.constants.entry(s);
                     let index = entry.index();
                     entry.or_insert_with(|| {
-                        Value::String(GcStr::new_in(self.gc, s)).into_nanboxed()
+                        let s = GcStr::new_in(self.gc, s);
+                        GcStr::immortalise(s);
+                        Value::String(s).into_nanboxed()
                     });
                     self.code.push(Const(index.try_into().unwrap()));
                 }
