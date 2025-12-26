@@ -479,9 +479,8 @@ impl<'a> GcStr<'a> {
                 match cached_string.get() {
                     Some(string) => unsafe { Self::from_ptr(string) },
                     None => {
-                        let string = GcRef::from_iter_in(gc, s.bytes());
-                        GcRef::immortalise(string);
-                        let string = Self(GcThin::from_ref(string));
+                        let string = Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())));
+                        Self::immortalise(string);
                         cached_string.set(Some(GcStr::as_inner(string)));
                         string
                     }
@@ -497,6 +496,10 @@ impl<'a> GcStr<'a> {
 
     pub(crate) fn as_inner(this: Self) -> NonNull<()> {
         GcThin::as_inner(this.0)
+    }
+
+    pub(crate) fn immortalise(this: Self) {
+        GcRef::immortalise(this.0.as_gc_ref());
     }
 
     fn str(&self) -> &'a str {
