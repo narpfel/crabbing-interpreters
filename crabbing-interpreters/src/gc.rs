@@ -166,14 +166,6 @@ impl Gc {
         self.allocated_heads.push(value.cast());
     }
 
-    fn immortalise<'a, T>(&'a self, value: &GcValue<'a, T>)
-    where
-        T: ?Sized,
-    {
-        let head = &value.head;
-        head.set(head.get().with_state(State::Immortal));
-    }
-
     pub(crate) unsafe fn sweep(&self) {
         self.allocation_count.set(0);
         self.allocated_heads.iter_with(|state| match state {
@@ -308,6 +300,11 @@ where
         // SAFETY: This is safe for uncollected `GcRef`s. Callers of `Gc::sweep` must ensure that
         // no reachable `GcRef`s are collected.
         unsafe { self.0.as_ref() }
+    }
+
+    pub(crate) fn immortalise(this: Self) {
+        let head = &this.value().head;
+        head.set(head.get().with_state(State::Immortal));
     }
 }
 
@@ -482,8 +479,9 @@ impl<'a> GcStr<'a> {
                 match cached_string.get() {
                     Some(string) => unsafe { Self::from_ptr(string) },
                     None => {
-                        let string = Self(GcThin::from_ref(GcRef::from_iter_in(gc, s.bytes())));
-                        gc.immortalise(string.0.as_gc_ref().value());
+                        let string = GcRef::from_iter_in(gc, s.bytes());
+                        GcRef::immortalise(string);
+                        let string = Self(GcThin::from_ref(string));
                         cached_string.set(Some(GcStr::as_inner(string)));
                         string
                     }
