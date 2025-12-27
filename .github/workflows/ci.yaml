@@ -45,6 +45,7 @@ jobs:
             --features=${{ matrix.features }} \
             --unreferenced=ignore \
             -- \
+            --color=always \
             --include-ignored
       - name: miri tests
         run: |
@@ -58,4 +59,5 @@ jobs:
             --features=miri_tests,${{ matrix.features }} \
             --unreferenced=reject \
             -- \
+            --color=always \
             --include-ignored
