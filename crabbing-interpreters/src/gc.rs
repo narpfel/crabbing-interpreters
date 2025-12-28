@@ -134,6 +134,8 @@ pub struct Gc {
     // TODO: only the first 128 entries are used, but reducing the size introduces an unnecessary
     // bounds check in `GcStr::new_in`
     small_string_cache: [Cell<Option<NonNull<()>>>; 256] = [const { Cell::new(None) }; _],
+    #[cfg(feature = "statistics")]
+    allocation_counts: std::cell::RefCell<rustc_hash::FxHashMap<Layout, usize>>,
 }
 
 impl Gc {
@@ -162,6 +164,14 @@ impl Gc {
     where
         T: ?Sized,
     {
+        #[cfg(feature = "statistics")]
+        {
+            *self
+                .allocation_counts
+                .borrow_mut()
+                .entry(Layout::for_value_raw(value.as_ptr()))
+                .or_default() += 1;
+        }
         self.allocation_count.set(self.allocation_count.get() + 1);
         self.allocated_heads.push(value.cast());
     }
@@ -177,6 +187,25 @@ impl Gc {
 
     pub(crate) fn collection_necessary(&self) -> bool {
         self.allocation_count.get() >= COLLECTION_INTERVAL
+    }
+
+    #[cfg(feature = "statistics")]
+    pub(crate) fn print_statistics(&self) {
+        use itertools::Itertools as _;
+        eprintln!("allocation counts");
+        for (layout, count) in self
+            .allocation_counts
+            .borrow()
+            .iter()
+            .sorted_by_key(|(_, &count)| count)
+        {
+            eprintln!("{layout:?}: {count}");
+        }
+    }
+
+    #[cfg(not(feature = "statistics"))]
+    pub(crate) fn print_statistics(&self) {
+        eprintln!("`statistics` feature not enabled");
     }
 }
 

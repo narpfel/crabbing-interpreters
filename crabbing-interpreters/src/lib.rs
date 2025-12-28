@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "statistics", feature(layout_for_ptr))]
 #![feature(closure_lifetime_binder)]
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
@@ -200,6 +201,8 @@ struct Args {
     r#loop: Loop,
     #[arg(long)]
     show_bytecode_execution_counts: bool,
+    #[arg(long)]
+    show_gc_statistics: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -504,6 +507,11 @@ pub fn run<'a>(
                                 "Total",
                                 vm.execution_counts().iter().sum::<u64>(),
                             );
+                        }
+
+                        if args.show_gc_statistics {
+                            eprintln!("GC statistics");
+                            gc.print_statistics();
                         }
 
                         match vm.error() {
