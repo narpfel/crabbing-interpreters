@@ -6,7 +6,7 @@ info:
     - run
     - "--profile=perf"
     - "--quiet"
-    - "--features=count_bytecode_execution"
+    - "--features=statistics"
     - "--"
     - "--loop=threaded"
     - "--show-bytecode-execution-counts"
