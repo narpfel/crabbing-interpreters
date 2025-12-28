@@ -38,7 +38,7 @@ macro_rules! bytecode {
         }
 
         impl $name {
-            #[cfg_attr(not(feature = "count_bytecode_execution"), expect(unused))]
+            #[cfg_attr(not(feature = "statistics"), expect(unused))]
             pub(crate) const fn discriminant(self) -> usize {
                 match self {
                     $( $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => ${index()}, )*

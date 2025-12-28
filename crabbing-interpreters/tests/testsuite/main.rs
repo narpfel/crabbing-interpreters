@@ -255,7 +255,7 @@ fn test_that_threaded_interpreter_is_properly_tailrecursive(
             .args([
                 "--profile=perf",
                 "--quiet",
-                &format!("--features=count_bytecode_execution,{additional_features}"),
+                &format!("--features=statistics,{additional_features}"),
                 "--",
                 "--loop=threaded",
                 "--show-bytecode-execution-counts",

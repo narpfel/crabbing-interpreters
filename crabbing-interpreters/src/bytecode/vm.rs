@@ -322,7 +322,7 @@ pub(crate) fn execute_bytecode<'a>(
     offset: &mut u32,
     bytecode: Bytecode,
 ) -> Result<(), Option<Box<Error<'a>>>> {
-    #[cfg(feature = "count_bytecode_execution")]
+    #[cfg(feature = "statistics")]
     {
         vm.execution_counts[bytecode.discriminant()] += 1;
     }
