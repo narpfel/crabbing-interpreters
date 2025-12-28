@@ -40,5 +40,3 @@ opt-level = "z"
 [profile.perf]
 inherits = "release"
 debug = 2
-lto = true
-codegen-units = 1
