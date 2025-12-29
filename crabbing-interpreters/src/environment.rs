@@ -23,6 +23,7 @@ use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::NativeError;
 use crate::value::NativeErrorWithName;
+use crate::value::NativeFunction;
 use crate::value::Value as Unboxed;
 
 mod builtins;
@@ -70,7 +71,7 @@ impl<'a> Environment<'a> {
             interner,
         };
         if let Some(&slot) = env.globals.get(&interned::CLOCK) {
-            env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(NativeFunction::new(|_env, arguments| {
                 if !arguments.is_empty() {
                     return Err(Box::new(NativeErrorWithName {
                         callee_name: "clock",
@@ -81,34 +82,34 @@ impl<'a> Environment<'a> {
                 Ok(Unboxed::Number(
                     START_TIME.get_or_init(Instant::now).elapsed().as_secs_f64(),
                 ))
-            })
+            }))
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::NATIVE_FUNCTION_TEST) {
-            env.stack[slot] = Unboxed::NativeFunction(|_env, arguments| {
+            env.stack[slot] = Unboxed::NativeFunction(NativeFunction::new(|_env, arguments| {
                 let arguments = arguments.iter().map(|value| value.parse()).collect_vec();
                 println!("native test function called with {arguments:#?}");
                 Ok(Unboxed::Nil)
-            })
+            }))
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::READ_FILE) {
-            env.stack[slot] = Unboxed::NativeFunction(|env, args| {
+            env.stack[slot] = Unboxed::NativeFunction(NativeFunction::new(|env, args| {
                 builtins::read_file(env, args).map_err(|error| {
                     Box::new(NativeErrorWithName { error: *error, callee_name: "read_file" })
                 })
-            })
+            }))
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }
         if let Some(&slot) = env.globals.get(&interned::SPLIT) {
-            env.stack[slot] = Unboxed::NativeFunction(|env, args| {
+            env.stack[slot] = Unboxed::NativeFunction(NativeFunction::new(|env, args| {
                 builtins::split(env, args).map_err(|error| {
                     Box::new(NativeErrorWithName { error: *error, callee_name: "split" })
                 })
-            })
+            }))
             .into_nanboxed();
             env.is_global_defined[slot] = true;
         }

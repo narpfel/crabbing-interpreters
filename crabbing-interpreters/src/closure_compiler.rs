@@ -533,7 +533,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                                 .iter()
                                 .map(|arg| arg(state).map(Value::into_nanboxed))
                                 .collect::<Result<Vec<_>, _>>()?;
-                            func(state.env, &arguments).map_err(|err| {
+                            func.call(state.env, &arguments).map_err(|err| {
                                 Box::new(err.at_expr(&state.env.interner, callee, expr))
                             })
                         }

@@ -1,7 +1,5 @@
-// TODO: apply this only to the actual comparison of `NativeFunction`
-#![expect(unpredictable_function_pointer_comparisons)]
-
 use std::cell::Cell;
+use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::iter::from_fn;
@@ -25,19 +23,19 @@ use crate::value::nanboxed::AsNanBoxed as _;
 pub(crate) mod nanboxed;
 
 pub(crate) type Cells<'a> = GcRef<'a, [Cell<GcRef<'a, Cell<nanboxed::Value<'a>>>>]>;
-pub(crate) type NativeFnPtr = for<'a> fn(
+type NativeFnPtr = for<'a> fn(
     &Environment<'a>,
     &[nanboxed::Value<'a>],
 ) -> Result<Value<'a>, Box<NativeErrorWithName<'a>>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Value<'a> {
     Number(f64),
     String(GcStr<'a>),
     Bool(bool),
     Nil,
     Function(Function<'a>),
-    NativeFunction(NativeFnPtr),
+    NativeFunction(NativeFunction),
     Class(Class<'a>),
     Instance(Instance<'a>),
     BoundMethod(BoundMethod<'a>),
@@ -171,6 +169,39 @@ unsafe impl Trace for FunctionInner<'_> {
 impl Debug for Function<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<function {} at {:p}>", self.name, Self::as_ptr(self))
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct NativeFunction {
+    native_fn: NativeFnPtr,
+}
+
+impl NativeFunction {
+    pub(crate) fn new(native_fn: NativeFnPtr) -> Self {
+        Self { native_fn }
+    }
+
+    pub(crate) fn call<'a>(
+        self,
+        env: &Environment<'a>,
+        arguments: &[nanboxed::Value<'a>],
+    ) -> Result<Value<'a>, Box<NativeErrorWithName<'a>>> {
+        (self.native_fn)(env, arguments)
+    }
+}
+
+impl PartialEq for NativeFunction {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.native_fn, other.native_fn)
+    }
+}
+
+impl fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { native_fn } = self;
+        fmt::Debug::fmt(native_fn, f)
     }
 }
 

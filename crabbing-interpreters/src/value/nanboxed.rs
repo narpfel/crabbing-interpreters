@@ -12,6 +12,7 @@ use crate::value::Class;
 use crate::value::Function;
 use crate::value::Instance;
 use crate::value::NativeFnPtr;
+use crate::value::NativeFunction;
 use crate::value::Value as Unboxed;
 
 const NAN_PREFIX_LENGTH: u8 = 1 + 11;
@@ -119,9 +120,9 @@ impl<'a> Value<'a> {
                 NanBoxTag::True => Unboxed::Bool(true),
                 NanBoxTag::String => Unboxed::String(unsafe { GcStr::from_ptr(pointer) }),
                 NanBoxTag::Function => Unboxed::Function(unsafe { GcRef::from_ptr(pointer) }),
-                NanBoxTag::NativeFunction => Unboxed::NativeFunction(unsafe {
+                NanBoxTag::NativeFunction => Unboxed::NativeFunction(NativeFunction::new(unsafe {
                     transmute::<NonNull<()>, NativeFnPtr>(pointer)
-                }),
+                })),
                 NanBoxTag::Class => Unboxed::Class(unsafe { GcRef::from_ptr(pointer) }),
                 NanBoxTag::Instance => Unboxed::Instance(unsafe { GcRef::from_ptr(pointer) }),
                 NanBoxTag::BoundMethod => Unboxed::BoundMethod(unsafe { GcRef::from_ptr(pointer) }),
@@ -229,8 +230,8 @@ impl From<Function<'_>> for NanBoxTag {
     }
 }
 
-impl From<NativeFnPtr> for NanBoxTag {
-    fn from(_value: NativeFnPtr) -> Self {
+impl From<NativeFunction> for NanBoxTag {
+    fn from(_value: NativeFunction) -> Self {
         NanBoxTag::NativeFunction
     }
 }
@@ -305,12 +306,13 @@ impl<T> NanBoxPayload for GcRef<'_, T> {
     }
 }
 
-impl NanBoxPayload for NativeFnPtr {
+impl NanBoxPayload for NativeFunction {
     fn payload(self) -> NonNull<()> {
+        let Self { native_fn } = self;
         #[expect(
             clippy::as_conversions,
             reason = "`as` is the only possible way to cast a `fn` pointer to a `*` pointer that preserves provenance"
         )]
-        NonNull::new(self as *mut ()).unwrap()
+        NonNull::new(native_fn as *mut ()).unwrap()
     }
 }

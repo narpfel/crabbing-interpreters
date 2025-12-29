@@ -35,7 +35,7 @@ use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
-use crate::value::NativeFnPtr;
+use crate::value::NativeFunction;
 use crate::value::Value;
 use crate::value::Value::*;
 use crate::Report;
@@ -951,13 +951,13 @@ fn execute_call<'a>(
                 pc: NonNull<CompiledBytecode>,
                 mut sp: NonNull<nanboxed::Value<'a>>,
                 argument_count: u32,
-                native_fn: NativeFnPtr,
+                native_fn: NativeFunction,
                 callee: Value<'a>,
             ) -> Result<NonNull<nanboxed::Value<'a>>, Box<Error<'a>>> {
                 let stack = vm.stack(sp);
                 let stack = stack.used_stack();
                 let args = &stack[stack.len() - argument_count.cast()..];
-                let value = native_fn(&vm.env, args).map_err(|err| {
+                let value = native_fn.call(&vm.env, args).map_err(|err| {
                     Box::new(err.at_expr(&vm.env.interner, callee, vm.expr_at(pc)))
                 })?;
                 let sp = &mut sp;
