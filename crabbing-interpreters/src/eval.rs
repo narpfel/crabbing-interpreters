@@ -414,7 +414,8 @@ pub fn eval<'a>(
                                 .map(Value::into_nanboxed)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
-                    func(env, &arguments).map_err(|err| err.at_expr(&env.interner, callee, expr))?
+                    func.call(env, &arguments)
+                        .map_err(|err| err.at_expr(&env.interner, callee, expr))?
                 }
                 Value::Class(class) => {
                     let instance =
