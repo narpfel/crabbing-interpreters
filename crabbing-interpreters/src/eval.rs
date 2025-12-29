@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::fmt::Debug;
-use std::iter::zip;
 use std::iter::Skip;
+use std::iter::zip;
 use std::slice;
 
 use ariadne::Color::Blue;
@@ -11,6 +11,8 @@ use ariadne::Color::Red;
 use crabbing_interpreters_derive_report::Report;
 use variant_types::IntoVariant;
 
+use crate::Report;
+use crate::Sliced;
 use crate::environment::Environment;
 use crate::gc::Gc;
 use crate::gc::GcRef;
@@ -31,16 +33,14 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
-use crate::value::instance::InstanceInner;
-use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
 use crate::value::FunctionInner;
 use crate::value::Value;
-use crate::Report;
-use crate::Sliced;
+use crate::value::instance::InstanceInner;
+use crate::value::nanboxed;
 
 #[derive(Debug)]
 pub enum ControlFlow<T, E> {
@@ -78,7 +78,9 @@ where
 #[derive(Debug, Report)]
 #[exit_code(70)]
 pub enum Error<'a> {
-    #[error("type error in unary operator `{op}`: operand has type `{actual}` but `{op}` requires type `{expected}`")]
+    #[error(
+        "type error in unary operator `{op}`: operand has type `{actual}` but `{op}` requires type `{expected}`"
+    )]
     #[with(
         actual = value.typ(),
         #[colour(Green)]
@@ -95,7 +97,9 @@ pub enum Error<'a> {
         at: ExpressionTypes::Unary<'a>,
     },
 
-    #[error("type error in binary operator `{op}`: lhs has type `{lhs_type}`, but rhs has type `{rhs_type}`")]
+    #[error(
+        "type error in binary operator `{op}`: lhs has type `{lhs_type}`, but rhs has type `{rhs_type}`"
+    )]
     #[with(
         lhs_type = lhs.typ(),
         rhs_type = rhs.typ(),

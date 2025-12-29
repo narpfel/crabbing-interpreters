@@ -68,7 +68,7 @@ impl<'a> Interner<'a> {
         let interned_strings = self
             .interned_strings
             .iter()
-            .sorted_by_key(|(&s, &interned)| (interned, s));
+            .sorted_by_key(|&(&s, &interned)| (interned, s));
         for (s, interned) in interned_strings {
             println!("{interned:>DEBUG_INDENT$}:  {s:?}");
         }

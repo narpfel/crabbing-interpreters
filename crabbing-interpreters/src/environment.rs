@@ -11,13 +11,12 @@ use crate::eval::Error;
 use crate::gc::Gc;
 use crate::gc::GcRef;
 use crate::gc::Trace as _;
-use crate::interner::interned;
 use crate::interner::InternedString;
 use crate::interner::Interner;
+use crate::interner::interned;
 use crate::parse::Name;
 use crate::scope::Slot;
 use crate::scope::Target;
-use crate::value::nanboxed::Value;
 use crate::value::Cells;
 use crate::value::Class;
 use crate::value::ClassInner;
@@ -25,6 +24,7 @@ use crate::value::NativeError;
 use crate::value::NativeErrorWithName;
 use crate::value::NativeFunction;
 use crate::value::Value as Unboxed;
+use crate::value::nanboxed::Value;
 
 mod builtins;
 

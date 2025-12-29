@@ -16,10 +16,11 @@ use itertools::Itertools as _;
 use rustc_hash::FxHashMap as HashMap;
 use variant_types_derive::derive_variant_types;
 
-use crate::closure_compiler::compile_block;
+use crate::IndentLines;
 use crate::closure_compiler::Execute;
-use crate::interner::interned;
+use crate::closure_compiler::compile_block;
 use crate::interner::InternedString;
+use crate::interner::interned;
 use crate::lex::Loc;
 use crate::lex::Token;
 use crate::nonempty;
@@ -29,7 +30,6 @@ use crate::parse::FunctionKind;
 use crate::parse::Literal;
 use crate::parse::Name;
 use crate::parse::UnaryOp;
-use crate::IndentLines;
 
 const EMPTY: &str = "";
 
@@ -50,12 +50,7 @@ impl From<HasBase> for bool {
 
 impl From<bool> for HasBase {
     fn from(value: bool) -> Self {
-        if value {
-            HasBase::Yes
-        }
-        else {
-            HasBase::No
-        }
+        if value { HasBase::Yes } else { HasBase::No }
     }
 }
 
@@ -1032,12 +1027,14 @@ pub(crate) fn resolve_names<'a>(
             .collect::<Result<Vec<_>, _>>()?,
     );
     assert!(scopes.is_in_globals());
-    assert!(scopes
-        .scopes
-        .first()
-        .cells
-        .values()
-        .all(|cell_ref| matches!(cell_ref, CellRef::Local(_))));
+    assert!(
+        scopes
+            .scopes
+            .first()
+            .cells
+            .values()
+            .all(|cell_ref| matches!(cell_ref, CellRef::Local(_)))
+    );
     let LocalScope { names, layout } = scopes.scopes.first().locals.first().clone();
     iter_function_scopes(&layout).for_each(|scope| adjust_local_refs(0, scope));
     Ok(Program {

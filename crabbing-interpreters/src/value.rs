@@ -252,9 +252,9 @@ pub mod instance {
     use crate::gc::Trace;
     use crate::hash_map::HashMap;
     use crate::interner::InternedString;
-    use crate::value::nanboxed;
     use crate::value::Class;
     use crate::value::NoSuchAttribute;
+    use crate::value::nanboxed;
 
     pub struct InstanceInner<'a> {
         pub(crate) class: Class<'a>,

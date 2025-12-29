@@ -166,10 +166,11 @@ impl Gc {
     {
         #[cfg(feature = "statistics")]
         {
+            let value_ptr = value.as_ptr();
             *self
                 .allocation_counts
                 .borrow_mut()
-                .entry(Layout::for_value_raw(value.as_ptr()))
+                .entry(unsafe { Layout::for_value_raw(value_ptr) })
                 .or_default() += 1;
         }
         self.allocation_count.set(self.allocation_count.get() + 1);
@@ -197,7 +198,7 @@ impl Gc {
             .allocation_counts
             .borrow()
             .iter()
-            .sorted_by_key(|(_, &count)| count)
+            .sorted_by_key(|(_, count)| *count)
         {
             eprintln!("{layout:?}: {count}");
         }
@@ -520,7 +521,7 @@ impl<'a> GcStr<'a> {
     }
 
     pub(crate) unsafe fn from_ptr(ptr: NonNull<()>) -> Self {
-        Self(GcThin::from_ptr(ptr))
+        Self(unsafe { GcThin::from_ptr(ptr) })
     }
 
     pub(crate) fn as_inner(this: Self) -> NonNull<()> {

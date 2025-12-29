@@ -1,10 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use quote::quote;
-use syn::fold::Fold;
-use syn::parse_macro_input;
-use syn::parse_quote;
-use syn::spanned::Spanned;
 use syn::Data;
 use syn::DeriveInput;
 use syn::Error;
@@ -15,6 +11,10 @@ use syn::Result;
 use syn::Token;
 use syn::TypePath;
 use syn::Visibility;
+use syn::fold::Fold;
+use syn::parse_macro_input;
+use syn::parse_quote;
+use syn::spanned::Spanned;
 
 struct ReferToTypesBySuper;
 struct MakePublic;

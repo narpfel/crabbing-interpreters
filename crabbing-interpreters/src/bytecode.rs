@@ -1,12 +1,12 @@
 use std::fmt;
 use std::ptr::NonNull;
 
-pub(crate) use crate::bytecode::compiler::compile_program;
 use crate::bytecode::compiler::Metadata;
+pub(crate) use crate::bytecode::compiler::compile_program;
+pub(crate) use crate::bytecode::vm::Vm;
 use crate::bytecode::vm::execute_bytecode;
 pub(crate) use crate::bytecode::vm::run_bytecode;
 use crate::bytecode::vm::stack::Stack;
-pub(crate) use crate::bytecode::vm::Vm;
 use crate::interner::InternedString;
 use crate::value::nanboxed;
 

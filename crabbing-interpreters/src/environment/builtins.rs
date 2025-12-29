@@ -3,11 +3,11 @@ use itertools::Itertools as _;
 use crate::environment::Environment;
 use crate::gc::GcStr;
 use crate::interner::interned;
-use crate::value::instance::InstanceInner;
-use crate::value::nanboxed::Value;
 use crate::value::Instance;
 use crate::value::NativeError;
 use crate::value::Value as Unboxed;
+use crate::value::instance::InstanceInner;
+use crate::value::nanboxed::Value;
 
 pub(super) fn read_file<'a>(
     env: &Environment<'a>,
