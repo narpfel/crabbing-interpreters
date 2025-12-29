@@ -345,39 +345,49 @@ impl<'gc, T> GcRef<'gc, [T]> {
     {
         let length = iterator.len();
 
-        unsafe {
-            let layout = Self::compute_layout(length);
-            let memory = NonNull::new(std::alloc::alloc(layout))
-                .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-            let nonnull_gc_value = Self::value_ptr_from_raw_parts(memory, length);
-            let gc_value = nonnull_gc_value.as_ptr();
+        let layout = Self::compute_layout(length);
+        const { assert!(std::mem::size_of::<GcHead>() != 0) };
+        // SAFETY: the layout is not zero-sized because the `GcHead` is not zero-sized.
+        let memory = NonNull::new(unsafe { std::alloc::alloc(layout) })
+            .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
+        let nonnull_gc_value = Self::value_ptr_from_raw_parts(memory, length);
+        let gc_value = nonnull_gc_value.as_ptr();
 
-            ptr::addr_of_mut!((*gc_value).head).write(Cell::new(GcHead {
-                next: None,
-                length_and_state: LengthAndState::new(length),
-                drop: |memory, length| {
-                    let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
+        let head = Cell::new(GcHead {
+            next: None,
+            length_and_state: LengthAndState::new(length),
+            drop: |memory, length| {
+                let layout = Self::compute_layout(length);
+                let gc_value = Self::value_ptr_from_raw_parts(memory.cast(), length);
+                unsafe {
                     ptr::drop_in_place(gc_value.as_ptr());
-                    std::alloc::dealloc(memory.cast().as_ptr(), Self::compute_layout(length));
-                },
-            }));
+                    std::alloc::dealloc(memory.cast().as_ptr(), layout);
+                }
+            },
+        });
+        unsafe {
+            ptr::addr_of_mut!((*gc_value).head).write(head);
             ptr::addr_of_mut!((*gc_value)._gc).write(PhantomData);
+        }
 
-            // FIXME: a panic here until the adoption leaks `gc_value`
-            // TODO: add a test with a broken `ExactSizeIterator` that reports an incorrect size
-            let values = ptr::addr_of_mut!((*gc_value).value);
-            for i in 0..length {
+        // FIXME: a panic here until the adoption leaks `gc_value`
+        // TODO: add a test with a broken `ExactSizeIterator` that reports an incorrect size
+        let values = unsafe { ptr::addr_of_mut!((*gc_value).value) };
+        for i in 0..length {
+            unsafe {
                 values
                     .get_unchecked_mut(i)
                     .write(iterator.next().expect("iterator was long enough"));
             }
-            assert!(iterator.next().is_none(), "iterator was too long");
-
-            // adopt after initialising the slice to prevent dropping uninitialised values when the
-            // loop above panics
-            gc.adopt(nonnull_gc_value);
-            Self(nonnull_gc_value, PhantomData)
         }
+        assert!(iterator.next().is_none(), "iterator was too long");
+
+        // adopt after initialising the slice to prevent dropping uninitialised values when the
+        // loop above panics
+        unsafe {
+            gc.adopt(nonnull_gc_value);
+        }
+        Self(nonnull_gc_value, PhantomData)
     }
 
     fn compute_layout(length: usize) -> Layout {
