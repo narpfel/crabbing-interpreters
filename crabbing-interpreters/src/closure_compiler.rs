@@ -1,15 +1,15 @@
 use std::cell::Cell;
-use std::iter::zip;
 use std::iter::Skip;
+use std::iter::zip;
 use std::slice;
 
 use bumpalo::Bump;
 use variant_types::IntoVariant as _;
 
 use crate::environment::Environment;
-use crate::eval::eval_function;
 use crate::eval::ControlFlow;
 use crate::eval::Error;
+use crate::eval::eval_function;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace as _;
@@ -24,13 +24,13 @@ use crate::scope::Slot;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
-use crate::value::instance::InstanceInner;
-use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::ClassInner;
 use crate::value::Function;
 use crate::value::Value;
+use crate::value::instance::InstanceInner;
+use crate::value::nanboxed;
 
 pub(crate) struct State<'a, 'b> {
     pub(crate) env: &'b mut Environment<'a>,
@@ -345,12 +345,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     bump.alloc(
                         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                             let lhs = lhs(state)?;
-                            if lhs.is_truthy() {
-                                rhs(state)
-                            }
-                            else {
-                                Ok(lhs)
-                            }
+                            if lhs.is_truthy() { rhs(state) } else { Ok(lhs) }
                         },
                     )
                 }
@@ -360,12 +355,7 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                     bump.alloc(
                         for<'b, 'c> move |state: &'c mut State<'a, 'b>| -> EvalResult<'a> {
                             let lhs = lhs(state)?;
-                            if lhs.is_truthy() {
-                                Ok(lhs)
-                            }
-                            else {
-                                rhs(state)
-                            }
+                            if lhs.is_truthy() { Ok(lhs) } else { rhs(state) }
                         },
                     )
                 }

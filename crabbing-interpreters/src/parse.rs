@@ -8,6 +8,7 @@ use ariadne::Color::Red;
 use bumpalo::Bump;
 use crabbing_interpreters_derive_report::Report;
 
+use crate::Sliced;
 use crate::interner::InternedString;
 use crate::interner::Interner;
 use crate::lex::Loc;
@@ -15,7 +16,6 @@ use crate::lex::Token;
 use crate::lex::TokenIter;
 use crate::lex::TokenKind;
 use crate::scope::ErrorAtToken;
-use crate::Sliced;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum FunctionKind {

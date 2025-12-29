@@ -1,3 +1,4 @@
+style_edition = "2024"
 control_brace_style = "ClosingNextLine"
 force_multiline_blocks = false
 group_imports = "StdExternalCrate"

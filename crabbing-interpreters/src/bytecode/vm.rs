@@ -1,35 +1,34 @@
 use std::cell::Cell;
 use std::ptr::NonNull;
 
+use Bytecode::*;
 use variant_types::IntoEnum;
 use variant_types::IntoVariant;
-use Bytecode::*;
 
 use super::CompiledBytecode;
 use super::CompiledBytecodes;
+use crate::Report;
+use crate::bytecode::Bytecode;
+use crate::bytecode::CallInner;
 use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
 use crate::bytecode::vm::stack::Stack;
 use crate::bytecode::vm::stack_ref::SetSpOnDrop;
 use crate::bytecode::vm::stack_ref::StackRef;
-use crate::bytecode::Bytecode;
-use crate::bytecode::CallInner;
-use crate::environment::Environment;
 use crate::environment::ENV_SIZE;
+use crate::environment::Environment;
 use crate::eval::ControlFlow;
 use crate::eval::Error;
 use crate::gc::GcRef;
 use crate::gc::GcStr;
 use crate::gc::Trace;
-use crate::interner::interned;
 use crate::interner::InternedString;
+use crate::interner::interned;
 use crate::scope::AssignmentTargetTypes;
 use crate::scope::Expression;
 use crate::scope::ExpressionTypes;
 use crate::scope::Target;
-use crate::value::instance::InstanceInner;
-use crate::value::nanboxed;
 use crate::value::BoundMethodInner;
 use crate::value::Cells;
 use crate::value::Class;
@@ -38,7 +37,8 @@ use crate::value::FunctionInner;
 use crate::value::NativeFnPtr;
 use crate::value::Value;
 use crate::value::Value::*;
-use crate::Report;
+use crate::value::instance::InstanceInner;
+use crate::value::nanboxed;
 
 #[cfg_attr(feature = "mmap", path = "vm/mmap_stack.rs")]
 pub(crate) mod stack;
@@ -1169,8 +1169,8 @@ mod stack_ref {
     use std::ops::Deref;
     use std::ptr::NonNull;
 
-    use crate::bytecode::vm::stack::Stack;
     use crate::bytecode::vm::Vm;
+    use crate::bytecode::vm::stack::Stack;
     use crate::value::nanboxed;
 
     pub(super) struct SetSpOnDrop<'a, T> {
@@ -1241,8 +1241,8 @@ mod stack_ref {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interner::Interner;
     use crate::Gc;
+    use crate::interner::Interner;
 
     // Implementing `Stack` by using `Box` internally breaks stacked borrow rules (but not tree
     // borrow rules), because `Box` is `Unique` and `Vm::stack` lets us get multiple immutable refs

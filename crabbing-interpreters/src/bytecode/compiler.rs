@@ -3,10 +3,10 @@ use std::fmt;
 use indexmap::IndexMap;
 use variant_types::IntoVariant as _;
 
-use crate::bytecode::vm::stack::Stack;
 use crate::bytecode::Bytecode;
 use crate::bytecode::Bytecode::*;
 use crate::bytecode::CallInner;
+use crate::bytecode::vm::stack::Stack;
 use crate::gc::Gc;
 use crate::gc::GcStr;
 use crate::parse::BinOp;
@@ -21,8 +21,8 @@ use crate::scope::Function;
 use crate::scope::Statement;
 use crate::scope::Target;
 use crate::scope::Variable;
-use crate::value::nanboxed;
 use crate::value::Value;
+use crate::value::nanboxed;
 
 struct Compiler<'a> {
     gc: &'a Gc,
