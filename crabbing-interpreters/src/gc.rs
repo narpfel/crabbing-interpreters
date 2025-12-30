@@ -820,6 +820,26 @@ mod from_iter_in_tests {
         }
     }
 
+    struct NextPanics(usize);
+
+    impl Iterator for NextPanics {
+        type Item = PrintOnDrop;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0 = self.0.strict_sub(1);
+            if self.0 == 5 {
+                panic!("`next` panics");
+            }
+            Some(PrintOnDrop(self.0.to_string()))
+        }
+    }
+
+    impl ExactSizeIterator for NextPanics {
+        fn len(&self) -> usize {
+            10
+        }
+    }
+
     #[test]
     #[should_panic]
     fn too_short() {
@@ -832,5 +852,12 @@ mod from_iter_in_tests {
     fn too_long() {
         let gc = &Gc::default();
         GcRef::from_iter_in(gc, IncorrectExactSizeImpl(15));
+    }
+
+    #[test]
+    #[should_panic]
+    fn next_panics() {
+        let gc = &Gc::default();
+        GcRef::from_iter_in(gc, NextPanics(10));
     }
 }
