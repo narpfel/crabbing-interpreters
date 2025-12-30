@@ -724,7 +724,6 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).push(value.into_nanboxed());
         }
         SuperForCall(name) => {
-            // FIXME: could use `peek_at_mut` here to avoid popping and pushing `this`
             let value = vm.stack_mut(sp).pop();
             let super_class = match value.parse() {
                 Value::Class(class) => class,
