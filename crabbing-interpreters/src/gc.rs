@@ -2,6 +2,7 @@ use std::alloc::Layout;
 use std::cell::Cell;
 use std::fmt;
 use std::marker::PhantomData;
+use std::mem::DropGuard;
 use std::ops::Deref;
 use std::ptr;
 use std::ptr::NonNull;
@@ -370,23 +371,30 @@ impl<'gc, T> GcRef<'gc, [T]> {
             ptr::addr_of_mut!((*gc_value)._gc).write(PhantomData);
         }
 
-        // FIXME: a panic here until the adoption leaks `gc_value`
-        // TODO: add a test with a broken `ExactSizeIterator` that reports an incorrect size
         let values = unsafe { ptr::addr_of_mut!((*gc_value).value) };
-        for i in 0..length {
-            unsafe {
-                values
-                    .get_unchecked_mut(i)
-                    .write(iterator.next().expect("iterator was long enough"));
-            }
-        }
-        assert!(iterator.next().is_none(), "iterator was too long");
 
-        // adopt after initialising the slice to prevent dropping uninitialised values when the
-        // loop above panics
+        let mut initialised_len = DropGuard::new(0, |initialised_len| unsafe {
+            ptr::drop_in_place(ptr::slice_from_raw_parts_mut(
+                values.as_mut_ptr(),
+                initialised_len,
+            ));
+            std::alloc::dealloc(nonnull_gc_value.as_ptr().cast(), layout);
+        });
+
+        for i in 0..length {
+            let value = iterator.next().expect("iterator was long enough");
+            unsafe { values.get_unchecked_mut(i).write(value) };
+            *initialised_len = i + 1;
+        }
+
+        DropGuard::dismiss(initialised_len);
+
         unsafe {
             gc.adopt(nonnull_gc_value);
         }
+
+        assert!(iterator.next().is_none(), "iterator was too long");
+
         Self(nonnull_gc_value, PhantomData)
     }
 
@@ -776,5 +784,53 @@ mod tests {
         assert_eq!(x.get().get().maybe_value.unwrap().get().get().n, 27);
         assert_eq!(y.get().get().n, 27);
         assert_eq!(y.get().get().maybe_value.unwrap().get().get().n, 42);
+    }
+}
+
+#[cfg(test)]
+mod from_iter_in_tests {
+    use super::*;
+
+    struct PrintOnDrop(String);
+
+    impl Drop for PrintOnDrop {
+        fn drop(&mut self) {
+            println!("dropping {:?}", self.0);
+        }
+    }
+
+    unsafe impl Trace for PrintOnDrop {
+        fn trace(&self) {}
+    }
+
+    struct IncorrectExactSizeImpl(usize);
+
+    impl Iterator for IncorrectExactSizeImpl {
+        type Item = PrintOnDrop;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0 = self.0.checked_sub(1)?;
+            Some(PrintOnDrop(self.0.to_string()))
+        }
+    }
+
+    impl ExactSizeIterator for IncorrectExactSizeImpl {
+        fn len(&self) -> usize {
+            10
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn too_short() {
+        let gc = &Gc::default();
+        GcRef::from_iter_in(gc, IncorrectExactSizeImpl(5));
+    }
+
+    #[test]
+    #[should_panic]
+    fn too_long() {
+        let gc = &Gc::default();
+        GcRef::from_iter_in(gc, IncorrectExactSizeImpl(15));
     }
 }

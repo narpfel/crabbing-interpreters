@@ -3,6 +3,7 @@
 #![feature(closure_track_caller)]
 #![feature(debug_closure_helpers)]
 #![feature(default_field_values)]
+#![feature(drop_guard)]
 #![feature(exact_bitshifts)]
 #![feature(explicit_tail_calls)]
 #![feature(if_let_guard)]
