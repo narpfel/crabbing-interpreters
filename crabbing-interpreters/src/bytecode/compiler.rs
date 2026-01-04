@@ -156,29 +156,19 @@ impl<'a> Compiler<'a> {
             Statement::If { condition, then, or_else } => {
                 self.compile_expr(condition);
                 let jump_index = self.code.len();
-                self.code.push(if or_else.is_some() {
-                    PopJumpIfFalse(0)
-                }
-                else {
-                    JumpIfFalse(0)
-                });
+                // replaced with `jump` below
+                self.code.push(End);
                 self.compile_stmt(then);
-                let jump_target = if let Some(or_else) = or_else {
-                    let jump_index = self.code.len();
-                    self.code.push(PopJumpIfTrue(0));
-                    let jump_target = self.code.len();
-                    self.compile_stmt(or_else);
-                    self.code[jump_index] = PopJumpIfTrue(self.code.len().try_into().unwrap());
-                    jump_target
-                }
-                else {
-                    self.code.len()
-                };
-                self.code[jump_index] = if or_else.is_some() {
-                    PopJumpIfFalse(jump_target.try_into().unwrap())
-                }
-                else {
-                    JumpIfFalse(jump_target.try_into().unwrap())
+                self.code[jump_index] = match or_else {
+                    Some(or_else) => {
+                        let jump_index = self.code.len();
+                        self.code.push(PopJumpIfTrue(0));
+                        let jump_target = self.code.len();
+                        self.compile_stmt(or_else);
+                        self.code[jump_index] = PopJumpIfTrue(self.code.len().try_into().unwrap());
+                        PopJumpIfFalse(jump_target.try_into().unwrap())
+                    }
+                    None => JumpIfFalse(self.code.len().try_into().unwrap()),
                 };
             }
             Statement::While { condition, body } => {
