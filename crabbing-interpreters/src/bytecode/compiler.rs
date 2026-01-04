@@ -156,7 +156,7 @@ impl<'a> Compiler<'a> {
             Statement::If { condition, then, or_else } => {
                 self.compile_expr(condition);
                 let jump_index = self.code.len();
-                // replaced with `jump` below
+                // replaced below
                 self.code.push(End);
                 self.compile_stmt(then);
                 self.code[jump_index] = match or_else {
