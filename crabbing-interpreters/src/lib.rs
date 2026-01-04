@@ -331,144 +331,153 @@ fn time<T>(step: &str, print: bool, f: impl FnOnce() -> T) -> T {
     result
 }
 
-pub fn run<'a>(
+fn execute_file<'a>(
     bump: &'a Bump,
     gc: &'a Gc,
-    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
+    args: &Args,
+    filename: &Path,
 ) -> Result<(), Box<dyn Report + 'a>> {
-    let args = Args::parse_from(args);
-    if let Some(filename) = args.filename {
-        let (tokens, eof_loc) = time("lex", args.times, || -> Result<_, Box<dyn Report>> {
-            Ok(lex(
-                bump,
-                bump.alloc_path(&filename),
-                bump.alloc_str(
-                    &std::fs::read_to_string(&filename)
-                        .map_err(|err| IoError { path: filename, io_error: err })?,
-                ),
-            ))
-        })?;
-        let mut interner = Interner::default();
-        let ast = time("ast", args.times, || {
-            parse(program, bump, tokens, eof_loc, &mut interner)
-        })?;
-
-        if args.stop_at == Some(StopAt::Ast) {
-            return Ok(());
-        }
-
-        let globals = &*bump.alloc_slice_copy(&[
-            Name::new(
-                interner.intern("split"),
-                bump.alloc(Loc::debug_loc(bump, "split")),
+    let (tokens, eof_loc) = time("lex", args.times, || -> Result<_, Box<dyn Report>> {
+        Ok(lex(
+            bump,
+            bump.alloc_path(filename),
+            bump.alloc_str(
+                &std::fs::read_to_string(filename)
+                    .map_err(|err| IoError { path: filename.to_owned(), io_error: err })?,
             ),
-            Name::new(
-                interner.intern("read_file"),
-                bump.alloc(Loc::debug_loc(bump, "read_file")),
-            ),
-            Name::new(
-                interner.intern("native_function_test"),
-                bump.alloc(Loc::debug_loc(bump, "native_function_test")),
-            ),
-            Name::new(
-                interner.intern("clock"),
-                bump.alloc(Loc::debug_loc(bump, "clock")),
-            ),
-        ]);
-        let program = time("scp", args.times, move || {
-            scope::resolve_names(bump, globals, ast)
-        })?;
+        ))
+    })?;
+    let mut interner = Interner::default();
+    let ast = time("ast", args.times, || {
+        parse(program, bump, tokens, eof_loc, &mut interner)
+    })?;
 
-        if args.layout {
-            let globals_offset = GlobalsOffset::global(globals.len().saturating_sub(1));
-            println!("{}\n", program.scopes.as_sexpr("layout", 3, globals_offset));
-        }
+    if args.stop_at == Some(StopAt::Ast) {
+        return Ok(());
+    }
 
-        if args.scopes {
-            println!("{}", program.stmts_as_sexpr(3));
-        }
-        if args.stop_at == Some(StopAt::Scopes) {
-            return Ok(());
-        }
-        if args.scopes {
-            println!();
-        }
+    let globals = &*bump.alloc_slice_copy(&[
+        Name::new(
+            interner.intern("split"),
+            bump.alloc(Loc::debug_loc(bump, "split")),
+        ),
+        Name::new(
+            interner.intern("read_file"),
+            bump.alloc(Loc::debug_loc(bump, "read_file")),
+        ),
+        Name::new(
+            interner.intern("native_function_test"),
+            bump.alloc(Loc::debug_loc(bump, "native_function_test")),
+        ),
+        Name::new(
+            interner.intern("clock"),
+            bump.alloc(Loc::debug_loc(bump, "clock")),
+        ),
+    ]);
+    let program = time("scp", args.times, move || {
+        scope::resolve_names(bump, globals, ast)
+    })?;
 
-        let global_name_offsets = program
-            .global_name_offsets
+    if args.layout {
+        let globals_offset = GlobalsOffset::global(globals.len().saturating_sub(1));
+        println!("{}\n", program.scopes.as_sexpr("layout", 3, globals_offset));
+    }
+
+    if args.scopes {
+        println!("{}", program.stmts_as_sexpr(3));
+    }
+    if args.stop_at == Some(StopAt::Scopes) {
+        return Ok(());
+    }
+    if args.scopes {
+        println!();
+    }
+
+    let global_name_offsets = program
+        .global_name_offsets
+        .iter()
+        .map(|(&name, v)| match v.target() {
+            scope::Target::GlobalBySlot(slot) => (name, slot),
+            _ => unreachable!(),
+        })
+        .collect();
+    let global_cells = GcRef::from_iter_in(
+        gc,
+        (0..program.global_cell_count)
+            .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
+    );
+    let mut stack = time("stk", args.times, || {
+        Environment::new(gc, global_name_offsets, global_cells, interner)
+    });
+    let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
+    let (bytecode, constants, metadata, error_locations) =
+        time("cmp", args.times, || compile_program(gc, program.stmts));
+    let compiled_bytecodes = time("thr", args.times, || {
+        bytecode
             .iter()
-            .map(|(&name, v)| match v.target() {
-                scope::Target::GlobalBySlot(slot) => (name, slot),
-                _ => unreachable!(),
-            })
-            .collect();
-        let global_cells = GcRef::from_iter_in(
-            gc,
-            (0..program.global_cell_count)
-                .map(|_| Cell::new(GcRef::new_in(gc, Cell::new(Value::Nil.into_nanboxed())))),
-        );
-        let mut stack = time("stk", args.times, || {
-            Environment::new(gc, global_name_offsets, global_cells, interner)
-        });
-        let execute_closures = time("clo", args.times, || compile_block(bump, program.stmts));
-        let (bytecode, constants, metadata, error_locations) =
-            time("cmp", args.times, || compile_program(gc, program.stmts));
-        let compiled_bytecodes = time("thr", args.times, || {
-            bytecode
-                .iter()
-                .map(|bytecode| bytecode.compile())
-                .collect_vec()
-        });
-        let compiled_bytecodes = CompiledBytecodes::new(&compiled_bytecodes);
+            .map(|bytecode| bytecode.compile())
+            .collect_vec()
+    });
+    let compiled_bytecodes = CompiledBytecodes::new(&compiled_bytecodes);
 
-        if args.bytecode {
-            println!("Interned strings");
-            stack.interner.print_interned_strings();
-            println!();
+    if args.bytecode {
+        println!("Interned strings");
+        stack.interner.print_interned_strings();
+        println!();
 
-            println!("Metadata");
-            for (i, metadata) in metadata.iter().enumerate() {
-                print!("{i:>DEBUG_INDENT$}:  ");
-                let metadata_string = format!("{metadata:#?}");
-                let mut lines = metadata_string.lines();
-                println!("{}", lines.next().unwrap());
-                for line in lines {
-                    println!("{EMPTY:>DEBUG_INDENT$}|  {line}");
-                }
-            }
-            println!();
-
-            println!("Constants");
-            for (i, constant) in constants.iter().enumerate() {
-                println!("{i:>DEBUG_INDENT$}:  {}", constant.parse().lox_debug());
-            }
-            println!();
-
-            println!("Bytecode");
-            for (i, bytecode) in bytecode.iter().enumerate() {
-                println!("{i:>DEBUG_INDENT$}   {bytecode}");
+        println!("Metadata");
+        for (i, metadata) in metadata.iter().enumerate() {
+            print!("{i:>DEBUG_INDENT$}:  ");
+            let metadata_string = format!("{metadata:#?}");
+            let mut lines = metadata_string.lines();
+            println!("{}", lines.next().unwrap());
+            for line in lines {
+                println!("{EMPTY:>DEBUG_INDENT$}|  {line}");
             }
         }
-        if args.stop_at == Some(StopAt::Bytecode) {
-            return Ok(());
-        }
-        if args.bytecode {
-            println!()
-        }
+        println!();
 
-        let execution_result = time(
-            "exe",
-            args.times,
-            || -> Result<Value, ControlFlow<Value, Box<dyn Report>>> {
-                let result = match args.r#loop {
-                    Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells, &|| ())?,
-                    Loop::Closures => execute_closures(&mut State {
-                        env: &mut stack,
-                        offset: 0,
-                        cell_vars: global_cells,
-                        trace_call_stack: &|| (),
-                    })?,
-                    Loop::Bytecode => run_bytecode(&mut Vm::new(
+        println!("Constants");
+        for (i, constant) in constants.iter().enumerate() {
+            println!("{i:>DEBUG_INDENT$}:  {}", constant.parse().lox_debug());
+        }
+        println!();
+
+        println!("Bytecode");
+        for (i, bytecode) in bytecode.iter().enumerate() {
+            println!("{i:>DEBUG_INDENT$}   {bytecode}");
+        }
+    }
+    if args.stop_at == Some(StopAt::Bytecode) {
+        return Ok(());
+    }
+    if args.bytecode {
+        println!()
+    }
+
+    let execution_result = time(
+        "exe",
+        args.times,
+        || -> Result<Value, ControlFlow<Value, Box<dyn Report>>> {
+            let result = match args.r#loop {
+                Loop::Ast => execute(&mut stack, 0, program.stmts, global_cells, &|| ())?,
+                Loop::Closures => execute_closures(&mut State {
+                    env: &mut stack,
+                    offset: 0,
+                    cell_vars: global_cells,
+                    trace_call_stack: &|| (),
+                })?,
+                Loop::Bytecode => run_bytecode(&mut Vm::new(
+                    &bytecode,
+                    &constants,
+                    &metadata,
+                    &error_locations,
+                    stack,
+                    global_cells,
+                    compiled_bytecodes,
+                )?)?,
+                Loop::Threaded => {
+                    let mut vm = Vm::new(
                         &bytecode,
                         &constants,
                         &metadata,
@@ -476,61 +485,58 @@ pub fn run<'a>(
                         stack,
                         global_cells,
                         compiled_bytecodes,
-                    )?)?,
-                    Loop::Threaded => {
-                        let mut vm = Vm::new(
-                            &bytecode,
-                            &constants,
-                            &metadata,
-                            &error_locations,
-                            stack,
-                            global_cells,
-                            compiled_bytecodes,
-                        )?;
-                        vm.run_threaded();
+                    )?;
+                    vm.run_threaded();
 
-                        if args.show_bytecode_execution_counts {
-                            let max_len = Bytecode::all_discriminants()
-                                .map(Bytecode::name)
-                                .map(str::len)
-                                .into_iter()
-                                .max()
-                                .unwrap();
-                            eprintln!("Bytecode execution counts");
-                            for (discriminant, count) in vm.execution_counts().iter().enumerate() {
-                                eprintln!(
-                                    "{:>max_len$} ({discriminant:>2}): {count:>12}",
-                                    Bytecode::name(discriminant),
-                                );
-                            }
+                    if args.show_bytecode_execution_counts {
+                        let max_len = Bytecode::all_discriminants()
+                            .map(Bytecode::name)
+                            .map(str::len)
+                            .into_iter()
+                            .max()
+                            .unwrap();
+                        eprintln!("Bytecode execution counts");
+                        for (discriminant, count) in vm.execution_counts().iter().enumerate() {
                             eprintln!(
-                                "{:>max_len$}     : {:>12}",
-                                "Total",
-                                vm.execution_counts().iter().sum::<u64>(),
+                                "{:>max_len$} ({discriminant:>2}): {count:>12}",
+                                Bytecode::name(discriminant),
                             );
                         }
-
-                        if args.show_gc_statistics {
-                            eprintln!("GC statistics");
-                            gc.print_statistics();
-                        }
-
-                        match vm.error() {
-                            Some(error) => Err(error)?,
-                            None => Value::Nil,
-                        }
+                        eprintln!(
+                            "{:>max_len$}     : {:>12}",
+                            "Total",
+                            vm.execution_counts().iter().sum::<u64>(),
+                        );
                     }
-                };
-                Ok(result)
-            },
-        );
-        match execution_result {
-            Ok(_) | Err(ControlFlow::Return(_)) => (),
-            Err(ControlFlow::Error(err)) => Err(err)?,
-        };
+
+                    if args.show_gc_statistics {
+                        eprintln!("GC statistics");
+                        gc.print_statistics();
+                    }
+
+                    match vm.error() {
+                        Some(error) => Err(error)?,
+                        None => Value::Nil,
+                    }
+                }
+            };
+            Ok(result)
+        },
+    );
+    match execution_result {
+        Ok(_) | Err(ControlFlow::Return(_)) => Ok(()),
+        Err(ControlFlow::Error(err)) => Err(err),
     }
-    else {
-        repl(&args)?;
+}
+
+pub fn run<'a>(
+    bump: &'a Bump,
+    gc: &'a Gc,
+    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
+) -> Result<(), Box<dyn Report + 'a>> {
+    let args = Args::parse_from(args);
+    match &args.filename {
+        Some(filename) => execute_file(bump, gc, &args, filename),
+        None => repl(&args),
     }
-    Ok(())
 }
