@@ -35,26 +35,26 @@ where
     }
 
     pub(crate) fn insert(&mut self, key: K, value: V) {
-        if let Some(v) = self.get_mut(&key) {
-            *v = value;
-        }
-        else {
-            if self.load_factor() >= 0.8 {
-                let new_capacity = (self.capacity() * 2).max(8);
-                let data = std::mem::take(&mut self.data);
-                self.data.resize_with(new_capacity, || None);
-                for (k, v) in data.into_iter().flatten() {
-                    match self.index(&k) {
-                        IndexResult::Present(_, _, _) => unreachable!(),
-                        IndexResult::NotPresent(index) => self.data[index] = Some((k, v)),
+        match self.get_mut(&key) {
+            Some(v) => *v = value,
+            None => {
+                if self.load_factor() >= 0.8 {
+                    let new_capacity = (self.capacity() * 2).max(8);
+                    let data = std::mem::take(&mut self.data);
+                    self.data.resize_with(new_capacity, || None);
+                    for (k, v) in data.into_iter().flatten() {
+                        match self.index(&k) {
+                            IndexResult::Present(_, _, _) => unreachable!(),
+                            IndexResult::NotPresent(index) => self.data[index] = Some((k, v)),
+                        }
                     }
                 }
+                match self.index(&key) {
+                    IndexResult::Present(index, _, _) | IndexResult::NotPresent(index) =>
+                        self.data[index] = Some((key, value)),
+                }
+                self.length += 1;
             }
-            match self.index(&key) {
-                IndexResult::Present(index, _, _) | IndexResult::NotPresent(index) =>
-                    self.data[index] = Some((key, value)),
-            }
-            self.length += 1;
         }
     }
 

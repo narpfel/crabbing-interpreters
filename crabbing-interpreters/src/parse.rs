@@ -549,12 +549,9 @@ impl<'a> Tokens<'a, '_> {
     }
 
     fn eof(&mut self) -> Result<(), Error<'a>> {
-        let token = self.iter.peek();
-        if let Some(&token) = token {
-            Err(Error::ExpectedEof { at: ErrorAtToken::at(token?) })
-        }
-        else {
-            Ok(())
+        match self.iter.peek() {
+            Some(&token) => Err(Error::ExpectedEof { at: ErrorAtToken::at(token?) }),
+            None => Ok(()),
         }
     }
 }

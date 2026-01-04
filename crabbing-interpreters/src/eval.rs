@@ -541,11 +541,10 @@ pub fn execute<'a>(
                 Value::Nil
             }
             Statement::Var(variable, initialiser) => {
-                let value = if let Some(initialiser) = initialiser {
-                    eval(env, cell_vars, offset, initialiser, trace_call_stack)?
-                }
-                else {
-                    Value::Nil
+                let value = match initialiser {
+                    Some(initialiser) =>
+                        eval(env, cell_vars, offset, initialiser, trace_call_stack)?,
+                    None => Value::Nil,
                 };
                 env.define(cell_vars, offset, variable.target(), value.into_nanboxed());
                 Value::Nil

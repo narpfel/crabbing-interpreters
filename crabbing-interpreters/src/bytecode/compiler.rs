@@ -143,11 +143,9 @@ impl<'a> Compiler<'a> {
                 self.code.push(Print);
             }
             Statement::Var(variable, initialiser) => {
-                if let Some(initialiser) = initialiser {
-                    self.compile_expr(initialiser);
-                }
-                else {
-                    self.code.push(ConstNil);
+                match initialiser {
+                    Some(initialiser) => self.compile_expr(initialiser),
+                    None => self.code.push(ConstNil),
                 }
                 self.compile_define(variable);
             }
@@ -207,13 +205,13 @@ impl<'a> Compiler<'a> {
                     self.compile_expr(update);
                     self.code.push(Pop);
                 }
-                if let Some(condition) = condition {
-                    self.code[jump_index] = Jump(self.code.len().try_into().unwrap());
-                    self.compile_expr(condition);
-                    self.code.push(JumpIfTrue(jump_target.try_into().unwrap()));
-                }
-                else {
-                    self.code.push(Jump(jump_target.try_into().unwrap()));
+                match condition {
+                    Some(condition) => {
+                        self.code[jump_index] = Jump(self.code.len().try_into().unwrap());
+                        self.compile_expr(condition);
+                        self.code.push(JumpIfTrue(jump_target.try_into().unwrap()));
+                    }
+                    None => self.code.push(Jump(jump_target.try_into().unwrap())),
                 }
             }
             Statement::Function { target, function } => {
@@ -225,11 +223,9 @@ impl<'a> Compiler<'a> {
                 self.compile_store(target);
             }
             Statement::Return(expr) => {
-                if let Some(expr) = expr {
-                    self.compile_expr(expr);
-                }
-                else {
-                    self.code.push(ConstNil);
+                match expr {
+                    Some(expr) => self.compile_expr(expr),
+                    None => self.code.push(ConstNil),
                 }
                 self.code.push(Return);
             }
@@ -242,12 +238,12 @@ impl<'a> Compiler<'a> {
                     self.code.push(ConstNil);
                     self.compile_define(target);
                 }
-                let base_error_location = if let Some(base) = base {
-                    self.compile_expr(base);
-                    Some(self.code.len().checked_sub(1).unwrap())
-                }
-                else {
-                    None
+                let base_error_location = match base {
+                    Some(base) => {
+                        self.compile_expr(base);
+                        Some(self.code.len().checked_sub(1).unwrap())
+                    }
+                    None => None,
                 };
                 methods
                     .iter()
