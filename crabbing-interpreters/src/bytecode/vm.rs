@@ -665,20 +665,20 @@ pub(crate) fn execute_bytecode<'a>(
                 .rev()
                 .map(|method| (method.name.id(), vm.stack_mut(sp).pop()))
                 .collect();
-            let base = if let Some(error_location) = base_error_location {
-                let base = vm.stack_mut(sp).pop();
-                match base.parse() {
-                    Class(class) => Some(class),
-                    base => Err(Box::new(Error::InvalidBase {
-                        base,
-                        at: vm.error_location_at(unsafe {
-                            vm.compiled_bytecodes.get_pc(error_location)
-                        }),
-                    }))?,
+            let base = match base_error_location {
+                Some(error_location) => {
+                    let base = vm.stack_mut(sp).pop();
+                    match base.parse() {
+                        Class(class) => Some(class),
+                        base => Err(Box::new(Error::InvalidBase {
+                            base,
+                            at: vm.error_location_at(unsafe {
+                                vm.compiled_bytecodes.get_pc(error_location)
+                            }),
+                        }))?,
+                    }
                 }
-            }
-            else {
-                None
+                None => None,
             };
             let class = GcRef::new_in(vm.env.gc, ClassInner { name, base, methods });
             if let Some(base) = base {
