@@ -222,7 +222,7 @@ pub enum Loop {
     Threaded,
 }
 
-fn repl(args: &Args) -> Result<(), Box<dyn Report>> {
+fn repl(args: &Args) -> io::Result<()> {
     let bump = &mut Bump::new();
     let mut interner = Interner::default();
     let clock = interner.intern("clock");
@@ -537,6 +537,6 @@ pub fn run<'a>(
     let args = Args::parse_from(args);
     match &args.filename {
         Some(filename) => execute_file(bump, gc, &args, filename),
-        None => repl(&args),
+        None => Ok(repl(&args)?),
     }
 }
