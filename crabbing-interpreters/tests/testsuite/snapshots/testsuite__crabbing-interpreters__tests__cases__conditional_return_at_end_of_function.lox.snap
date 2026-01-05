@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/conditional_return_at_end_of_function.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+42
+nil
+42
+<C instance at [POINTER]>
+
+----- stderr -----

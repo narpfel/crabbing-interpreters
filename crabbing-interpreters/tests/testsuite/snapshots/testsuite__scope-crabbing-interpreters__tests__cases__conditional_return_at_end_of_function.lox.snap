@@ -1,0 +1,36 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=ast"
+    - crabbing-interpreters/tests/cases/conditional_return_at_end_of_function.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (fun f (global @1) [] []
+      (block
+         (if
+            true
+            (block
+               (print 42.0))
+            (block
+               (return 27.0)))))
+   (print (call +2 (global f @1)))
+   (class C (global @2) ∅
+      (method init [(local this @0)] []
+         (block
+            (if
+               true
+               (block
+                  (print 42.0))
+               (block
+                  (init-return)))
+            (init-return))))
+   (print (call +3 (global C @2))))
+
+----- stderr -----
