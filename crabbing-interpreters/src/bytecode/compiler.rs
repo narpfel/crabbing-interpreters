@@ -162,11 +162,11 @@ impl<'a> Compiler<'a> {
                 self.code[jump_index] = match or_else {
                     Some(or_else) => {
                         let jump_index = self.code.len();
-                        self.code.push(PopJumpIfTrue(0));
+                        self.code.push(End);
                         let jump_target = self.code.len();
                         self.compile_stmt(or_else);
-                        self.code[jump_index] = PopJumpIfTrue(self.code.len().try_into().unwrap());
-                        PopJumpIfFalse(jump_target.try_into().unwrap())
+                        self.code[jump_index] = Jump(self.code.len().try_into().unwrap());
+                        JumpIfFalse(jump_target.try_into().unwrap())
                     }
                     None => JumpIfFalse(self.code.len().try_into().unwrap()),
                 };

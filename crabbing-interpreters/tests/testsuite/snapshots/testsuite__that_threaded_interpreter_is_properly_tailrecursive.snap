@@ -52,21 +52,19 @@ Bytecode execution counts
      GlobalByName (31):      1000000
 StoreGlobalByName (32):      1000000
        JumpIfTrue (33):      3000002
-      JumpIfFalse (34):      2000000
-    PopJumpIfTrue (35):      1000000
-   PopJumpIfFalse (36):      2000000
-             Jump (37):      1000002
-    BeginFunction (38):      3000005
-           Return (39):      9000000
-    BuildFunction (40):      3000005
-              End (41):            1
-             Pop2 (42):      9000000
-            Pop23 (43):      4000000
-       BuildClass (44):      2000002
-            Super (45):      1000000
-     SuperForCall (46):      1000000
-         ConstNil (47):     10000000
-        ConstTrue (48):      2000000
-       ConstFalse (49):      3000000
-      ConstNumber (50):   1061000005
+      JumpIfFalse (34):      4000000
+             Jump (35):      2000002
+    BeginFunction (36):      3000005
+           Return (37):      9000000
+    BuildFunction (38):      3000005
+              End (39):            1
+             Pop2 (40):      9000000
+            Pop23 (41):      4000000
+       BuildClass (42):      2000002
+            Super (43):      1000000
+     SuperForCall (44):      1000000
+         ConstNil (45):     10000000
+        ConstTrue (46):      2000000
+       ConstFalse (47):      3000000
+      ConstNumber (48):   1061000005
             Total     :   2281000034

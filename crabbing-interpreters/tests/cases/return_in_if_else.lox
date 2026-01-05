@@ -1,0 +1,10 @@
+fun f() {
+    if (true) {
+        return 42;
+    }
+    else {
+        print "not executed";
+    }
+}
+
+print f();

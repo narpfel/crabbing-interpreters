@@ -1,0 +1,14 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/return_in_if_else.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+42
+
+----- stderr -----

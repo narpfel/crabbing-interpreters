@@ -583,20 +583,6 @@ pub(crate) fn execute_bytecode<'a>(
                 *pc = unsafe { vm.get_pc(target.cast() - 1) };
             }
         }
-        PopJumpIfTrue(target) => {
-            let value = vm.stack(*sp).peek();
-            if value.is_truthy() {
-                vm.stack_mut(sp).pop();
-                *pc = unsafe { vm.get_pc(target.cast() - 1) };
-            }
-        }
-        PopJumpIfFalse(target) => {
-            let value = vm.stack(*sp).peek();
-            if !value.is_truthy() {
-                vm.stack_mut(sp).pop();
-                *pc = unsafe { vm.get_pc(target.cast() - 1) };
-            }
-        }
         Jump(target) => {
             *pc = unsafe { vm.get_pc(target.cast() - 1) };
         }
