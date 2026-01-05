@@ -222,8 +222,6 @@ bytecode! {
         StoreGlobalByName(InternedString),
         JumpIfTrue(u32),
         JumpIfFalse(u32),
-        PopJumpIfTrue(u32),
-        PopJumpIfFalse(u32),
         Jump(u32),
         BeginFunction(u32),
         Return,
@@ -290,8 +288,6 @@ impl fmt::Display for Bytecode {
             StoreGlobalByName(string) => write!(f, "store_global_by_name {string}"),
             JumpIfTrue(target) => write!(f, "jump_if_true {target}"),
             JumpIfFalse(target) => write!(f, "jump_if_false {target}"),
-            PopJumpIfTrue(target) => write!(f, "pop_jump_if_true {target}"),
-            PopJumpIfFalse(target) => write!(f, "pop_jump_if_false {target}"),
             Jump(target) => write!(f, "jump {target}"),
             BeginFunction(size) => write!(f, "function {size}"),
             Return => write!(f, "return"),
@@ -333,8 +329,6 @@ fn validate_bytecode(
         match bytecode {
             Bytecode::JumpIfTrue(target)
             | Bytecode::JumpIfFalse(target)
-            | Bytecode::PopJumpIfTrue(target)
-            | Bytecode::PopJumpIfFalse(target)
             | Bytecode::Jump(target)
             | Bytecode::BeginFunction(target) =>
                 if !valid_jump_targets.contains(&target) {
