@@ -423,7 +423,10 @@ impl<'a> Compiler<'a> {
             self.compile_stmt(stmt);
         }
 
-        if self.code.last() != Some(&Return) {
+        if !matches!(
+            function.body.last(),
+            Some(Statement::Return(_) | Statement::InitReturn(_)),
+        ) {
             self.code.push(ConstNil);
             self.code.push(Return);
         }

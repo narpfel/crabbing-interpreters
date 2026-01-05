@@ -1,0 +1,23 @@
+fun f() {
+    if (true) {
+        print 42;
+    }
+    else {
+        return 27;
+    }
+}
+
+print f();
+
+class C {
+    init() {
+        if (true) {
+            print 42;
+        }
+        else {
+            return;
+        }
+    }
+}
+
+print C();
