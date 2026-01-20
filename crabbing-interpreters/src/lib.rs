@@ -348,6 +348,7 @@ fn execute_file<'a>(
         ))
     })?;
     let mut interner = Interner::default();
+    #[expect(clippy::result_large_err, reason = "this is fine")]
     let ast = time("ast", args.times, || {
         parse(program, bump, tokens, eof_loc, &mut interner)
     })?;
