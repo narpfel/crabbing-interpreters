@@ -63,6 +63,7 @@ macro_rules! bytecode {
                     $(
                         $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => {
                             #[allow(non_snake_case)]
+                            extern "rust-preserve-none"
                             fn $variant_name<'a>(
                                 vm: &mut Vm<'a, '_>,
                                 mut pc: NonNull<CompiledBytecode>,
@@ -152,8 +153,12 @@ impl<'a> CompiledBytecodes<'a> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompiledBytecode {
     pub(crate) bytecode: Bytecode,
-    pub(crate) function:
-        for<'a> fn(&mut Vm<'a, '_>, NonNull<CompiledBytecode>, NonNull<nanboxed::Value<'a>>, u32),
+    pub(crate) function: for<'a> extern "rust-preserve-none" fn(
+        &mut Vm<'a, '_>,
+        NonNull<CompiledBytecode>,
+        NonNull<nanboxed::Value<'a>>,
+        u32,
+    ),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
