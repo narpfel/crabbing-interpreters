@@ -11,6 +11,7 @@
 #![feature(never_type)]
 #![feature(ptr_metadata)]
 #![feature(rust_cold_cc)]
+#![feature(rust_preserve_none_cc)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
