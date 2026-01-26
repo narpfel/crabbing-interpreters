@@ -30,7 +30,7 @@ jobs:
       - name: Install Rust nightly toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2026-01-20
+          toolchain: nightly-2026-01-26
           components: miri
       - name: Install `cargo-insta`
         run: |
