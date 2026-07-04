@@ -6,15 +6,17 @@ info:
     - miri
     - run
     - "-q"
+    - "--features"
+    - ""
     - "--"
     - "--loop=closures"
     - nonexistent_file
   env:
-    MIRIFLAGS: "-Zmiri-disable-isolation"
+    MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-deterministic-floats"
 ---
 success: false
 exit_code: 74
 ----- stdout -----
 
 ----- stderr -----
-entity not found (os error 2): `nonexistent_file`
+No such file or directory (os error 2) (os error 2): `nonexistent_file`
