@@ -1,5 +1,5 @@
 #![feature(type_alias_impl_trait)]
-#![feature(closure_lifetime_binder)]
+#![cfg_attr(test, feature(closure_lifetime_binder))]
 
 use std::ops::Range;
 use std::path::Path;
