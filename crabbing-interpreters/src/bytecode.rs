@@ -90,7 +90,7 @@ macro_rules! bytecode {
                                     Err(error) => {
                                         #[cold]
                                         #[inline(never)]
-                                        fn set_error<'a>(
+                                        extern "tail" fn set_error<'a>(
                                             vm: &mut Vm<'a, '_>,
                                             sp: NonNull<nanboxed::Value<'a>>,
                                             error: Option<Box<crate::eval::Error<'a>>>,
@@ -100,7 +100,7 @@ macro_rules! bytecode {
                                             }
                                             vm.set_error(error)
                                         }
-                                        set_error(vm, sp, error);
+                                        become set_error(vm, sp, error);
                                     }
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
