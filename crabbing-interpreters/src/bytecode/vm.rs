@@ -10,6 +10,7 @@ use super::CompiledBytecodes;
 use crate::Report;
 use crate::bytecode::Bytecode;
 use crate::bytecode::CallInner;
+use crate::bytecode::OffsetOrError;
 use crate::bytecode::compiler::ContainingExpression;
 use crate::bytecode::compiler::Metadata;
 use crate::bytecode::validate_bytecode;
@@ -287,7 +288,8 @@ impl<'a, 'b> Vm<'a, 'b> {
 
     pub(crate) fn run_threaded(&mut self) {
         let compiled_bytecode = unsafe { self.compiled_bytecodes.get_unchecked(0) };
-        (compiled_bytecode.function)(self, unsafe { self.get_pc(0) }, self.stack_pointer, 0);
+        let offset = OffsetOrError { offset: 0 };
+        (compiled_bytecode.function)(self, unsafe { self.get_pc(0) }, self.stack_pointer, offset);
     }
 }
 
