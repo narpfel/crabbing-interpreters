@@ -11,7 +11,7 @@
 #![feature(never_type)]
 #![feature(ptr_metadata)]
 #![feature(rust_cold_cc)]
-#![feature(rust_tail_cc)]
+#![feature(rust_preserve_none_cc)]
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
 #![warn(clippy::as_conversions)]

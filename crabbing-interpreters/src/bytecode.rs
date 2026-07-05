@@ -1,4 +1,5 @@
 use std::fmt;
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
 use crate::bytecode::compiler::Metadata;
@@ -63,12 +64,12 @@ macro_rules! bytecode {
                     $(
                         $name::$variant_name $( ( $(_ ${ignore($ty)} ,)* ) )? => {
                             #[allow(non_snake_case)]
-                            extern "tail"
+                            extern "rust-preserve-none"
                             fn $variant_name<'a>(
                                 vm: &mut Vm<'a, '_>,
                                 mut pc: NonNull<CompiledBytecode>,
                                 mut sp: NonNull<nanboxed::Value<'a>>,
-                                mut offset: u32,
+                                mut offset: OffsetOrError<'a>,
                             ) {
                                 let $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?
                                     // SAFETY: `compiled_program` has the same length as
@@ -83,24 +84,27 @@ macro_rules! bytecode {
                                     vm,
                                     &mut pc,
                                     &mut sp,
-                                    &mut offset,
+                                    unsafe { &mut offset.offset },
                                     $name::$variant_name $( ( $( $variant_name ${ignore($ty)} ,)* ) )?,
                                 );
                                 match result {
                                     Err(error) => {
                                         #[cold]
                                         #[inline(never)]
-                                        extern "tail" fn set_error<'a>(
+                                        extern "rust-preserve-none" fn set_error<'a>(
                                             vm: &mut Vm<'a, '_>,
+                                            _pc: NonNull<CompiledBytecode>,
                                             sp: NonNull<nanboxed::Value<'a>>,
-                                            error: Option<Box<crate::eval::Error<'a>>>,
+                                            error: OffsetOrError<'a>,
                                         ) {
                                             unsafe {
                                                 vm.set_stack_pointer(sp);
                                             }
-                                            vm.set_error(error)
+                                            let error = unsafe { error.error };
+                                            vm.set_error(ManuallyDrop::into_inner(error))
                                         }
-                                        become set_error(vm, sp, error);
+                                        let error = ManuallyDrop::new(error);
+                                        become set_error(vm, NonNull::dangling(), sp, OffsetOrError { error });
                                     }
                                     Ok(()) => {
                                         // SAFETY: `compiled_program` has the same length as
@@ -150,14 +154,19 @@ impl<'a> CompiledBytecodes<'a> {
     }
 }
 
+pub(crate) union OffsetOrError<'a> {
+    offset: u32,
+    error: ManuallyDrop<Option<Box<crate::eval::Error<'a>>>>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompiledBytecode {
     pub(crate) bytecode: Bytecode,
-    pub(crate) function: for<'a> extern "tail" fn(
+    pub(crate) function: for<'a> extern "rust-preserve-none" fn(
         &mut Vm<'a, '_>,
         NonNull<CompiledBytecode>,
         NonNull<nanboxed::Value<'a>>,
-        u32,
+        OffsetOrError<'a>,
     ),
 }
 
