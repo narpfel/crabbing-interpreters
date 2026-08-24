@@ -1,6 +1,5 @@
 #![cfg_attr(feature = "mmap", feature(slice_from_ptr_range))]
 #![cfg_attr(not(feature = "mmap"), feature(closure_track_caller))]
-#![cfg_attr(feature = "statistics", feature(layout_for_ptr))]
 #![feature(closure_lifetime_binder)]
 #![feature(debug_closure_helpers)]
 #![feature(default_field_values)]
