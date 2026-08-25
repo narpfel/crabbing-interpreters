@@ -10,11 +10,10 @@ use std::ptr::Pointee;
 
 mod heads;
 
-#[cfg(not(miri))]
-const COLLECTION_INTERVAL: usize = 100_000;
-
-#[cfg(miri)]
-const COLLECTION_INTERVAL: usize = 1;
+const COLLECTION_INTERVAL: usize = cfg_select! {
+    miri => 1,
+    _ => 100_000,
+};
 
 type BoxedValue<'a, T> = Box<GcValue<'a, T>>;
 
@@ -191,23 +190,22 @@ impl Gc {
         self.allocation_count.get() >= COLLECTION_INTERVAL
     }
 
-    #[cfg(feature = "statistics")]
     pub(crate) fn print_statistics(&self) {
-        use itertools::Itertools as _;
-        eprintln!("allocation counts");
-        for (layout, count) in self
-            .allocation_counts
-            .borrow()
-            .iter()
-            .sorted_by_key(|(_, count)| *count)
-        {
-            eprintln!("{layout:?}: {count}");
+        cfg_select! {
+            feature = "statistics" => {
+                use itertools::Itertools as _;
+                eprintln!("allocation counts");
+                for (layout, count) in self
+                    .allocation_counts
+                    .borrow()
+                    .iter()
+                    .sorted_by_key(|(_, count)| *count)
+                {
+                    eprintln!("{layout:?}: {count}");
+                }
+            }
+            _ => eprintln!("`statistics` feature not enabled"),
         }
-    }
-
-    #[cfg(not(feature = "statistics"))]
-    pub(crate) fn print_statistics(&self) {
-        eprintln!("`statistics` feature not enabled");
     }
 }
 
