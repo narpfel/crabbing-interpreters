@@ -28,11 +28,10 @@ use crate::value::nanboxed::Value;
 
 mod builtins;
 
-#[cfg(not(miri))]
-pub(crate) const ENV_SIZE: usize = 100_000;
-
-#[cfg(miri)]
-pub(crate) const ENV_SIZE: usize = 1_000;
+pub(crate) const ENV_SIZE: usize = cfg_select! {
+    miri => 1_000,
+    _ => 100_000,
+};
 
 pub struct Environment<'a> {
     stack: Box<[Value<'a>; ENV_SIZE]>,
