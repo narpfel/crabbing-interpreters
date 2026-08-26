@@ -1,0 +1,38 @@
+name: Δc
+
+on:
+  pull_request:
+
+env:
+  TERM: xterm-256color
+
+jobs:
+  delta-c:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-08-24
+          components: miri, llvm-tools
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: generate coverage
+        run: |
+          set -x
+
+          pip install git+https://github.com/narpfel/delta-c@f198e409a34d84ef4217bb3b3c17d6e9541ea947
+
+          Δc \
+            --color=always \
+            origin/"${{ github.base_ref }}" \
+            origin/"${{ github.head_ref }}" \
+            -- cargo llvm-cov --text --branch -- -q
