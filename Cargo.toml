@@ -12,6 +12,9 @@ members = [
 unqualified_local_imports = "warn"
 unused_qualifications = "warn"
 
+[workspace.lints.clippy]
+as_conversions = "warn"
+
 [workspace.dependencies]
 bumpalo = "3.19.1"
 libc = { version = "0.2.178" }

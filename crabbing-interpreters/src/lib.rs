@@ -12,7 +12,6 @@
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
 #![feature(unqualified_local_imports)]
-#![warn(clippy::as_conversions)]
 #![expect(incomplete_features)]
 
 use std::cell::Cell;
