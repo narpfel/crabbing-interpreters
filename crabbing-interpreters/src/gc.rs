@@ -143,16 +143,15 @@ impl Gc {
     where
         T: Trace,
     {
-        let gc_value = BoxedValue::<'a, T>::into_raw(BoxedValue::<'a, T>::new(GcValue {
+        let gc_value = BoxedValue::<'a, T>::into_non_null(BoxedValue::<'a, T>::new(GcValue {
             head: Cell::new(GcHead {
                 next: None,
                 length_and_state: LengthAndState::new(0),
-                drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
+                drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_non_null(p.cast()) }),
             }),
             _gc: PhantomData,
             value,
         }));
-        let gc_value = NonNull::new(gc_value).unwrap();
 
         unsafe {
             self.adopt(gc_value);
@@ -491,7 +490,7 @@ where
 {
     fn from_ref(gc_ref: GcRef<'a, T>) -> Self {
         let (ptr, _metadata) = gc_ref.0.to_raw_parts();
-        Self(ptr.cast(), PhantomData)
+        Self(ptr, PhantomData)
     }
 
     fn as_inner(this: Self) -> NonNull<()> {

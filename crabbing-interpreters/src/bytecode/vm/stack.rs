@@ -131,14 +131,13 @@ impl<T, const N: usize> AbortOnOutOfBounds<T, N> {
 
 impl<T, const N: usize> Drop for AbortOnOutOfBounds<T, N> {
     fn drop(&mut self) {
-        drop(unsafe { Box::from_raw(self.0.as_ptr()) })
+        drop(unsafe { Box::from_non_null(self.0) })
     }
 }
 
 impl<T, const N: usize> From<Box<[T; N]>> for AbortOnOutOfBounds<T, N> {
     fn from(boxed_array: Box<[T; N]>) -> Self {
-        let ptr = NonNull::new(Box::into_raw(boxed_array)).unwrap();
-        AbortOnOutOfBounds(ptr)
+        AbortOnOutOfBounds(Box::into_non_null(boxed_array))
     }
 }
 
@@ -146,13 +145,13 @@ impl<T, const N: usize> Deref for AbortOnOutOfBounds<T, N> {
     type Target = [T; N];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.0.cast().as_ref() }
+        unsafe { self.0.as_ref() }
     }
 }
 
 impl<T, const N: usize> DerefMut for AbortOnOutOfBounds<T, N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0.cast().as_mut() }
+        unsafe { self.0.as_mut() }
     }
 }
 
