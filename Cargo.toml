@@ -8,10 +8,6 @@ members = [
     "variant-types-derive",
 ]
 
-[workspace.lints.rust]
-unqualified_local_imports = "warn"
-unused_qualifications = "warn"
-
 [workspace.dependencies]
 bumpalo = "3.19.1"
 libc = { version = "0.2.178" }
