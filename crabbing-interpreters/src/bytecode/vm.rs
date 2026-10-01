@@ -1,7 +1,6 @@
 use std::cell::Cell;
 use std::ptr::NonNull;
 
-use Bytecode::*;
 use variant_types::IntoEnum;
 use variant_types::IntoVariant;
 
@@ -9,6 +8,7 @@ use super::CompiledBytecode;
 use super::CompiledBytecodes;
 use crate::Report;
 use crate::bytecode::Bytecode;
+use crate::bytecode::Bytecode::*;
 use crate::bytecode::CallInner;
 use crate::bytecode::OffsetOrError;
 use crate::bytecode::compiler::ContainingExpression;
