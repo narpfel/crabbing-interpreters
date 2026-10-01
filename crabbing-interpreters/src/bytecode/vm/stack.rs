@@ -137,8 +137,7 @@ impl<T, const N: usize> Drop for AbortOnOutOfBounds<T, N> {
 
 impl<T, const N: usize> From<Box<[T; N]>> for AbortOnOutOfBounds<T, N> {
     fn from(boxed_array: Box<[T; N]>) -> Self {
-        let ptr = NonNull::new(Box::into_raw(boxed_array)).unwrap();
-        AbortOnOutOfBounds(ptr)
+        AbortOnOutOfBounds(Box::into_non_null(boxed_array))
     }
 }
 

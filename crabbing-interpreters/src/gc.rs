@@ -143,7 +143,7 @@ impl Gc {
     where
         T: Trace,
     {
-        let gc_value = BoxedValue::<'a, T>::into_raw(BoxedValue::<'a, T>::new(GcValue {
+        let gc_value = BoxedValue::<'a, T>::into_non_null(BoxedValue::<'a, T>::new(GcValue {
             head: Cell::new(GcHead {
                 next: None,
                 length_and_state: LengthAndState::new(0),
@@ -152,7 +152,6 @@ impl Gc {
             _gc: PhantomData,
             value,
         }));
-        let gc_value = NonNull::new(gc_value).unwrap();
 
         unsafe {
             self.adopt(gc_value);
