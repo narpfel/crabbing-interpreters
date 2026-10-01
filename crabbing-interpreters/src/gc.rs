@@ -147,7 +147,7 @@ impl Gc {
             head: Cell::new(GcHead {
                 next: None,
                 length_and_state: LengthAndState::new(0),
-                drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_raw(p.cast().as_ptr()) }),
+                drop: |p, _| drop(unsafe { BoxedValue::<'a, T>::from_non_null(p.cast()) }),
             }),
             _gc: PhantomData,
             value,
