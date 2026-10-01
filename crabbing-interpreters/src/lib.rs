@@ -52,7 +52,6 @@ use crate::parse::Name;
 use crate::parse::parse;
 use crate::parse::program;
 use crate::scope::GlobalsOffset;
-use crate::scope::resolve_names;
 use crate::value::Value;
 
 mod bytecode;
@@ -279,7 +278,7 @@ fn repl(args: &Args) -> io::Result<()> {
                 }
             };
         };
-        let program = match resolve_names(bump, globals_names, stmts) {
+        let program = match scope::resolve_names(bump, globals_names, stmts) {
             Ok(program) => program,
             Err(err) => {
                 err.print();

@@ -50,17 +50,17 @@ impl<T> Stack<T> {
     #![cfg_attr(not(feature = "mmap"), allow(unused))]
 
     pub(crate) const ELEMENT_COUNT_IN_GUARD_AREA: usize =
-        (Self::GUARD_PAGE_COUNT * Self::PAGE_SIZE) / std::mem::size_of::<T>();
+        (Self::GUARD_PAGE_COUNT * Self::PAGE_SIZE) / size_of::<T>();
     const GUARD_PAGE_COUNT: usize = 1;
     const PAGE_SIZE: usize = 4096;
     const SIZE_IN_BYTES: usize = Self::SIZE_IN_PAGES * Self::PAGE_SIZE;
     const SIZE_IN_PAGES: usize =
         2 * Self::GUARD_PAGE_COUNT + Self::USEABLE_SIZE_IN_BYTES / Self::PAGE_SIZE;
     const START_OFFSET: usize = Self::PAGE_SIZE * Self::GUARD_PAGE_COUNT;
-    const USEABLE_SIZE_IN_BYTES: usize = USEABLE_STACK_SIZE_IN_ELEMENTS * std::mem::size_of::<T>();
-    const _ASSERT_CORRECT_ALIGNMENT: () = assert!(Self::PAGE_SIZE >= std::mem::align_of::<T>());
+    const USEABLE_SIZE_IN_BYTES: usize = USEABLE_STACK_SIZE_IN_ELEMENTS * size_of::<T>();
+    const _ASSERT_CORRECT_ALIGNMENT: () = assert!(Self::PAGE_SIZE >= align_of::<T>());
     const _ASSERT_PAGE_SIZE_IS_MULTIPLE_OF_ELEMENT_SIZE: () =
-        assert!(Self::PAGE_SIZE % std::mem::size_of::<T>() == 0);
+        assert!(Self::PAGE_SIZE % size_of::<T>() == 0);
     const _ASSERT_STACK_HAS_SIZE: () = assert!(Self::SIZE_IN_PAGES > 2);
 }
 
@@ -150,7 +150,7 @@ impl<'a, 'b> Vm<'a, 'b> {
     ) -> Result<Self, InvalidBytecode> {
         let gc = env.gc;
         validate_bytecode(bytecode, metadata, compiled_bytecodes)?;
-        let stack = Stack::new(Value::Nil.into_nanboxed());
+        let stack = Stack::new(Nil.into_nanboxed());
         let (stack_base, stack_pointer) = stack.into_raw_parts();
         Ok(Self {
             constants,
@@ -306,7 +306,7 @@ pub fn run_bytecode<'a>(
             Ok(()) => (),
             Err(None) => {
                 assert_eq!(vm.stack_base, sp);
-                return Ok(Value::Nil);
+                return Ok(Nil);
             }
             Err(Some(err)) => {
                 vm.stack_pointer = sp;
@@ -448,15 +448,15 @@ pub(crate) fn execute_bytecode<'a>(
                 name,
                 |vm, sp, Attribute(attribute)| vm.stack_mut(sp).push(attribute),
                 |vm, sp, Attribute(method), instance| {
-                    let Value::Instance(instance) = instance.parse()
+                    let Instance(instance) = instance.parse()
                     else {
                         unreachable!()
                     };
-                    let Value::Function(method) = method.parse()
+                    let Function(method) = method.parse()
                     else {
                         unreachable!()
                     };
-                    let bound_method = Value::BoundMethod(GcRef::new_in(
+                    let bound_method = BoundMethod(GcRef::new_in(
                         vm.env.gc,
                         BoundMethodInner { method, instance },
                     ))
@@ -473,7 +473,7 @@ pub(crate) fn execute_bytecode<'a>(
                 name,
                 |vm, sp, Attribute(attribute)| {
                     vm.stack_mut(sp).push(attribute);
-                    vm.stack_mut(sp).push(Value::Nil.into_nanboxed());
+                    vm.stack_mut(sp).push(Nil.into_nanboxed());
                 },
                 |vm, sp, Attribute(method), instance| {
                     vm.stack_mut(sp).push(method);
@@ -608,13 +608,10 @@ pub(crate) fn execute_bytecode<'a>(
                 vm.env.gc,
                 function.cells.iter().map(|cell| match cell {
                     Some(idx) => Cell::new(vm.cell_vars[*idx].get()),
-                    None => Cell::new(GcRef::new_in(
-                        vm.env.gc,
-                        Cell::new(Value::Nil.into_nanboxed()),
-                    )),
+                    None => Cell::new(GcRef::new_in(vm.env.gc, Cell::new(Nil.into_nanboxed()))),
                 }),
             );
-            let value = Value::Function(GcRef::new_in(
+            let value = Function(GcRef::new_in(
                 vm.env.gc,
                 FunctionInner {
                     name: function.name.slice(),
@@ -684,18 +681,18 @@ pub(crate) fn execute_bytecode<'a>(
         Super(name) => {
             let value = vm.stack_mut(sp).pop();
             let super_class = match value.parse() {
-                Value::Class(class) => class,
+                Class(class) => class,
                 _ => unreachable!("invalid base class value: {}", value.parse()),
             };
             let value = vm.stack_mut(sp).pop();
             let this = match value.parse() {
-                Value::Instance(this) => this,
+                Instance(this) => this,
                 _ => unreachable!("`this` is not an instance: {}", value.parse()),
             };
             let value = super_class
                 .lookup_method(name)
                 .map(|method| match method.parse() {
-                    Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                    Function(method) => BoundMethod(GcRef::new_in(
                         vm.env.gc,
                         BoundMethodInner { method, instance: this },
                     )),
@@ -705,7 +702,7 @@ pub(crate) fn execute_bytecode<'a>(
                     let super_ = vm.error_location_at(*pc);
                     Box::new(Error::UndefinedSuperProperty {
                         at: super_,
-                        super_: Value::Instance(this),
+                        super_: Instance(this),
                         attribute: super_.attribute,
                     })
                 })?;
@@ -714,7 +711,7 @@ pub(crate) fn execute_bytecode<'a>(
         SuperForCall(name) => {
             let value = vm.stack_mut(sp).pop();
             let super_class = match value.parse() {
-                Value::Class(class) => class,
+                Class(class) => class,
                 _ => unreachable!("invalid base class value: {}", value.parse()),
             };
             let this = vm.stack_mut(sp).pop();
@@ -740,9 +737,9 @@ pub(crate) fn execute_bytecode<'a>(
             vm.stack_mut(sp).push(method);
             vm.stack_mut(sp).push(this);
         }
-        ConstNil => vm.stack_mut(sp).push(Value::Nil.into_nanboxed()),
-        ConstTrue => vm.stack_mut(sp).push(Value::Bool(true).into_nanboxed()),
-        ConstFalse => vm.stack_mut(sp).push(Value::Bool(false).into_nanboxed()),
+        ConstNil => vm.stack_mut(sp).push(Nil.into_nanboxed()),
+        ConstTrue => vm.stack_mut(sp).push(Bool(true).into_nanboxed()),
+        ConstFalse => vm.stack_mut(sp).push(Bool(false).into_nanboxed()),
         ConstNumber(number) => vm.stack_mut(sp).push(
             // SAFETY: `validate_bytecode` makes sure that `number` is not `NaN`
             unsafe { nanboxed::Value::from_f64_unchecked(number.into()) },
@@ -918,7 +915,7 @@ fn execute_call<'a>(
         BoundMethod(bound_method) => {
             let method = bound_method.method;
             vm.stack_mut(sp)
-                .push(Value::Instance(bound_method.instance).into_nanboxed());
+                .push(Instance(bound_method.instance).into_nanboxed());
             execute_function_call(
                 vm,
                 pc,
@@ -975,12 +972,11 @@ fn execute_call<'a>(
                 let sp = &mut sp;
                 let offset = &mut offset;
                 let instance = GcRef::new_in(vm.env.gc, InstanceInner::new(class));
-                vm.stack_mut(sp)
-                    .push(Value::Instance(instance).into_nanboxed());
+                vm.stack_mut(sp).push(Instance(instance).into_nanboxed());
                 match unsafe { vm.lookup_inline_cache(*pc, interned::INIT, class) }
                     .map(|value| value.parse())
                 {
-                    Some(Value::Function(init)) => execute_function_call(
+                    Some(Function(init)) => execute_function_call(
                         vm,
                         pc,
                         offset,
@@ -1033,7 +1029,7 @@ fn execute_call_method<'a>(
     let callee = peeker.peek_at(&vm.stack(*sp), argument_count + 1);
     let instance = peeker.peek_at(&vm.stack(*sp), argument_count);
 
-    if instance.eq_nanboxed(Value::Nil.into_nanboxed()) {
+    if instance.eq_nanboxed(Nil.into_nanboxed()) {
         unsafe {
             let result = vm.stack_mut(sp).swap(argument_count, argument_count + 1);
             result.unwrap();
@@ -1060,11 +1056,11 @@ fn execute_call_method<'a>(
                 argument_count,
                 stack_size_at_callsite,
                 || {
-                    let Value::Instance(instance) = instance.parse()
+                    let Instance(instance) = instance.parse()
                     else {
                         unreachable!()
                     };
-                    Value::BoundMethod(GcRef::new_in(
+                    BoundMethod(GcRef::new_in(
                         vm.env.gc,
                         BoundMethodInner { method: function, instance },
                     ))
@@ -1240,7 +1236,7 @@ mod tests {
     fn multiple_stack_refs() {
         let gc = Gc::default();
         let global_cells = Cells::from_iter_in(&gc, [].into_iter());
-        let bytecode = [Bytecode::End];
+        let bytecode = [End];
         let compiled_bytecodes = bytecode.map(Bytecode::compile);
         let compiled_bytecodes = CompiledBytecodes::new(&compiled_bytecodes);
         let mut vm = Vm::new(
@@ -1259,8 +1255,7 @@ mod tests {
         )
         .unwrap();
         let mut sp = vm.stack_pointer;
-        vm.stack_mut(&mut sp)
-            .push(Value::Number(1.0).into_nanboxed());
+        vm.stack_mut(&mut sp).push(Number(1.0).into_nanboxed());
         let stack = vm.stack(sp);
         let other_stack = vm.stack(sp);
         assert_eq!(stack.peek().parse(), other_stack.peek().parse());

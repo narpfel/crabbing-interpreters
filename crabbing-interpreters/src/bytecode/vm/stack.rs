@@ -158,7 +158,7 @@ impl<T, const N: usize> DerefMut for AbortOnOutOfBounds<T, N> {
 
 impl<T, Idx, const N: usize> Index<Idx> for AbortOnOutOfBounds<T, N>
 where
-    Idx: SliceIndex<[T]> + std::fmt::Debug + Clone,
+    Idx: SliceIndex<[T]> + fmt::Debug + Clone,
 {
     type Output = <[T; N] as Index<Idx>>::Output;
 
@@ -176,7 +176,7 @@ where
 
 impl<T, Idx, const N: usize> IndexMut<Idx> for AbortOnOutOfBounds<T, N>
 where
-    Idx: SliceIndex<[T]> + std::fmt::Debug + Clone,
+    Idx: SliceIndex<[T]> + fmt::Debug + Clone,
 {
     #[track_caller]
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
@@ -195,7 +195,7 @@ where
 #[inline(never)]
 extern "C" fn index_failed<T, Idx>(len: usize, index: Idx, location: &Location)
 where
-    Idx: SliceIndex<[T]> + std::fmt::Debug + Clone,
+    Idx: SliceIndex<[T]> + fmt::Debug + Clone,
 {
     eprintln!(
         "thread '{}' panicked at {}:\nindex operation failed: the len is {} but the index is `{:?}`",

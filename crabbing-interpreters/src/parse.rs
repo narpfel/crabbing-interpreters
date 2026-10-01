@@ -902,7 +902,7 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression
                 id: tokens.interner.intern(super_.slice()),
                 loc: super_.loc(),
             };
-            tokens.consume(TokenKind::Dot)?;
+            tokens.consume(Dot)?;
             let attribute = name(tokens)?;
             Expression::Super { super_, attribute }
         }
@@ -912,10 +912,10 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression
 
     loop {
         expr = match tokens.peek() {
-            Ok(Token { kind: TokenKind::LParen, .. }) => {
-                let l_paren = tokens.consume(TokenKind::LParen)?;
+            Ok(Token { kind: LParen, .. }) => {
+                let l_paren = tokens.consume(LParen)?;
                 let arguments = call_arguments(bump, tokens)?;
-                let r_paren = tokens.consume(TokenKind::RParen)?;
+                let r_paren = tokens.consume(RParen)?;
                 Expression::Call {
                     callee: bump.alloc(expr),
                     l_paren,
@@ -923,8 +923,8 @@ fn primary<'a>(bump: &'a Bump, tokens: &mut Tokens<'a, '_>) -> Result<Expression
                     r_paren,
                 }
             }
-            Ok(Token { kind: TokenKind::Dot, .. }) => {
-                tokens.consume(TokenKind::Dot)?;
+            Ok(Token { kind: Dot, .. }) => {
+                tokens.consume(Dot)?;
                 let attribute = name(tokens)?;
                 Expression::Attribute { lhs: bump.alloc(expr), attribute }
             }

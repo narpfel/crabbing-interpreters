@@ -110,7 +110,7 @@ unsafe impl Trace for Value<'_> {
 }
 
 impl Display for Value<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(x) => write!(f, "{x}"),
             Self::String(s) => write!(f, "{s}"),
@@ -167,7 +167,7 @@ unsafe impl Trace for FunctionInner<'_> {
 }
 
 impl Debug for Function<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<function {} at {:p}>", self.name, Self::as_ptr(self))
     }
 }
@@ -198,10 +198,10 @@ impl PartialEq for NativeFunction {
     }
 }
 
-impl fmt::Debug for NativeFunction {
+impl Debug for NativeFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self { native_fn } = self;
-        fmt::Debug::fmt(native_fn, f)
+        Debug::fmt(native_fn, f)
     }
 }
 
@@ -241,7 +241,7 @@ unsafe impl Trace for ClassInner<'_> {
 }
 
 impl Debug for Class<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<class {} at {:p}>", self.name, Self::as_ptr(self))
     }
 }
@@ -299,7 +299,7 @@ pub mod instance {
 pub type Instance<'a> = GcRef<'a, instance::InstanceInner<'a>>;
 
 impl Debug for Instance<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "<{} instance at {:p}>",
@@ -324,7 +324,7 @@ unsafe impl Trace for BoundMethodInner<'_> {
 }
 
 impl Debug for BoundMethod<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "<bound method {name} of {instance:?}>",

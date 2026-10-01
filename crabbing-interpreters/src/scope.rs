@@ -2,8 +2,6 @@ use std::cell::Cell;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter;
-use std::iter::empty;
-use std::iter::once;
 use std::ptr;
 
 use ariadne::Color::Blue;
@@ -1017,7 +1015,7 @@ impl Program<'_> {
 pub(crate) fn resolve_names<'a>(
     bump: &'a Bump,
     global_names: &'a [Name<'a>],
-    program: &'a [crate::parse::Statement<'a>],
+    program: &'a [parse::Statement<'a>],
 ) -> Result<Program<'a>, Error<'a>> {
     let mut scopes = Scopes::new(bump, global_names);
     let stmts = &*bump.alloc_slice_copy(
@@ -1370,10 +1368,10 @@ fn iter_function_scopes<'a>(frame: &'a StackFrame<'a>) -> impl Iterator<Item = &
         .iter()
         .flat_map(|frame_entry| -> Box<dyn Iterator<Item = _>> {
             match frame_entry {
-                FrameEntry::Local(_) | FrameEntry::Call(_) => Box::new(empty()),
+                FrameEntry::Local(_) | FrameEntry::Call(_) => Box::new(iter::empty()),
                 FrameEntry::ChildScope(scope) => Box::new(iter_function_scopes(scope)),
                 FrameEntry::FunctionScope(scope) =>
-                    Box::new(once(scope).chain(iter_function_scopes(scope))),
+                    Box::new(iter::once(scope).chain(iter_function_scopes(scope))),
             }
         })
 }

@@ -345,7 +345,7 @@ impl<'gc, T> GcRef<'gc, [T]> {
         let length = iterator.len();
 
         let layout = Self::compute_layout(length);
-        const { assert!(std::mem::size_of::<GcHead>() != 0) };
+        const { assert!(size_of::<GcHead>() != 0) };
         // SAFETY: the layout is not zero-sized because the `GcHead` is not zero-sized.
         let memory = NonNull::new(unsafe { std::alloc::alloc(layout) })
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
