@@ -131,7 +131,7 @@ impl<T, const N: usize> AbortOnOutOfBounds<T, N> {
 
 impl<T, const N: usize> Drop for AbortOnOutOfBounds<T, N> {
     fn drop(&mut self) {
-        drop(unsafe { Box::from_raw(self.0.as_ptr()) })
+        drop(unsafe { Box::from_non_null(self.0) })
     }
 }
 
