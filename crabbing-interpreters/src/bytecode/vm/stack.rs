@@ -145,13 +145,13 @@ impl<T, const N: usize> Deref for AbortOnOutOfBounds<T, N> {
     type Target = [T; N];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.0.cast().as_ref() }
+        unsafe { self.0.as_ref() }
     }
 }
 
 impl<T, const N: usize> DerefMut for AbortOnOutOfBounds<T, N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0.cast().as_mut() }
+        unsafe { self.0.as_mut() }
     }
 }
 

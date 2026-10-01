@@ -490,7 +490,7 @@ where
 {
     fn from_ref(gc_ref: GcRef<'a, T>) -> Self {
         let (ptr, _metadata) = gc_ref.0.to_raw_parts();
-        Self(ptr.cast(), PhantomData)
+        Self(ptr, PhantomData)
     }
 
     fn as_inner(this: Self) -> NonNull<()> {
