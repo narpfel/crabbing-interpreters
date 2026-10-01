@@ -1,3 +1,5 @@
+#![feature(unqualified_local_imports)]
+
 pub use variant_types_derive::derive_variant_types;
 
 pub trait IntoVariant<Variant>

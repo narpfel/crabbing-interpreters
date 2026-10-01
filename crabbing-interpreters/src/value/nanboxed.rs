@@ -1,5 +1,4 @@
 use std::fmt;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem::transmute;
 use std::ptr::NonNull;

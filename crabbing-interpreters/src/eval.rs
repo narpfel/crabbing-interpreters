@@ -275,7 +275,7 @@ pub fn eval<'a>(
                 AssignmentTarget::Attribute { lhs, attribute } => {
                     let target_value = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
                     match target_value {
-                        Value::Instance(instance) =>
+                        Instance(instance) =>
                             instance.setattr(attribute.id(), value.into_nanboxed()),
                         _ => Err(Error::NoFields {
                             lhs: target_value,
@@ -380,7 +380,7 @@ pub fn eval<'a>(
                     function.cells,
                     trace_call_stack,
                 ) {
-                    Ok(_) => Ok(Value::Nil),
+                    Ok(_) => Ok(Nil),
                     Err(ControlFlow::Return(value)) => Ok(value),
                     Err(ControlFlow::Error(err)) => Err(err),
                 }
@@ -403,14 +403,14 @@ pub fn eval<'a>(
             };
 
             match callee {
-                Value::Function(ref func) => eval_call(
+                Function(ref func) => eval_call(
                     env,
                     func,
                     // FIXME: clippy issue 11761
                     #[expect(clippy::iter_skip_zero)]
                     func.parameters.iter().skip(0),
                 )?,
-                Value::NativeFunction(func) => {
+                NativeFunction(func) => {
                     let arguments = arguments
                         .iter()
                         .map(|arg| {
@@ -421,14 +421,13 @@ pub fn eval<'a>(
                     func.call(env, &arguments)
                         .map_err(|err| err.at_expr(&env.interner, callee, expr))?
                 }
-                Value::Class(class) => {
-                    let instance =
-                        Value::Instance(GcRef::new_in(env.gc, InstanceInner::new(class)));
+                Class(class) => {
+                    let instance = Instance(GcRef::new_in(env.gc, InstanceInner::new(class)));
                     match class
                         .lookup_method(interned::INIT)
                         .map(nanboxed::Value::parse)
                     {
-                        Some(Value::Function(init)) => {
+                        Some(Function(init)) => {
                             eval_method_call(env, &init, instance)?;
                         }
                         Some(_) => unreachable!(),
@@ -441,11 +440,8 @@ pub fn eval<'a>(
                     }
                     instance
                 }
-                Value::BoundMethod(bound_method) => eval_method_call(
-                    env,
-                    &bound_method.method,
-                    Value::Instance(bound_method.instance),
-                )?,
+                BoundMethod(bound_method) =>
+                    eval_method_call(env, &bound_method.method, Instance(bound_method.instance))?,
                 _ => Err(Error::Uncallable { callee, at: expr.into_variant() })?,
             }
         }
@@ -463,14 +459,14 @@ pub fn eval<'a>(
         Expression::Attribute { lhs, attribute } => {
             let lhs = eval(env, cell_vars, offset, lhs, trace_call_stack)?;
             match lhs {
-                Value::Instance(instance) => instance
+                Instance(instance) => instance
                     .getattr(attribute.id())
                     .ok()
                     .map(nanboxed::Value::parse)
                     .or_else(|| {
                         instance.class.lookup_method(attribute.id()).map(|method| {
                             match method.parse() {
-                                Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                                Function(method) => BoundMethod(GcRef::new_in(
                                     env.gc,
                                     BoundMethodInner { method, instance },
                                 )),
@@ -501,14 +497,14 @@ pub fn eval<'a>(
                 &Expression::Name(*super_),
                 trace_call_stack,
             )? {
-                Value::Class(super_) => super_,
+                Class(super_) => super_,
                 value => unreachable!("invalid base class value: {value}"),
             };
             match this {
-                Value::Instance(instance) => super_
+                Instance(instance) => super_
                     .lookup_method(attribute.id())
                     .map(|method| match method.parse() {
-                        Value::Function(method) => Value::BoundMethod(GcRef::new_in(
+                        Function(method) => BoundMethod(GcRef::new_in(
                             env.gc,
                             BoundMethodInner { method, instance },
                         )),
@@ -756,11 +752,10 @@ mod tests {
         else {
             unreachable!()
         };
-        let ast = crate::parse::tests::parse_str(bump, src).unwrap();
-        let program =
-            std::slice::from_ref(bump.alloc(parse::Statement::Expression { expr: ast, semi }));
+        let ast = parse::tests::parse_str(bump, src).unwrap();
+        let program = slice::from_ref(bump.alloc(parse::Statement::Expression { expr: ast, semi }));
         let Ok(Program {
-            stmts: [scope::Statement::Expression(scoped_ast)],
+            stmts: [Statement::Expression(scoped_ast)],
             global_name_offsets,
             global_cell_count: 0,
             scopes: _,
@@ -772,7 +767,7 @@ mod tests {
         let global_name_offsets = global_name_offsets
             .iter()
             .map(|(&name, v)| match v.target() {
-                scope::Target::GlobalBySlot(slot) => (name, slot),
+                Target::GlobalBySlot(slot) => (name, slot),
                 _ => unreachable!(),
             })
             .collect();

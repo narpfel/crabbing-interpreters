@@ -1,3 +1,5 @@
+#![feature(unqualified_local_imports)]
+
 use std::process::exit;
 
 use bumpalo::Bump;

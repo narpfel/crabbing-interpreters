@@ -1,4 +1,5 @@
 #![feature(type_alias_impl_trait)]
+#![feature(unqualified_local_imports)]
 #![cfg_attr(test, feature(closure_lifetime_binder))]
 
 use std::ops::Range;

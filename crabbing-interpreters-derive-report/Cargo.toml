@@ -3,6 +3,9 @@ name = "crabbing-interpreters-derive-report"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [lib]
 proc-macro = true
 

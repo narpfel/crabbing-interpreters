@@ -3,16 +3,15 @@
 #![feature(closure_lifetime_binder)]
 #![feature(debug_closure_helpers)]
 #![feature(default_field_values)]
-#![feature(drop_guard)]
 #![feature(exact_bitshifts)]
 #![feature(explicit_tail_calls)]
 #![feature(macro_metavar_expr)]
-#![feature(never_type)]
 #![feature(ptr_metadata)]
 #![feature(rust_cold_cc)]
 #![feature(rust_preserve_none_cc)]
 #![feature(slice_ptr_get)]
 #![feature(stmt_expr_attributes)]
+#![feature(unqualified_local_imports)]
 #![warn(clippy::as_conversions)]
 #![expect(incomplete_features)]
 
@@ -54,7 +53,6 @@ use crate::parse::Name;
 use crate::parse::parse;
 use crate::parse::program;
 use crate::scope::GlobalsOffset;
-use crate::scope::resolve_names;
 use crate::value::Value;
 
 mod bytecode;
@@ -281,7 +279,7 @@ fn repl(args: &Args) -> io::Result<()> {
                 }
             };
         };
-        let program = match resolve_names(bump, globals_names, stmts) {
+        let program = match scope::resolve_names(bump, globals_names, stmts) {
             Ok(program) => program,
             Err(err) => {
                 err.print();

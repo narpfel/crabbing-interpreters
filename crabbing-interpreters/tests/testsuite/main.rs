@@ -1,4 +1,5 @@
 #![feature(closure_lifetime_binder)]
+#![feature(unqualified_local_imports)]
 
 use std::path::Path;
 use std::path::PathBuf;
