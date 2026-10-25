@@ -29,10 +29,13 @@ jobs:
         run: |
           set -x
 
-          pip install git+https://github.com/narpfel/delta-c@f198e409a34d84ef4217bb3b3c17d6e9541ea947
+          pip install git+https://github.com/narpfel/delta-c@8337feabfffe05d6ece8da20ef61f553f09a8262
 
           Δc \
             --color=always \
             origin/"${{ github.base_ref }}" \
             origin/"${{ github.head_ref }}" \
-            -- cargo llvm-cov --text --branch -- -q
+            --run "cargo llvm-cov clean --workspace" \
+            --run "cargo llvm-cov --no-report --branch -- -q" \
+            --run "cargo llvm-cov --no-report --features mmap --branch -- -q" \
+            -- cargo llvm-cov report --text
