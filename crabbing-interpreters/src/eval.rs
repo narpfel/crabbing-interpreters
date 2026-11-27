@@ -325,6 +325,7 @@ pub fn eval<'a>(
                             Minus => Number(lhs - rhs),
                             Times => Number(lhs * rhs),
                             Divide => Number(lhs / rhs),
+                            Remainder => Number(lhs % rhs),
                             Power => Number(lhs.powf(*rhs)),
                             EqualEqual | NotEqual | Assign | And | Or => unreachable!(),
                         },

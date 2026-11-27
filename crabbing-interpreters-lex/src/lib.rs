@@ -188,6 +188,8 @@ pub enum TokenKind {
     Semicolon,
     #[token("/")]
     Slash,
+    #[token("rem")]
+    Rem,
     #[token("*")]
     Star,
     #[token("**")]

@@ -215,6 +215,7 @@ bytecode! {
         Subtract,
         Multiply,
         Divide,
+        Remainder,
         Power,
         Local(u32),
         Global(u32),
@@ -271,6 +272,7 @@ impl fmt::Display for Bytecode {
             Subtract => write!(f, "subtract"),
             Multiply => write!(f, "multiply"),
             Divide => write!(f, "divide"),
+            Remainder => write!(f, "remainder"),
             Power => write!(f, "power"),
             Local(slot) => write!(f, "load_local {slot}"),
             Global(slot) => write!(f, "load_global {slot}"),
@@ -407,6 +409,7 @@ fn validate_bytecode(
             | Bytecode::Subtract
             | Bytecode::Multiply
             | Bytecode::Divide
+            | Bytecode::Remainder
             | Bytecode::Power
             | Bytecode::Local(_)
             | Bytecode::Global(_)

@@ -409,6 +409,7 @@ pub(crate) fn execute_bytecode<'a>(
         Subtract => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs - rhs)?,
         Multiply => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs * rhs)?,
         Divide => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs / rhs)?,
+        Remainder => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs % rhs)?,
         Power => nan_preserving_number_binop(vm, *pc, sp, |lhs, rhs| lhs.powf(rhs))?,
         Local(slot) => {
             let value = vm.env[*offset + slot];

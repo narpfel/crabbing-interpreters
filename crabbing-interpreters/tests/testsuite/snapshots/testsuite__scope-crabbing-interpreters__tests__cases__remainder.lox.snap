@@ -1,0 +1,26 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=ast"
+    - crabbing-interpreters/tests/cases/remainder.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (rem 142.0 100.0))
+   (print (rem 4.0 1.5))
+   (print (rem 5.0 1.5))
+   (print (rem (- 37.0) 10.0))
+   (print (rem (group (- 37.0)) 10.0))
+   (print (rem (rem 37.0 10.0) 4.0))
+   (print (rem 37.0 (group (rem 10.0 4.0))))
+   (print (rem 2.0 0.0))
+   (print (rem (group (/ 0.0 0.0)) 0.0))
+   (print (rem 2.0 (group (/ 0.0 0.0)))))
+
+----- stderr -----

@@ -1,0 +1,23 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=threaded"
+    - crabbing-interpreters/tests/cases/remainder.lox
+---
+success: true
+exit_code: 0
+----- stdout -----
+42
+1
+0.5
+-7
+-7
+3
+1
+NaN
+NaN
+NaN
+
+----- stderr -----

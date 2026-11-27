@@ -1,0 +1,17 @@
+---
+source: crabbing-interpreters/tests/testsuite/main.rs
+info:
+  program: crabbing-interpreters
+  args:
+    - "--loop=ast"
+    - crabbing-interpreters/tests/cases/remainder_error.lox
+    - "--scopes"
+    - "--stop-at=scopes"
+---
+success: true
+exit_code: 0
+----- stdout -----
+(program
+   (print (rem 42.0 "10")))
+
+----- stderr -----
