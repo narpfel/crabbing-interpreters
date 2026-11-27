@@ -321,6 +321,7 @@ impl<'a> Compiler<'a> {
                     BinOpKind::Minus => Subtract,
                     BinOpKind::Times => Multiply,
                     BinOpKind::Divide => Divide,
+                    BinOpKind::Remainder => Remainder,
                     BinOpKind::Power => Power,
                     BinOpKind::Assign | BinOpKind::And | BinOpKind::Or => unreachable!(),
                 };

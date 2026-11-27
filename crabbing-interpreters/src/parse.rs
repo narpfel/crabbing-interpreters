@@ -424,6 +424,7 @@ pub enum BinOpKind {
     Minus,
     Times,
     Divide,
+    Remainder,
     Power,
     Assign,
     And,
@@ -444,6 +445,7 @@ impl<'a> BinOp<'a> {
             Minus => BinOpKind::Minus,
             Star => BinOpKind::Times,
             Slash => BinOpKind::Divide,
+            Rem => BinOpKind::Remainder,
             StarStar => BinOpKind::Power,
             Equal => BinOpKind::Assign,
             And => BinOpKind::And,
@@ -1071,13 +1073,13 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
         Some(Infix(Plus | Minus)) => match right {
             Prefix(_) => Right,
             Infix(Or | And | Plus | Minus) => Left,
-            Infix(Times | Divide | Power) => Right,
+            Infix(Times | Divide | Remainder | Power) => Right,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
             Infix(Assign) => Ambiguous,
         },
-        Some(Infix(Times | Divide)) => match right {
+        Some(Infix(Times | Divide | Remainder)) => match right {
             Prefix(_) => Right,
-            Infix(Or | And | Plus | Minus | Times | Divide) => Left,
+            Infix(Or | And | Plus | Minus | Times | Divide | Remainder) => Left,
             Infix(Power) => Right,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
             Infix(Assign) => Ambiguous,
@@ -1085,7 +1087,7 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
         Some(Infix(Power)) => match right {
             Prefix(_) => Right,
             Infix(Power) => Right,
-            Infix(Or | And | Plus | Minus | Times | Divide) => Left,
+            Infix(Or | And | Plus | Minus | Times | Divide | Remainder) => Left,
             Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) => Left,
             Infix(Assign) => Ambiguous,
         },
@@ -1093,7 +1095,7 @@ fn precedence(left: Option<Operator>, right: Operator) -> Precedence {
             match right {
                 Prefix(_) => Right,
                 Infix(Or | And) => Left,
-                Infix(Plus | Minus | Times | Divide | Power) => Right,
+                Infix(Plus | Minus | Times | Divide | Remainder | Power) => Right,
                 Infix(EqualEqual | NotEqual | Less | LessEqual | Greater | GreaterEqual) =>
                     Ambiguous,
                 Infix(Assign) => Ambiguous,

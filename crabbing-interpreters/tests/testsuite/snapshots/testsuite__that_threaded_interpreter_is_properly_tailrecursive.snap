@@ -18,7 +18,7 @@ exit_code: 0
 
 ----- stderr -----
 Bytecode execution counts
-              Pop ( 0):     36000000
+              Pop ( 0):     37000000
             Const ( 1):      6000000
        UnaryMinus ( 2):      1000000
          UnaryNot ( 3):      1000000
@@ -32,39 +32,40 @@ Bytecode execution counts
          Subtract (11):      1000000
          Multiply (12):      2000000
            Divide (13):      1000000
-            Power (14):      1000000
-            Local (15):     15000001
-           Global (16):      6000000
-             Cell (17):      7000001
-              Dup (18):      5000000
-        StoreAttr (19):      1000000
-         LoadAttr (20):      1000000
-       LoadMethod (21):      3000000
-       StoreLocal (22):   1046000001
-      StoreGlobal (23):      1000006
-        StoreCell (24):      1000000
-       DefineCell (25):      1000001
-             Call (26):      1000000
-        ShortCall (27):      8000000
-       CallMethod (28):      1000000
-  ShortCallMethod (29):      3000000
-            Print (30):      1000000
-     GlobalByName (31):      1000000
-StoreGlobalByName (32):      1000000
-       JumpIfTrue (33):      3000002
-      JumpIfFalse (34):      4000000
-             Jump (35):      2000002
-    BeginFunction (36):      3000005
-           Return (37):      9000000
-    BuildFunction (38):      3000005
-              End (39):            1
-             Pop2 (40):      9000000
-            Pop23 (41):      4000000
-       BuildClass (42):      2000002
-            Super (43):      1000000
-     SuperForCall (44):      1000000
-         ConstNil (45):     10000000
-        ConstTrue (46):      2000000
-       ConstFalse (47):      3000000
-      ConstNumber (48):   1061000005
-            Total     :   2281000034
+        Remainder (14):      1000000
+            Power (15):      1000000
+            Local (16):     15000001
+           Global (17):      6000000
+             Cell (18):      7000001
+              Dup (19):      5000000
+        StoreAttr (20):      1000000
+         LoadAttr (21):      1000000
+       LoadMethod (22):      3000000
+       StoreLocal (23):   1046000001
+      StoreGlobal (24):      1000006
+        StoreCell (25):      1000000
+       DefineCell (26):      1000001
+             Call (27):      1000000
+        ShortCall (28):      8000000
+       CallMethod (29):      1000000
+  ShortCallMethod (30):      3000000
+            Print (31):      1000000
+     GlobalByName (32):      1000000
+StoreGlobalByName (33):      1000000
+       JumpIfTrue (34):      3000002
+      JumpIfFalse (35):      4000000
+             Jump (36):      2000002
+    BeginFunction (37):      3000005
+           Return (38):      9000000
+    BuildFunction (39):      3000005
+              End (40):            1
+             Pop2 (41):      9000000
+            Pop23 (42):      4000000
+       BuildClass (43):      2000002
+            Super (44):      1000000
+     SuperForCall (45):      1000000
+         ConstNil (46):     10000000
+        ConstTrue (47):      2000000
+       ConstFalse (48):      3000000
+      ConstNumber (49):   1063000005
+            Total     :   2285000034

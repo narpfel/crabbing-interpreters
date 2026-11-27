@@ -335,6 +335,9 @@ fn compile_expr<'a>(bump: &'a Bump, expr: &'a Expression<'a>) -> &'a Evaluate<'a
                 BinOpKind::Divide => number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| {
                     Value::Number(lhs / rhs)
                 }),
+                BinOpKind::Remainder => number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| {
+                    Value::Number(lhs % rhs)
+                }),
                 BinOpKind::Power => number_binop(bump, expr, op, lhs, rhs, |lhs, rhs| {
                     Value::Number(lhs.powf(rhs))
                 }),
