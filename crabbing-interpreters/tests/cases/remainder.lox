@@ -5,3 +5,6 @@ print -37 rem 10;
 print (-37) rem 10;
 print 37 rem 10 rem 4;
 print 37 rem (10 rem 4);
+print 2 rem 0;
+print (0 / 0) rem 0;
+print 2 rem (0 / 0);
